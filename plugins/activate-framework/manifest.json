@@ -1,0 +1,85 @@
+{
+  "version": "1.0",
+  "files": [
+    {
+      "src": "AGENTS.md",
+      "dest": "AGENTS.md",
+      "tier": "core"
+    },
+    {
+      "src": "CUSTOMIZATION.md",
+      "dest": "CUSTOMIZATION.md",
+      "tier": "core"
+    },
+    {
+      "src": "instructions/security.instructions.md",
+      "dest": "instructions/security.instructions.md",
+      "tier": "core"
+    },
+    {
+      "src": "instructions/general.instructions.md",
+      "dest": "instructions/general.instructions.md",
+      "tier": "core"
+    },
+    {
+      "src": "prompts/accessibility-check.prompt.md",
+      "dest": "prompts/accessibility-check.prompt.md",
+      "tier": "core"
+    },
+    {
+      "src": "prompts/code-review.prompt.md",
+      "dest": "prompts/code-review.prompt.md",
+      "tier": "core"
+    },
+    {
+      "src": "prompts/create-adr.prompt.md",
+      "dest": "prompts/create-adr.prompt.md",
+      "tier": "core"
+    },
+    {
+      "src": "prompts/qasp-report.prompt.md",
+      "dest": "prompts/qasp-report.prompt.md",
+      "tier": "ad-hoc"
+    },
+    {
+      "src": "instructions/code-review.instructions.md",
+      "dest": "instructions/code-review.instructions.md",
+      "tier": "ad-hoc"
+    },
+    {
+      "src": "instructions/python.instructions.md",
+      "dest": "instructions/python.instructions.md",
+      "tier": "ad-hoc"
+    },
+    {
+      "src": "instructions/typescript.instructions.md",
+      "dest": "instructions/typescript.instructions.md",
+      "tier": "ad-hoc"
+    },
+    {
+      "src": "skills/activate-installer/SKILL.md",
+      "dest": "skills/activate-installer/SKILL.md",
+      "tier": "ad-hoc"
+    },
+    {
+      "src": "skills/create-journey-map/SKILL.md",
+      "dest": "skills/create-journey-map/SKILL.md",
+      "tier": "ad-hoc"
+    },
+    {
+      "src": "skills/create-service-blueprint/SKILL.md",
+      "dest": "skills/create-service-blueprint/SKILL.md",
+      "tier": "ad-hoc"
+    },
+    {
+      "src": "skills/write-user-story/SKILL.md",
+      "dest": "skills/write-user-story/SKILL.md",
+      "tier": "ad-hoc"
+    },
+    {
+      "src": "agents/service-designer.agent.md",
+      "dest": "agents/service-designer.agent.md",
+      "tier": "ad-hoc"
+    }
+  ]
+}
