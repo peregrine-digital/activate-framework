@@ -1,5 +1,6 @@
 ---
 description: 'Run an accessibility check on the current file or selection against WCAG 2.1 AA standards.'
+version: '0.5.0'
 agent: 'agent'
 ---
 

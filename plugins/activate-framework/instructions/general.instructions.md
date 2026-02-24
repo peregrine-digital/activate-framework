@@ -1,5 +1,6 @@
 ---
 description: 'Universal coding conventions and workflow expectations'
+version: '0.5.0'
 applyTo: '**'
 excludeAgent: []
 ---

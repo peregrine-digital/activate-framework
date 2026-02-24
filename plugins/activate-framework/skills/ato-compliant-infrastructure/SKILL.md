@@ -1,5 +1,8 @@
+---
 name: ato-compliant-infrastructure
 description: Use when generating Terraform or other infrastructure-as-code for federal workloads that must stay NIST 800-53 aligned from the first iteration, especially when demo timelines, LocalStack limits, or stakeholder pressure tempt shortcuts.
+version: '0.5.0'
+---
 
 # ATO-Compliant Infrastructure
 

@@ -2,22 +2,12 @@ import { copyFile, mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import readline from 'node:readline';
 import { fileURLToPath } from 'node:url';
-
-const TIER_MAP = {
-  minimal: ['core'],
-  standard: ['core', 'ad-hoc'],
-  advanced: ['core', 'ad-hoc', 'ad-hoc-advanced'],
-};
+import { selectFiles, TIER_MAP } from './core.mjs';
 
 const ASSISTANT_TARGET_MAP = {
   'github-copilot': '~/.copilot',
   'vs-code': '~/.copilot',
 };
-
-export function selectFiles(files, choice) {
-  const allowed = new Set(TIER_MAP[choice] ?? TIER_MAP.standard);
-  return files.filter((f) => allowed.has(f.tier));
-}
 
 function expandHome(target, homeDir = process.env.HOME) {
   return target.startsWith('~/') ? path.join(homeDir ?? '', target.slice(2)) : target;

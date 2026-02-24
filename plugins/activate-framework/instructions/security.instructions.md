@@ -1,5 +1,6 @@
 ---
 description: 'Security guardrails for all code changes'
+version: '0.5.0'
 applyTo: '**'
 excludeAgent: []
 ---

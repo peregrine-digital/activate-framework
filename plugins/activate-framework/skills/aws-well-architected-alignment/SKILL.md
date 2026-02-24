@@ -1,5 +1,8 @@
+---
 name: aws-well-architected-alignment
 description: Use when planning, reviewing, or remediating AWS workloads that must follow the Well-Architected Framework, especially when deadline, cost, or lift-and-shift pressure tempts teams to skip pillar-level best practices.
+version: '0.5.0'
+---
 
 # AWS Well-Architected Alignment
 

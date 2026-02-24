@@ -63,9 +63,13 @@ async function syncFiles(context, tier) {
     const src = vscode.Uri.joinPath(context.extensionUri, 'assets', f.src);
     const dest = vscode.Uri.joinPath(root, '.github', f.dest);
 
-    await vscode.workspace.fs.createDirectory(vscode.Uri.joinPath(dest, '..'));
-    await vscode.workspace.fs.copy(src, dest, { overwrite: true });
-    installed.push(f.dest);
+    try {
+      await vscode.workspace.fs.createDirectory(vscode.Uri.joinPath(dest, '..'));
+      await vscode.workspace.fs.copy(src, dest, { overwrite: true });
+      installed.push(f.dest);
+    } catch {
+      // File may not exist in the bundle (e.g. manifest references unreleased content)
+    }
   }
 
   // Copy AGENTS.md to the root (not inside .github/) so Copilot finds it

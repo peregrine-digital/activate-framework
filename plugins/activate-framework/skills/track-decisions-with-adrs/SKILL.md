@@ -1,5 +1,8 @@
+---
 name: track-decisions-with-adrs
 description: Use when architecture or process choices are made (especially under time pressure or via chat) to ensure every consequential decision is captured in an ADR with context, decision, alternatives, and follow-up actions.
+version: '0.5.0'
+---
 
 # Track Decisions with ADRs
 

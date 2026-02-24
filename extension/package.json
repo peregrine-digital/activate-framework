@@ -25,10 +25,28 @@
   "activationEvents": ["onStartupFinished"],
   "main": "./src/extension.js",
   "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "peregrine-activate",
+          "title": "Peregrine Activate",
+          "icon": "media/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "peregrine-activate": [
+        {
+          "id": "activate-framework.filesView",
+          "name": "Files"
+        }
+      ]
+    },
     "commands": [
       {
         "command": "activate-framework.changeTier",
-        "title": "Peregrine Activate: Change Tier"
+        "title": "Peregrine Activate: Change Tier",
+        "icon": "$(settings-gear)"
       },
       {
         "command": "activate-framework.showStatus",
@@ -37,8 +55,27 @@
       {
         "command": "activate-framework.remove",
         "title": "Peregrine Activate: Remove from Workspace"
+      },
+      {
+        "command": "activate-framework.refresh",
+        "title": "Refresh",
+        "icon": "$(refresh)"
       }
     ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "activate-framework.refresh",
+          "when": "view == activate-framework.filesView",
+          "group": "navigation"
+        },
+        {
+          "command": "activate-framework.changeTier",
+          "when": "view == activate-framework.filesView",
+          "group": "navigation"
+        }
+      ]
+    },
     "configuration": {
       "title": "Peregrine Activate",
       "properties": {

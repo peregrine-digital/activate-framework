@@ -1,6 +1,7 @@
 ---
 name: write-user-story
 description: Create a well-structured user story with acceptance criteria, following project conventions and issue templates
+version: '0.5.0'
 inputs:
   - name: feature_description
     description: Brief description of what the user wants to accomplish

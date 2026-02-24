@@ -1,6 +1,7 @@
 ---
 name: alt-text
 description: Guide for writing descriptive, accessible alternative text for images following Section 508 and WCAG standards. Use when Claude needs to create alt text for web content, documents, or any digital images that require accessibility compliance.
+version: '0.5.0'
 ---
 
 # Alt Text Writing Guide

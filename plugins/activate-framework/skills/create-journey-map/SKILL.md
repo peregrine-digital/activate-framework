@@ -1,6 +1,7 @@
 ---
 name: create-journey-map
 description: Create a user journey map documenting the end-to-end experience of a user accomplishing a goal
+version: '0.5.0'
 inputs:
   - name: persona
     description: The user persona or role whose journey is being mapped

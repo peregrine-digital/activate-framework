@@ -1,5 +1,6 @@
 ---
 description: 'Scaffold a new Architecture Decision Record (ADR) with proper structure and numbering.'
+version: '0.5.0'
 agent: 'agent'
 tools:
   - 'editFiles'

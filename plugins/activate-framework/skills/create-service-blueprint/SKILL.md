@@ -1,6 +1,7 @@
 ---
 name: create-service-blueprint
 description: Create a service blueprint documenting frontstage and backstage processes that deliver a service experience
+version: '0.5.0'
 inputs:
   - name: service_scenario
     description: The specific service interaction or transaction being mapped

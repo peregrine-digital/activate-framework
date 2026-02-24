@@ -1,6 +1,7 @@
 ---
 name: creating-github-agents
 description: Use when creating GitHub Copilot custom agents, agent profiles, or .agent.md files for repository, organization, or enterprise use
+version: '0.5.0'
 ---
 
 # Creating GitHub Copilot Custom Agents

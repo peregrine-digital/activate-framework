@@ -2,16 +2,32 @@ const vscode = require('vscode');
 const { syncFiles, addWorkspaceRoot, readInstalledVersion, readBundledVersion, removeWorkspaceRoot, findActivateWorkspaceFolder } = require('./installer');
 const { changeTierCommand } = require('./commands/changeTier');
 const { showStatusCommand } = require('./commands/showStatus');
+const { ActivateTreeProvider } = require('./treeView');
 
 function activate(context) {
+  // Create the sidebar tree view
+  const treeProvider = new ActivateTreeProvider(context);
+  const treeView = vscode.window.createTreeView('activate-framework.filesView', {
+    treeDataProvider: treeProvider,
+    showCollapseAll: true,
+  });
+
   context.subscriptions.push(
-    vscode.commands.registerCommand('activate-framework.changeTier', () => changeTierCommand(context)),
+    treeView,
+    vscode.commands.registerCommand('activate-framework.changeTier', async () => {
+      await changeTierCommand(context);
+      treeProvider.refresh();
+    }),
     vscode.commands.registerCommand('activate-framework.showStatus', () => showStatusCommand(context)),
-    vscode.commands.registerCommand('activate-framework.remove', () => removeCommand(context)),
+    vscode.commands.registerCommand('activate-framework.remove', async () => {
+      await removeCommand(context);
+      treeProvider.refresh();
+    }),
+    vscode.commands.registerCommand('activate-framework.refresh', () => treeProvider.refresh()),
   );
 
   // Auto-sync files and add workspace root on activation
-  autoSetup(context);
+  autoSetup(context).then(() => treeProvider.refresh());
 }
 
 async function autoSetup(context) {

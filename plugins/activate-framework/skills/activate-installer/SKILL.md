@@ -1,6 +1,7 @@
 ---
 name: activate-installer
 description: Installs Activate Copilot in a repository with intelligent customization. Use when asked to install, set up, or update Activate.
+version: '0.5.0'
 inputs:
   - name: tier
     description: 'minimal, standard, or advanced. Defaults to standard.'
