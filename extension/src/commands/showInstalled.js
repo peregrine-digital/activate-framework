@@ -4,7 +4,7 @@ const { readBundledManifest, readInstalledVersion } = require('../installer');
 async function showInstalledCommand(context) {
   const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
   if (!workspaceFolder) {
-    vscode.window.showErrorMessage('Activate Framework: Open a workspace folder first.');
+    vscode.window.showErrorMessage('Peregrine Activate: Open a workspace folder first.');
     return;
   }
 
@@ -14,7 +14,7 @@ async function showInstalledCommand(context) {
   const installedVersion = await readInstalledVersion(workspaceFolder.uri, targetSubdir);
   if (!installedVersion) {
     const choice = await vscode.window.showInformationMessage(
-      'Activate Framework is not installed in this workspace.',
+      'Peregrine Activate is not installed in this workspace.',
       'Install Now',
     );
     if (choice === 'Install Now') {
@@ -41,9 +41,9 @@ async function showInstalledCommand(context) {
     }
   }
 
-  const channel = vscode.window.createOutputChannel('Activate Framework');
+  const channel = vscode.window.createOutputChannel('Peregrine Activate');
   channel.clear();
-  channel.appendLine('Activate Framework — Installed Files');
+  channel.appendLine('Peregrine Activate — Installed Files');
   channel.appendLine(`Version: ${installedVersion}`);
   channel.appendLine(`Location: ${targetBase.fsPath}`);
   channel.appendLine('');

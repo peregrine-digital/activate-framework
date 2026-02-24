@@ -5,7 +5,7 @@ const { readBundledManifest, readBundledVersion, readInstalledVersion, installFi
 async function updateCommand(context) {
   const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
   if (!workspaceFolder) {
-    vscode.window.showErrorMessage('Activate Framework: Open a workspace folder first.');
+    vscode.window.showErrorMessage('Peregrine Activate: Open a workspace folder first.');
     return;
   }
 
@@ -17,7 +17,7 @@ async function updateCommand(context) {
 
   if (!installedVersion) {
     const choice = await vscode.window.showInformationMessage(
-      'Activate Framework is not installed in this workspace. Install now?',
+      'Peregrine Activate is not installed in this workspace. Install now?',
       'Install',
       'Cancel',
     );
@@ -28,7 +28,7 @@ async function updateCommand(context) {
   }
 
   if (installedVersion === bundledVersion) {
-    vscode.window.showInformationMessage(`Activate Framework is already up to date (${bundledVersion}).`);
+    vscode.window.showInformationMessage(`Peregrine Activate is already up to date (${bundledVersion}).`);
     return;
   }
 
@@ -37,7 +37,7 @@ async function updateCommand(context) {
   const files = selectFiles(manifest.files, tier);
 
   const confirm = await vscode.window.showInformationMessage(
-    `Update Activate Framework from ${installedVersion} to ${bundledVersion}? (${files.length} files, ${tier} tier)`,
+    `Update Peregrine Activate from ${installedVersion} to ${bundledVersion}? (${files.length} files, ${tier} tier)`,
     { modal: true },
     'Update',
   );
@@ -46,14 +46,14 @@ async function updateCommand(context) {
   await vscode.window.withProgress(
     {
       location: vscode.ProgressLocation.Notification,
-      title: 'Activate Framework',
+      title: 'Peregrine Activate',
       cancellable: false,
     },
     async (progress) => {
       progress.report({ message: `Updating to ${bundledVersion}…` });
       const result = await installFiles(context, workspaceFolder.uri, targetSubdir, files, bundledVersion);
       vscode.window.showInformationMessage(
-        `Activate Framework updated: ${installedVersion} → ${result.version} (${result.installed.length} files).`,
+        `Peregrine Activate updated: ${installedVersion} → ${result.version} (${result.installed.length} files).`,
       );
     },
   );

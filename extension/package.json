@@ -1,13 +1,13 @@
 {
-  "name": "activate-framework",
-  "displayName": "Activate Framework",
+  "name": "peregrine-activate",
+  "displayName": "Peregrine Activate",
   "description": "Cross-functional agentic framework for government delivery teams — install Copilot instructions, prompts, skills, and agents into your workspace.",
   "version": "0.5.0",
-  "publisher": "ironarch",
+  "publisher": "peregrine",
   "license": "SEE LICENSE IN LICENSE",
   "repository": {
     "type": "git",
-    "url": "https://github.com/IronArch/activate-framework"
+    "url": "https://github.com/peregrine-digital/activate-framework"
   },
   "engines": {
     "vscode": "^1.85.0"
@@ -28,19 +28,19 @@
     "commands": [
       {
         "command": "activate-framework.install",
-        "title": "Activate Framework: Install into Workspace"
+        "title": "Peregrine Activate: Install into Workspace"
       },
       {
         "command": "activate-framework.update",
-        "title": "Activate Framework: Check for Updates"
+        "title": "Peregrine Activate: Check for Updates"
       },
       {
         "command": "activate-framework.showInstalled",
-        "title": "Activate Framework: Show Installed Files"
+        "title": "Peregrine Activate: Show Installed Files"
       }
     ],
     "configuration": {
-      "title": "Activate Framework",
+      "title": "Peregrine Activate",
       "properties": {
         "activate-framework.defaultTier": {
           "type": "string",
@@ -55,7 +55,7 @@
             "Core + ad-hoc instructions, skills, and agents",
             "Standard + advanced tooling"
           ],
-          "description": "Default installation tier when installing Activate Framework."
+          "description": "Default installation tier when installing Peregrine Activate."
         },
         "activate-framework.targetSubdir": {
           "type": "string",

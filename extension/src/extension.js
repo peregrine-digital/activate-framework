@@ -28,7 +28,7 @@ async function checkForUpdatesOnStartup(context) {
 
     if (installedVersion !== bundledVersion) {
       const choice = await vscode.window.showInformationMessage(
-        `Activate Framework update available: ${installedVersion} → ${bundledVersion}`,
+        `Peregrine Activate update available: ${installedVersion} → ${bundledVersion}`,
         'Update Now',
         'Dismiss',
       );

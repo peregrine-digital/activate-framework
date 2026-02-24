@@ -6,7 +6,7 @@ async function installCommand(context) {
   // 1. Require an open workspace
   const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
   if (!workspaceFolder) {
-    vscode.window.showErrorMessage('Activate Framework: Open a workspace folder first.');
+    vscode.window.showErrorMessage('Peregrine Activate: Open a workspace folder first.');
     return;
   }
 
@@ -34,7 +34,7 @@ async function installCommand(context) {
 
   const tierPick = await vscode.window.showQuickPick(tierItems, {
     placeHolder: 'Select installation tier',
-    title: 'Activate Framework — Installation Tier',
+    title: 'Peregrine Activate — Installation Tier',
   });
   if (!tierPick) return;
 
@@ -62,7 +62,7 @@ async function installCommand(context) {
 
   const targetPick = await vscode.window.showQuickPick(targetItems, {
     placeHolder: 'Where should files be installed?',
-    title: 'Activate Framework — Target Directory',
+    title: 'Peregrine Activate — Target Directory',
   });
   if (!targetPick) return;
 
@@ -94,7 +94,7 @@ async function installCommand(context) {
   await vscode.window.withProgress(
     {
       location: vscode.ProgressLocation.Notification,
-      title: 'Activate Framework',
+      title: 'Peregrine Activate',
       cancellable: false,
     },
     async (progress) => {
@@ -102,11 +102,11 @@ async function installCommand(context) {
 
       const result = await installFiles(context, workspaceFolder.uri, finalTarget, files, version);
 
-      const msg = `Activate Framework ${result.version} (${tier}) — ${result.installed.length} files installed.`;
+      const msg = `Peregrine Activate ${result.version} (${tier}) — ${result.installed.length} files installed.`;
       vscode.window.showInformationMessage(msg);
 
       // Log details to output channel
-      const channel = vscode.window.createOutputChannel('Activate Framework');
+      const channel = vscode.window.createOutputChannel('Peregrine Activate');
       channel.appendLine(msg);
       result.installed.forEach((f) => channel.appendLine(`  ✓ ${f}`));
       channel.show(true);
