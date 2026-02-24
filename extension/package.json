@@ -1,0 +1,77 @@
+{
+  "name": "activate-framework",
+  "displayName": "Activate Framework",
+  "description": "Cross-functional agentic framework for government delivery teams — install Copilot instructions, prompts, skills, and agents into your workspace.",
+  "version": "0.5.0",
+  "publisher": "ironarch",
+  "license": "SEE LICENSE IN LICENSE",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/IronArch/activate-framework"
+  },
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "keywords": [
+    "copilot",
+    "agents",
+    "instructions",
+    "skills",
+    "government"
+  ],
+  "activationEvents": [],
+  "main": "./src/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "activate-framework.install",
+        "title": "Activate Framework: Install into Workspace"
+      },
+      {
+        "command": "activate-framework.update",
+        "title": "Activate Framework: Check for Updates"
+      },
+      {
+        "command": "activate-framework.showInstalled",
+        "title": "Activate Framework: Show Installed Files"
+      }
+    ],
+    "configuration": {
+      "title": "Activate Framework",
+      "properties": {
+        "activate-framework.defaultTier": {
+          "type": "string",
+          "default": "standard",
+          "enum": [
+            "minimal",
+            "standard",
+            "advanced"
+          ],
+          "enumDescriptions": [
+            "Core workflow guidance (AGENTS.md, instructions, prompts)",
+            "Core + ad-hoc instructions, skills, and agents",
+            "Standard + advanced tooling"
+          ],
+          "description": "Default installation tier when installing Activate Framework."
+        },
+        "activate-framework.targetSubdir": {
+          "type": "string",
+          "default": ".github",
+          "description": "Subdirectory within the workspace where files are installed (e.g. .github or .copilot)."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "prepare-assets": "node scripts/prepare-assets.mjs",
+    "package": "npm run prepare-assets && vsce package --no-dependencies",
+    "test": "node --test src/__tests__/*.test.js"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.85.0",
+    "@vscode/vsce": "^3.0.0"
+  }
+}
