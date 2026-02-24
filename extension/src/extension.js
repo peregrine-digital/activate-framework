@@ -1,50 +1,58 @@
 const vscode = require('vscode');
-const { installCommand } = require('./commands/install');
-const { updateCommand } = require('./commands/update');
-const { showInstalledCommand } = require('./commands/showInstalled');
+const { syncFiles, addWorkspaceRoot, readInstalledVersion, readBundledVersion, removeWorkspaceRoot, findActivateWorkspaceFolder } = require('./installer');
+const { changeTierCommand } = require('./commands/changeTier');
+const { showStatusCommand } = require('./commands/showStatus');
 
 function activate(context) {
   context.subscriptions.push(
-    vscode.commands.registerCommand('activate-framework.install', () => installCommand(context)),
-    vscode.commands.registerCommand('activate-framework.update', () => updateCommand(context)),
-    vscode.commands.registerCommand('activate-framework.showInstalled', () => showInstalledCommand(context)),
+    vscode.commands.registerCommand('activate-framework.changeTier', () => changeTierCommand(context)),
+    vscode.commands.registerCommand('activate-framework.showStatus', () => showStatusCommand(context)),
+    vscode.commands.registerCommand('activate-framework.remove', () => removeCommand(context)),
   );
 
-  checkForUpdatesOnStartup(context);
+  // Auto-sync files and add workspace root on activation
+  autoSetup(context);
 }
 
-async function checkForUpdatesOnStartup(context) {
+async function autoSetup(context) {
   const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
   if (!workspaceFolder) return;
 
   const config = vscode.workspace.getConfiguration('activate-framework');
-  const targetSubdir = config.get('targetSubdir', '.github');
-  const versionFileUri = vscode.Uri.joinPath(workspaceFolder.uri, targetSubdir, '.activate-version');
+  const tier = config.get('defaultTier', 'standard');
 
-  try {
-    const content = await vscode.workspace.fs.readFile(versionFileUri);
-    const installedVersion = Buffer.from(content).toString('utf8').trim();
-    const bundledVersion = getBundledVersion(context);
+  const installedVersion = await readInstalledVersion(context);
+  const bundledVersion = context.extension.packageJSON.version ?? 'unknown';
 
-    if (installedVersion !== bundledVersion) {
-      const choice = await vscode.window.showInformationMessage(
-        `Peregrine Activate update available: ${installedVersion} → ${bundledVersion}`,
-        'Update Now',
-        'Dismiss',
+  // Sync files if first run or version mismatch
+  if (installedVersion !== bundledVersion) {
+    await syncFiles(context, tier);
+
+    if (installedVersion) {
+      vscode.window.showInformationMessage(
+        `Peregrine Activate updated: ${installedVersion} → ${bundledVersion}`,
       );
-      if (choice === 'Update Now') {
-        await vscode.commands.executeCommand('activate-framework.update');
-      }
     }
-  } catch {
-    // No version file = not installed yet
+  }
+
+  // Ensure the root is in the workspace
+  const added = addWorkspaceRoot(context);
+  if (added && !installedVersion) {
+    vscode.window.showInformationMessage(
+      `Peregrine Activate ${bundledVersion} (${tier}) is ready.`,
+    );
   }
 }
 
-function getBundledVersion(context) {
-  return context.extension.packageJSON.version ?? 'unknown';
+async function removeCommand(context) {
+  const removed = removeWorkspaceRoot();
+  if (removed) {
+    vscode.window.showInformationMessage('Peregrine Activate workspace root removed.');
+  } else {
+    vscode.window.showInformationMessage('Peregrine Activate is not in the workspace.');
+  }
 }
 
 function deactivate() {}
 
-module.exports = { activate, deactivate, getBundledVersion };
+module.exports = { activate, deactivate };

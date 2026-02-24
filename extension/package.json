@@ -22,21 +22,21 @@
     "skills",
     "government"
   ],
-  "activationEvents": [],
+  "activationEvents": ["onStartupFinished"],
   "main": "./src/extension.js",
   "contributes": {
     "commands": [
       {
-        "command": "activate-framework.install",
-        "title": "Peregrine Activate: Install into Workspace"
+        "command": "activate-framework.changeTier",
+        "title": "Peregrine Activate: Change Tier"
       },
       {
-        "command": "activate-framework.update",
-        "title": "Peregrine Activate: Check for Updates"
+        "command": "activate-framework.showStatus",
+        "title": "Peregrine Activate: Show Status"
       },
       {
-        "command": "activate-framework.showInstalled",
-        "title": "Peregrine Activate: Show Installed Files"
+        "command": "activate-framework.remove",
+        "title": "Peregrine Activate: Remove from Workspace"
       }
     ],
     "configuration": {
@@ -55,12 +55,7 @@
             "Core + ad-hoc instructions, skills, and agents",
             "Standard + advanced tooling"
           ],
-          "description": "Default installation tier when installing Peregrine Activate."
-        },
-        "activate-framework.targetSubdir": {
-          "type": "string",
-          "default": ".github",
-          "description": "Subdirectory within the workspace where files are installed (e.g. .github or .copilot)."
+          "description": "Default installation tier for Peregrine Activate."
         }
       }
     }
