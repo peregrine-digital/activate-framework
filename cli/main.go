@@ -360,7 +360,6 @@ func installWithResolvedConfig(manifests []Manifest, cfg Config, target string, 
 
 	cwd, _ := os.Getwd()
 	_ = WriteProjectConfig(cwd, &Config{Manifest: chosen.ID, Tier: cfg.Tier})
-	_ = EnsureGitExclude(cwd)
 
 	fmt.Printf("\nDone. %s v%s (%s) installed.\n", chosen.Name, chosen.Version, cfg.Tier)
 	return nil

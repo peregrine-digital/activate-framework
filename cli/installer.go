@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -27,16 +26,7 @@ func InstallFiles(files []ManifestFile, basePath, targetDir, version, manifestID
 		fmt.Printf("  ✓  %s\n", f.Dest)
 	}
 
-	// Write version marker
-	versionFile := filepath.Join(targetDir, ".github", ".activate-version")
-	if err := os.MkdirAll(filepath.Dir(versionFile), 0755); err != nil {
-		return err
-	}
-	vData, _ := json.MarshalIndent(map[string]string{
-		"manifest": manifestID,
-		"version":  version,
-	}, "", "  ")
-	return os.WriteFile(versionFile, vData, 0644)
+	return nil
 }
 
 // ResolveBundleDir locates the manifest bundle directory starting from startDir.

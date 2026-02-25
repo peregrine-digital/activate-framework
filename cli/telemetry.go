@@ -145,8 +145,7 @@ func BuildTelemetryEntry(data map[string]interface{}) TelemetryEntry {
 
 // telemetryLogDir returns the telemetry log directory (~/.activate).
 func telemetryLogDir() string {
-	home, _ := os.UserHomeDir()
-	return filepath.Join(home, globalConfigDir)
+	return storeBase()
 }
 
 // AppendTelemetryEntry appends an entry to the JSONL log file.

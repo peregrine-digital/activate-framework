@@ -1,23 +1,16 @@
 package main
 
 import (
-	"encoding/json"
 	"os"
-	"path/filepath"
 )
 
 // InstallState captures config and install status for state-aware boot flow.
 type InstallState struct {
-	HasGlobalConfig  bool   `json:"hasGlobalConfig"`
-	HasProjectConfig bool   `json:"hasProjectConfig"`
-	HasInstallMarker bool   `json:"hasInstallMarker"`
+	HasGlobalConfig   bool   `json:"hasGlobalConfig"`
+	HasProjectConfig  bool   `json:"hasProjectConfig"`
+	HasInstallMarker  bool   `json:"hasInstallMarker"`
 	InstalledManifest string `json:"installedManifest,omitempty"`
 	InstalledVersion  string `json:"installedVersion,omitempty"`
-}
-
-type installMarker struct {
-	Manifest string `json:"manifest"`
-	Version  string `json:"version"`
 }
 
 func DetectInstallState(projectDir string) InstallState {
@@ -30,14 +23,10 @@ func DetectInstallState(projectDir string) InstallState {
 		state.HasProjectConfig = true
 	}
 
-	markerPath := filepath.Join(projectDir, ".github", ".activate-version")
-	if data, err := os.ReadFile(markerPath); err == nil {
-		var marker installMarker
-		if json.Unmarshal(data, &marker) == nil {
-			state.HasInstallMarker = true
-			state.InstalledManifest = marker.Manifest
-			state.InstalledVersion = marker.Version
-		}
+	if sc, _ := readRepoSidecar(projectDir); sc != nil {
+		state.HasInstallMarker = true
+		state.InstalledManifest = sc.Manifest
+		state.InstalledVersion = sc.Version
 	}
 
 	return state

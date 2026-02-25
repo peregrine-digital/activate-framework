@@ -105,7 +105,6 @@ func (s *ActivateService) SetConfig(scope string, updates *Config) (*SetConfigRe
 		if err := WriteProjectConfig(s.ProjectDir, updates); err != nil {
 			return nil, err
 		}
-		_ = EnsureGitExclude(s.ProjectDir)
 	default:
 		return nil, fmt.Errorf("invalid scope for set: %s (use project|global)", scope)
 	}

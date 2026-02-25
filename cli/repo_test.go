@@ -149,7 +149,7 @@ func TestRepoAddLocalCopiesManagedFiles(t *testing.T) {
 
 	projectCfgData, err := os.ReadFile(projectConfigPath(projectDir))
 	if err != nil {
-		t.Fatalf("expected .activate.json written, err=%v", err)
+		t.Fatalf("expected project config written, err=%v", err)
 	}
 	if !strings.Contains(string(projectCfgData), "\"manifest\": \"m1\"") || !strings.Contains(string(projectCfgData), "\"tier\": \"minimal\"") {
 		t.Fatalf("unexpected project config content:\n%s", string(projectCfgData))

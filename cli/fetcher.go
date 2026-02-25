@@ -156,15 +156,5 @@ func InstallFilesFromRemote(files []ManifestFile, basePath, targetDir, version, 
 		fmt.Printf("  ✓  %s\n", f.Dest)
 	}
 
-	// Write version marker
-	versionFile := filepath.Join(targetDir, ".github", ".activate-version")
-	if err := os.MkdirAll(filepath.Dir(versionFile), 0755); err != nil {
-		return err
-	}
-	vData, _ := json.MarshalIndent(map[string]string{
-		"manifest": manifestID,
-		"version":  version,
-		"remote":   repo + "@" + branch,
-	}, "", "  ")
-	return os.WriteFile(versionFile, vData, 0644)
+	return nil
 }

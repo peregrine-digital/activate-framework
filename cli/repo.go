@@ -9,7 +9,6 @@ import (
 )
 
 const (
-	repoSidecarRel       = ".github/.activate-installed.json"
 	repoExcludeStartMark = "# >>> Peregrine Activate (managed — do not edit)"
 	repoExcludeEndMark   = "# <<< Peregrine Activate"
 )
@@ -24,7 +23,7 @@ type repoSidecar struct {
 }
 
 func sidecarPath(projectDir string) string {
-	return filepath.Join(projectDir, repoSidecarRel)
+	return filepath.Join(repoStorePath(projectDir), "installed.json")
 }
 
 func readRepoSidecar(projectDir string) (*repoSidecar, error) {
@@ -63,10 +62,10 @@ func writeRepoSidecar(projectDir string, next repoSidecar) error {
 		_ = os.Remove(filepath.Join(projectDir, oldPath))
 	}
 
-	path := sidecarPath(projectDir)
-	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+	if err := ensureRepoMeta(projectDir); err != nil {
 		return err
 	}
+	path := sidecarPath(projectDir)
 	data, err := json.MarshalIndent(next, "", "  ")
 	if err != nil {
 		return err
@@ -75,9 +74,7 @@ func writeRepoSidecar(projectDir string, next repoSidecar) error {
 		return err
 	}
 
-	excludePaths := []string{repoSidecarRel}
-	excludePaths = append(excludePaths, next.Files...)
-	return syncRepoGitExcludeIfPresent(projectDir, excludePaths)
+	return syncRepoGitExcludeIfPresent(projectDir, next.Files)
 }
 
 func deleteRepoSidecar(projectDir string) error {
@@ -224,20 +221,6 @@ func RepoAdd(manifests []Manifest, cfg Config, projectDir string, useRemote bool
 		}
 	}
 
-	marker := map[string]string{"manifest": chosen.ID, "version": chosen.Version}
-	if useRemote {
-		marker["remote"] = repo + "@" + branch
-	}
-	markerPath := filepath.Join(projectDir, ".github", ".activate-version")
-	if err := os.MkdirAll(filepath.Dir(markerPath), 0755); err != nil {
-		return err
-	}
-	markerData, _ := json.MarshalIndent(marker, "", "  ")
-	if err := os.WriteFile(markerPath, append(markerData, '\n'), 0644); err != nil {
-		return err
-	}
-	installed = append(installed, filepath.ToSlash(filepath.Join(".github", ".activate-version")))
-
 	source := "bundled"
 	if useRemote {
 		source = "remote"
@@ -253,9 +236,7 @@ func RepoAdd(manifests []Manifest, cfg Config, projectDir string, useRemote bool
 		return err
 	}
 
-	if err := WriteProjectConfig(projectDir, &Config{Manifest: chosen.ID, Tier: cfg.Tier}); err == nil {
-		_ = EnsureGitExclude(projectDir)
-	}
+	_ = WriteProjectConfig(projectDir, &Config{Manifest: chosen.ID, Tier: cfg.Tier})
 
 	fmt.Printf("\nAdded %d managed files to repository.\n", len(installed))
 	return nil

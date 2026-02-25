@@ -139,10 +139,6 @@ func loadLegacyManifest(baseDir string) ([]Manifest, error) {
 	if version == "" {
 		version = "unknown"
 	}
-	// Try .activate-version file
-	if v, err := os.ReadFile(filepath.Join(baseDir, ".activate-version")); err == nil {
-		version = strings.TrimSpace(string(v))
-	}
 	return []Manifest{{
 		ID:       "activate-framework",
 		Name:     "Activate Framework",

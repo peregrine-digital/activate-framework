@@ -1,18 +1,58 @@
 package main
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"os"
 	"path/filepath"
 )
 
 const (
-	globalConfigDir      = ".activate"
-	globalConfigFile     = "config.json"
-	projectConfigFile    = ".activate.json"
-	defaultManifest      = "activate-framework"
-	defaultTier          = "standard"
+	activateDirName = ".activate"
+	globalConfigFile = "config.json"
+	defaultManifest  = "activate-framework"
+	defaultTier      = "standard"
 )
+
+// activateBaseDir overrides the base store path for testing.
+// Empty means use ~/.activate.
+var activateBaseDir string
+
+// storeBase returns the root of all activate state (~/.activate or test override).
+func storeBase() string {
+	if activateBaseDir != "" {
+		return activateBaseDir
+	}
+	home, _ := os.UserHomeDir()
+	return filepath.Join(home, activateDirName)
+}
+
+// repoStorePath returns ~/.activate/repos/<sha256>/ for a project directory.
+func repoStorePath(projectDir string) string {
+	abs, _ := filepath.Abs(projectDir)
+	hash := sha256.Sum256([]byte(abs))
+	return filepath.Join(storeBase(), "repos", hex.EncodeToString(hash[:]))
+}
+
+type repoMeta struct {
+	Path string `json:"path"`
+}
+
+// ensureRepoMeta writes repo.json metadata alongside the per-repo config.
+func ensureRepoMeta(projectDir string) error {
+	dir := repoStorePath(projectDir)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return err
+	}
+	metaPath := filepath.Join(dir, "repo.json")
+	if _, err := os.Stat(metaPath); err == nil {
+		return nil // already exists
+	}
+	abs, _ := filepath.Abs(projectDir)
+	data, _ := json.MarshalIndent(repoMeta{Path: abs}, "", "  ")
+	return os.WriteFile(metaPath, append(data, '\n'), 0644)
+}
 
 // Config is the unified configuration shape used at both layers.
 type Config struct {
@@ -25,13 +65,12 @@ type Config struct {
 
 // globalConfigPath returns ~/.activate/config.json.
 func globalConfigPath() string {
-	home, _ := os.UserHomeDir()
-	return filepath.Join(home, globalConfigDir, globalConfigFile)
+	return filepath.Join(storeBase(), globalConfigFile)
 }
 
-// projectConfigPath returns <projectDir>/.activate.json.
+// projectConfigPath returns ~/.activate/repos/<hash>/config.json.
 func projectConfigPath(projectDir string) string {
-	return filepath.Join(projectDir, projectConfigFile)
+	return filepath.Join(repoStorePath(projectDir), "config.json")
 }
 
 // readJSONConfig reads and parses a JSON config file. Returns nil if missing.
@@ -52,7 +91,7 @@ func ReadGlobalConfig() (*Config, error) {
 	return readJSONConfig(globalConfigPath())
 }
 
-// ReadProjectConfig reads .activate.json from projectDir.
+// ReadProjectConfig reads per-repo config from ~/.activate/repos/<hash>/config.json.
 func ReadProjectConfig(projectDir string) (*Config, error) {
 	return readJSONConfig(projectConfigPath(projectDir))
 }
@@ -86,8 +125,11 @@ func ResolveConfig(projectDir string, overrides *Config) Config {
 	return result
 }
 
-// WriteProjectConfig writes (merge-update) .activate.json.
+// WriteProjectConfig writes (merge-update) per-repo config to ~/.activate/repos/<hash>/config.json.
 func WriteProjectConfig(projectDir string, updates *Config) error {
+	if err := ensureRepoMeta(projectDir); err != nil {
+		return err
+	}
 	path := projectConfigPath(projectDir)
 	existing, _ := ReadProjectConfig(projectDir)
 	base := &Config{

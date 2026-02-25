@@ -7,6 +7,16 @@ import (
 	"testing"
 )
 
+// setupTestStore isolates all activate state to a temp directory.
+func setupTestStore(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	old := activateBaseDir
+	activateBaseDir = dir
+	t.Cleanup(func() { activateBaseDir = old })
+	return dir
+}
+
 // --- readJSONConfig ---
 
 func TestConfig_readJSONConfig_MissingFile(t *testing.T) {
@@ -73,6 +83,7 @@ func TestConfig_readJSONConfig_EmptyObject(t *testing.T) {
 // --- ReadProjectConfig / WriteProjectConfig ---
 
 func TestConfig_ReadProjectConfig_Missing(t *testing.T) {
+	setupTestStore(t)
 	tmp := t.TempDir()
 	cfg, err := ReadProjectConfig(tmp)
 	if err != nil {
@@ -84,6 +95,7 @@ func TestConfig_ReadProjectConfig_Missing(t *testing.T) {
 }
 
 func TestConfig_WriteProjectConfig_CreatesFile(t *testing.T) {
+	setupTestStore(t)
 	tmp := t.TempDir()
 	err := WriteProjectConfig(tmp, &Config{Manifest: "ironarch", Tier: "minimal"})
 	if err != nil {
@@ -102,6 +114,7 @@ func TestConfig_WriteProjectConfig_CreatesFile(t *testing.T) {
 }
 
 func TestConfig_WriteProjectConfig_MergeUpdate(t *testing.T) {
+	setupTestStore(t)
 	tmp := t.TempDir()
 	// Write initial config
 	if err := WriteProjectConfig(tmp, &Config{Manifest: "ironarch", Tier: "full"}); err != nil {
@@ -124,6 +137,7 @@ func TestConfig_WriteProjectConfig_MergeUpdate(t *testing.T) {
 }
 
 func TestConfig_WriteProjectConfig_PreservesExistingMaps(t *testing.T) {
+	setupTestStore(t)
 	tmp := t.TempDir()
 	if err := WriteProjectConfig(tmp, &Config{
 		FileOverrides: map[string]string{"a.md": "pinned"},
@@ -148,15 +162,14 @@ func TestConfig_WriteProjectConfig_PreservesExistingMaps(t *testing.T) {
 // --- WriteGlobalConfig / ReadGlobalConfig ---
 
 func TestConfig_WriteGlobalConfig_CreatesDirectory(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
+	storeDir := setupTestStore(t)
 
 	err := WriteGlobalConfig(&Config{Manifest: "ironarch"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	// Verify file exists
-	p := filepath.Join(home, globalConfigDir, globalConfigFile)
+	p := filepath.Join(storeDir, globalConfigFile)
 	if _, err := os.Stat(p); os.IsNotExist(err) {
 		t.Fatal("global config file was not created")
 	}
@@ -170,8 +183,7 @@ func TestConfig_WriteGlobalConfig_CreatesDirectory(t *testing.T) {
 }
 
 func TestConfig_WriteGlobalConfig_MergeUpdate(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
+	setupTestStore(t)
 
 	if err := WriteGlobalConfig(&Config{Manifest: "ironarch", Tier: "full"}); err != nil {
 		t.Fatal(err)
@@ -192,8 +204,7 @@ func TestConfig_WriteGlobalConfig_MergeUpdate(t *testing.T) {
 // --- ResolveConfig precedence ---
 
 func TestConfig_ResolveConfig_DefaultsOnly(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
+	setupTestStore(t)
 	tmp := t.TempDir()
 
 	cfg := ResolveConfig(tmp, nil)
@@ -212,8 +223,7 @@ func TestConfig_ResolveConfig_DefaultsOnly(t *testing.T) {
 }
 
 func TestConfig_ResolveConfig_GlobalOverridesDefaults(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
+	setupTestStore(t)
 	tmp := t.TempDir()
 
 	if err := WriteGlobalConfig(&Config{Tier: "full"}); err != nil {
@@ -229,8 +239,7 @@ func TestConfig_ResolveConfig_GlobalOverridesDefaults(t *testing.T) {
 }
 
 func TestConfig_ResolveConfig_ProjectOverridesGlobal(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
+	setupTestStore(t)
 	tmp := t.TempDir()
 
 	if err := WriteGlobalConfig(&Config{Manifest: "global-manifest", Tier: "full"}); err != nil {
@@ -249,8 +258,7 @@ func TestConfig_ResolveConfig_ProjectOverridesGlobal(t *testing.T) {
 }
 
 func TestConfig_ResolveConfig_OverridesWin(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
+	setupTestStore(t)
 	tmp := t.TempDir()
 
 	if err := WriteGlobalConfig(&Config{Manifest: "global-manifest"}); err != nil {
@@ -266,8 +274,7 @@ func TestConfig_ResolveConfig_OverridesWin(t *testing.T) {
 }
 
 func TestConfig_ResolveConfig_EmptyProjectDir(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
+	setupTestStore(t)
 
 	if err := WriteGlobalConfig(&Config{Tier: "full"}); err != nil {
 		t.Fatal(err)
