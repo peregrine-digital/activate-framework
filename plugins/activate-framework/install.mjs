@@ -9,6 +9,12 @@ import {
   ensureGitExclude,
   PROJECT_CONFIG_FILENAME,
 } from './config.mjs';
+import {
+  discoverRemoteManifests,
+  installFilesFromRemote,
+  DEFAULT_REPO,
+  DEFAULT_BRANCH,
+} from './fetcher.mjs';
 
 const ASSISTANT_TARGET_MAP = {
   'github-copilot': '~/.copilot',
@@ -91,13 +97,26 @@ async function prompt(rl, question) {
 }
 
 function parseArgs(argv) {
-  const args = { manifest: null, tier: null, target: null, assistant: null, list: false, help: false };
+  const args = {
+    manifest: null,
+    tier: null,
+    target: null,
+    assistant: null,
+    list: false,
+    help: false,
+    remote: false,
+    repo: null,
+    branch: null,
+  };
   for (let i = 2; i < argv.length; i++) {
     if (argv[i] === '--manifest' && argv[i + 1]) { args.manifest = argv[++i]; continue; }
     if (argv[i] === '--tier' && argv[i + 1]) { args.tier = argv[++i]; continue; }
     if (argv[i] === '--target' && argv[i + 1]) { args.target = argv[++i]; continue; }
     if (argv[i] === '--assistant' && argv[i + 1]) { args.assistant = argv[++i]; continue; }
+    if (argv[i] === '--repo' && argv[i + 1]) { args.repo = argv[++i]; continue; }
+    if (argv[i] === '--branch' && argv[i + 1]) { args.branch = argv[++i]; continue; }
     if (argv[i] === '--list') { args.list = true; continue; }
+    if (argv[i] === '--remote') { args.remote = true; continue; }
     if (argv[i] === '--help' || argv[i] === '-h') { args.help = true; continue; }
   }
   return args;
@@ -115,13 +134,34 @@ Options:
   --target <dir>      Target directory (default: ~/.copilot)
   --assistant <name>  Assistant type: github-copilot, vs-code
   --list              List available manifests and exit
+  --remote            Fetch files from GitHub instead of local bundle
+  --repo <owner/repo> GitHub repository (default: ${DEFAULT_REPO})
+  --branch <name>     Branch or tag (default: ${DEFAULT_BRANCH})
   -h, --help          Show this help message
 `);
     process.exit(0);
   }
 
-  const bundleDir = await resolveBundleDir(path.dirname(fileURLToPath(import.meta.url)));
-  const manifests = await discoverManifests(bundleDir);
+  // Remote or local mode
+  const useRemote = args.remote;
+  const repo = args.repo || DEFAULT_REPO;
+  const branch = args.branch || DEFAULT_BRANCH;
+
+  let bundleDir = null;
+  let manifests;
+
+  if (useRemote) {
+    console.log(`Fetching manifests from ${repo}@${branch}...\n`);
+    try {
+      manifests = await discoverRemoteManifests({ repo, branch });
+    } catch (err) {
+      console.error(`Failed to fetch remote manifests: ${err.message}`);
+      process.exit(1);
+    }
+  } else {
+    bundleDir = await resolveBundleDir(path.dirname(fileURLToPath(import.meta.url)));
+    manifests = await discoverManifests(bundleDir);
+  }
 
   if (manifests.length === 0) {
     console.error('No manifests found.');
@@ -205,7 +245,20 @@ Options:
 
   const files = selectFiles(chosen.files, tier);
   console.log(`\nInstalling ${files.length} files to ${targetDir}:\n`);
-  await installFiles({ files, bundleDir, basePath: chosen.basePath, targetDir, version: chosen.version, manifestId: chosen.id });
+
+  if (useRemote) {
+    await installFilesFromRemote({
+      files,
+      basePath: chosen.basePath,
+      targetDir,
+      version: chosen.version,
+      manifestId: chosen.id,
+      repo,
+      branch,
+    });
+  } else {
+    await installFiles({ files, bundleDir, basePath: chosen.basePath, targetDir, version: chosen.version, manifestId: chosen.id });
+  }
 
   // Persist choices to project config (if running from a project dir)
   try {
