@@ -409,3 +409,130 @@ func TestFindManifestFile(t *testing.T) {
 		t.Fatal("expected nil for missing file")
 	}
 }
+
+// ── SelectFilesWithOverrides nil map ────────────────────────────
+
+func TestSelectFilesWithOverridesNilMap(t *testing.T) {
+	m := Manifest{
+		Files: []ManifestFile{
+			{Src: "a.md", Dest: "a.md", Tier: "core"},
+			{Src: "b.md", Dest: "b.md", Tier: "ad-hoc"},
+		},
+	}
+
+	// nil overrides should not panic and should behave like no overrides
+	result := SelectFilesWithOverrides(m.Files, m, "minimal", nil)
+	if len(result) != 1 {
+		t.Fatalf("expected 1 file for minimal tier with nil overrides, got %d", len(result))
+	}
+	if result[0].Dest != "a.md" {
+		t.Fatalf("expected a.md, got %s", result[0].Dest)
+	}
+}
+
+// ── UpdateFiles MCP-aware filtering ─────────────────────────────
+
+func TestUpdateFilesMcpAware(t *testing.T) {
+	projectDir := t.TempDir()
+	bundleDir := t.TempDir()
+
+	// Create bundled non-MCP source
+	srcPath := filepath.Join(bundleDir, "instructions", "general.md")
+	os.MkdirAll(filepath.Dir(srcPath), 0755)
+	os.WriteFile(srcPath, []byte("---\nversion: '0.5.0'\n---\n# Updated"), 0644)
+
+	// Create installed non-MCP file
+	installedPath := filepath.Join(projectDir, ".github", "instructions", "general.md")
+	os.MkdirAll(filepath.Dir(installedPath), 0755)
+	os.WriteFile(installedPath, []byte("---\nversion: '0.4.0'\n---\n# Old"), 0644)
+
+	// Setup git exclude
+	excludeDir := filepath.Join(projectDir, ".git", "info")
+	os.MkdirAll(excludeDir, 0755)
+	os.WriteFile(filepath.Join(excludeDir, "exclude"), []byte(""), 0644)
+
+	// Create sidecar
+	scPath := filepath.Join(projectDir, ".github", ".activate-installed.json")
+	os.MkdirAll(filepath.Dir(scPath), 0755)
+	scData, _ := json.Marshal(repoSidecar{
+		Manifest: "test", Version: "0.4.0", Tier: "minimal",
+		Files: []string{".github/instructions/general.md"},
+	})
+	os.WriteFile(scPath, scData, 0644)
+
+	manifest := Manifest{
+		ID: "test", Version: "0.5.0", BasePath: bundleDir,
+		Files: []ManifestFile{
+			{Src: "instructions/general.md", Dest: "instructions/general.md", Tier: "core"},
+			{Src: "mcp-servers/server.json", Dest: "mcp-servers/server.json", Tier: "core", Category: "mcp-servers"},
+		},
+	}
+	sidecar := &repoSidecar{
+		Manifest: "test", Version: "0.4.0", Tier: "minimal",
+		Files: []string{".github/instructions/general.md"},
+	}
+
+	updated, _, err := UpdateFiles(manifest, sidecar, Config{}, projectDir, false, "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// MCP file should NOT appear in updated (it's handled separately)
+	for _, u := range updated {
+		if strings.Contains(u, "mcp-servers") {
+			t.Fatalf("MCP file should be filtered out of regular updates, got %s", u)
+		}
+	}
+	// Non-MCP tracked file should be updated
+	if len(updated) != 1 || updated[0] != "instructions/general.md" {
+		t.Fatalf("expected 1 non-MCP updated file, got %v", updated)
+	}
+}
+
+// ── DiffFile missing bundled source ─────────────────────────────
+
+func TestDiffFileMissingBundled(t *testing.T) {
+	projectDir := t.TempDir()
+	bundleDir := t.TempDir()
+
+	// Create installed file but NOT the bundled source
+	installedPath := filepath.Join(projectDir, ".github", "a.md")
+	os.MkdirAll(filepath.Dir(installedPath), 0755)
+	os.WriteFile(installedPath, []byte("content"), 0644)
+
+	file := ManifestFile{Src: "a.md", Dest: "a.md"}
+	manifest := Manifest{BasePath: bundleDir}
+
+	_, err := DiffFile(file, manifest, projectDir)
+	if err == nil {
+		t.Fatal("expected error when bundled source is missing")
+	}
+	if !strings.Contains(err.Error(), "read bundled") {
+		t.Fatalf("expected 'read bundled' in error, got: %s", err)
+	}
+}
+
+// ── SyncNeeded tests ────────────────────────────────────────────
+
+func TestSyncNeeded(t *testing.T) {
+	m := Manifest{Version: "1.1.0"}
+
+	// Versions differ → sync needed
+	sc := &repoSidecar{Version: "1.0.0"}
+	if !SyncNeeded(m, sc) {
+		t.Fatal("expected SyncNeeded=true when versions differ")
+	}
+
+	// Versions same → no sync needed
+	sc.Version = "1.1.0"
+	if SyncNeeded(m, sc) {
+		t.Fatal("expected SyncNeeded=false when versions match")
+	}
+}
+
+func TestSyncNeededNilSidecar(t *testing.T) {
+	m := Manifest{Version: "1.0.0"}
+	if SyncNeeded(m, nil) {
+		t.Fatal("expected SyncNeeded=false for nil sidecar")
+	}
+}
