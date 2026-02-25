@@ -79,7 +79,7 @@
       "description": "Write temporary Cypress screenshot tests to visually confirm UI changes"
     },
     {
-      "src": "../../plugins/activate-framework/mcp-servers/github.json",
+      "src": "../../mcp-servers/github.json",
       "dest": "mcp-servers/github.json",
       "tier": "skills",
       "category": "mcp-servers",

@@ -164,14 +164,14 @@
       "description": "Specialized agent for creating service design artifacts including journey maps and service blueprints"
     },
     {
-      "src": "mcp-servers/github.json",
+      "src": "../../mcp-servers/github.json",
       "dest": "mcp-servers/github.json",
       "tier": "ad-hoc",
       "category": "mcp-servers",
       "description": "GitHub MCP server for repository operations, issues, PRs, and file access"
     },
     {
-      "src": "mcp-servers/fetch.json",
+      "src": "../../mcp-servers/fetch.json",
       "dest": "mcp-servers/fetch.json",
       "tier": "ad-hoc-advanced",
       "category": "mcp-servers",
