@@ -1,13 +1,21 @@
 {
   "name": "IronArch",
   "description": "VA-oriented agent workflow with specialized agents for planning, implementing, testing, reviewing, documenting, and PR creation",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "basePath": "plugins/ironarch",
   "tiers": [
+    { "id": "core", "label": "Core" },
     { "id": "skills", "label": "Skills" },
     { "id": "workflow", "label": "Workflow" }
   ],
   "files": [
+    {
+      "src": "AGENTS.md",
+      "dest": "AGENTS.md",
+      "tier": "core",
+      "category": "other",
+      "description": "Guidelines for AI agents working with the IronArch plugin (requires user approval for instructions/skills)"
+    },
     {
       "src": "../../skills/ci-debugger/SKILL.md",
       "dest": "skills/ci-debugger/SKILL.md",
