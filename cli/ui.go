@@ -790,7 +790,10 @@ func RunInteractiveMenu(svc *ActivateService) error {
 		if err != nil {
 			return err
 		}
-		result := finalModel.(mainMenuModel)
+		result, ok := finalModel.(mainMenuModel)
+		if !ok {
+			return fmt.Errorf("unexpected TUI model type: %T", finalModel)
+		}
 
 		switch result.action {
 		case "guided-install":
@@ -853,7 +856,10 @@ func RunInteractiveInstall(svc *ActivateService) error {
 		return err
 	}
 
-	result := finalModel.(model)
+	result, ok := finalModel.(model)
+	if !ok {
+		return fmt.Errorf("unexpected TUI model type: %T", finalModel)
+	}
 
 	if !result.confirm {
 		fmt.Println(dimStyle.Render("\n  Cancelled.\n"))

@@ -32,7 +32,10 @@ func FetchFile(filePath, repo, branch string) ([]byte, error) {
 
 func fetchWithAPI(filePath, repo, branch, token string) ([]byte, error) {
 	url := fmt.Sprintf("%s/repos/%s/contents/%s?ref=%s", apiBase, repo, filePath, branch)
-	req, _ := http.NewRequest("GET", url, nil)
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("build request for %s: %w", filePath, err)
+	}
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Accept", "application/vnd.github.raw+json")
 

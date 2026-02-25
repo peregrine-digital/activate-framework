@@ -219,7 +219,11 @@ func main() {
 	}
 
 	// ── Resolve config ──────────────────────────────────────────
-	cwd, _ := os.Getwd()
+	cwd, err := os.Getwd()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: cannot determine working directory: %s\n", err)
+		os.Exit(1)
+	}
 	projectDir := cwd
 	if strings.TrimSpace(args.projectDir) != "" {
 		projectDir = args.projectDir
@@ -358,8 +362,10 @@ func installWithResolvedConfig(manifests []Manifest, cfg Config, target string, 
 		return err
 	}
 
-	cwd, _ := os.Getwd()
-	_ = WriteProjectConfig(cwd, &Config{Manifest: chosen.ID, Tier: cfg.Tier})
+	cwd, err := os.Getwd()
+	if err == nil {
+		_ = WriteProjectConfig(cwd, &Config{Manifest: chosen.ID, Tier: cfg.Tier})
+	}
 
 	fmt.Printf("\nDone. %s v%s (%s) installed.\n", chosen.Name, chosen.Version, cfg.Tier)
 	return nil
