@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/lipgloss"
 )
@@ -13,7 +14,7 @@ import (
 // ── Brand colors ────────────────────────────────────────────────
 const (
 	colorGold   = "#E8C228" // Peregrine falcon gold
-	colorDim    = "#666666" // Subtitle gray
+	colorDim    = "#666666"
 	colorBright = "#FFFFFF"
 	colorGreen  = "#04B575"
 	colorRed    = "#FF4672"
@@ -28,7 +29,6 @@ var (
 	titleStyle   = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(colorPurple))
 	successStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(colorGreen))
 	errorStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color(colorRed))
-	subtleStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color(colorDim))
 
 	bannerBox = lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
@@ -51,27 +51,29 @@ var (
 
 // ── Logo ────────────────────────────────────────────────────────
 
-// falconArt is a simplified peregrine falcon rendered in Unicode block
-// characters, colored in Peregrine gold (#E8C228).
-const falconArt = `    ██
-   ████
-  ██████
- ███  ██▓
- ██   █▓▓▒
-  ██ ██▓▒░
-   ████▒░
-    ██▒░
-   ██░
-  ██`
+// falconArt is a peregrine falcon in flight, front-facing with spread wings.
+// Designed on a 25-column grid centered at column 12.
+const falconArt = `          ▄███▄
+         █▀   ▀█
+          ▀▄ ▄▀
+           ███
+       ▄▄▀▀███▀▀▄▄
+     ▄▀   █████   ▀▄
+   ▄▀    ███████    ▀▄
+  ▀     █████████     ▀
+       ████   ████
+        ██▀   ▀██
+         ▀     ▀`
 
 func renderBanner() string {
 	falcon := goldStyle.Render(falconArt)
 
 	wordmark := brightStyle.Render("P E R E G R I N E")
 	subtitle := dimStyle.Render("D I G I T A L   S E R V I C E S")
-	tagline := dimStyle.Render("─── Activate Framework Installer ───")
+	tagline := dimStyle.Render("─── Activate Framework ───")
 
 	text := lipgloss.JoinVertical(lipgloss.Left,
+		"",
 		"",
 		wordmark,
 		subtitle,
@@ -83,227 +85,335 @@ func renderBanner() string {
 	return bannerBox.Render(logo)
 }
 
-// ── Interactive install ─────────────────────────────────────────
+// ── Bubble Tea model ────────────────────────────────────────────
 
-// RunInteractiveInstall runs the full-page TUI installer wizard.
-func RunInteractiveInstall(manifests []Manifest, cfg Config, useRemote bool, repo, branch string) error {
-	// Print branded banner
-	fmt.Println()
-	fmt.Println(renderBanner())
-	fmt.Println()
+type phase int
 
-	// ── Form state ──────────────────────────────────────────────
-	var manifestID string
-	var tierID string
-	var targetDir string
-	var confirm bool
+const (
+	phaseManifest  phase = iota // select manifest (skipped if one)
+	phaseConfigure              // select tier + target dir + confirm
+)
 
-	home, _ := os.UserHomeDir()
-	defaultTarget := filepath.Join(home, ".copilot")
+// model is the top-level Bubble Tea model for the interactive installer.
+type model struct {
+	phase  phase
+	form   *huh.Form
+	width  int
+	height int
 
-	// ── Resolve defaults from config ────────────────────────────
+	quitting bool
 
-	// Manifest default
-	manifestID = cfg.Manifest
+	// data
+	manifests []Manifest
+	cfg       Config
+
+	// form-bound values
+	manifestID string
+	tierID     string
+	targetDir  string
+	confirm    bool
+
+	// resolved after manifest selection
+	chosen Manifest
+}
+
+func initialModel(manifests []Manifest, cfg Config) model {
+	m := model{
+		manifests: manifests,
+		cfg:       cfg,
+	}
+
+	// Resolve manifest default from config
+	m.manifestID = cfg.Manifest
 	found := false
-	for _, m := range manifests {
-		if m.ID == manifestID {
+	for _, man := range manifests {
+		if man.ID == m.manifestID {
 			found = true
 			break
 		}
 	}
 	if !found {
-		manifestID = manifests[0].ID
+		m.manifestID = manifests[0].ID
 	}
 
-	// ── Build manifest options ──────────────────────────────────
-	var manifestOptions []huh.Option[string]
-	for _, m := range manifests {
-		label := m.Name
-		desc := fmt.Sprintf("v%s · %d files", m.Version, len(m.Files))
-		if m.Description != "" {
-			desc += " — " + m.Description
+	if len(manifests) == 1 {
+		// Skip manifest phase
+		m.manifestID = manifests[0].ID
+		m.chosen = manifests[0]
+		m.phase = phaseConfigure
+		m.form = m.buildConfigureForm()
+	} else {
+		m.phase = phaseManifest
+		m.form = m.buildManifestForm()
+	}
+
+	return m
+}
+
+func (m *model) buildManifestForm() *huh.Form {
+	var opts []huh.Option[string]
+	for _, man := range m.manifests {
+		desc := fmt.Sprintf("v%s · %d files", man.Version, len(man.Files))
+		if man.Description != "" {
+			desc += " — " + man.Description
 		}
-		manifestOptions = append(manifestOptions, huh.NewOption(
-			fmt.Sprintf("%s  %s", label, dimStyle.Render(desc)),
-			m.ID,
+		opts = append(opts, huh.NewOption(
+			fmt.Sprintf("%s  %s", man.Name, dimStyle.Render(desc)),
+			man.ID,
 		))
 	}
 
-	// ── Build tier options (dynamic based on manifest) ──────────
-	// We'll build these after manifest selection if needed. For the
-	// form wizard, we use a callback-style by splitting into groups.
-	// Group 1: manifest selection → Group 2: tier + target → Group 3: confirm
+	return huh.NewForm(
+		huh.NewGroup(
+			huh.NewSelect[string]().
+				Title("Select manifest").
+				Description("Choose which collection to install").
+				Options(opts...).
+				Value(&m.manifestID),
+		),
+	).WithTheme(huh.ThemeCharm()).WithShowHelp(false)
+}
 
-	manifestSelect := huh.NewSelect[string]().
-		Title("Select manifest").
-		Description("Choose which set of files to install").
-		Options(manifestOptions...).
-		Value(&manifestID)
-
-	// ── Group 1: Manifest selection ─────────────────────────────
-	group1 := huh.NewGroup(manifestSelect).
-		Title("  1 · Manifest").
-		Description("   Which collection of files?")
-
-	// We'll skip group 1 entirely if there's only one manifest
-	if len(manifests) == 1 {
-		group1 = group1.WithHide(true)
-		manifestID = manifests[0].ID
-	}
-
-	// ── Run manifest selection first so we can build tier options ─
-	if len(manifests) > 1 {
-		err := huh.NewForm(group1).
-			WithTheme(huh.ThemeCharm()).
-			Run()
-		if err != nil {
-			return err
-		}
-	}
-
+func (m *model) buildConfigureForm() *huh.Form {
 	// Resolve chosen manifest
-	var chosen Manifest
-	for _, m := range manifests {
-		if m.ID == manifestID {
-			chosen = m
+	for _, man := range m.manifests {
+		if man.ID == m.manifestID {
+			m.chosen = man
 			break
 		}
 	}
 
-	// ── Build tier options based on chosen manifest ─────────────
-	availableTiers := DiscoverAvailableTiers(chosen)
+	tiers := DiscoverAvailableTiers(m.chosen)
 
-	// Resolve tier default
-	tierID = cfg.Tier
+	// Tier default
+	m.tierID = m.cfg.Tier
 	tierFound := false
-	for _, t := range availableTiers {
-		if t.ID == tierID {
+	for _, t := range tiers {
+		if t.ID == m.tierID {
 			tierFound = true
 			break
 		}
 	}
-	if !tierFound && len(availableTiers) > 0 {
-		tierID = availableTiers[0].ID
+	if !tierFound && len(tiers) > 0 {
+		m.tierID = tiers[0].ID
 	}
 
-	var tierOptions []huh.Option[string]
-	for _, t := range availableTiers {
-		files := SelectFiles(chosen.Files, chosen, t.ID)
-		desc := fmt.Sprintf("%d files", len(files))
-		tierOptions = append(tierOptions, huh.NewOption(
-			fmt.Sprintf("%-12s %s", t.Label, dimStyle.Render(desc)),
+	var tierOpts []huh.Option[string]
+	for _, t := range tiers {
+		files := SelectFiles(m.chosen.Files, m.chosen, t.ID)
+		tierOpts = append(tierOpts, huh.NewOption(
+			fmt.Sprintf("%-12s %s", t.Label, dimStyle.Render(fmt.Sprintf("%d files", len(files)))),
 			t.ID,
 		))
 	}
 
-	tierSelect := huh.NewSelect[string]().
-		Title("Select tier").
-		Description("Higher tiers include everything from lower tiers").
-		Options(tierOptions...).
-		Value(&tierID)
+	home, _ := os.UserHomeDir()
+	defaultTarget := filepath.Join(home, ".copilot")
 
-	targetInput := huh.NewInput().
-		Title("Target directory").
-		Description("Where to install files (leave empty for default)").
-		Placeholder(defaultTarget).
-		Value(&targetDir)
-
-	// Dynamic confirm description showing summary
-	confirmField := huh.NewConfirm().
-		Title("Ready to install?").
-		Affirmative("  Install  ").
-		Negative("  Cancel  ").
-		Value(&confirm)
-
-	// ── Group 2: Tier + Target ──────────────────────────────────
-	group2Fields := []huh.Field{targetInput}
-	if len(availableTiers) > 1 {
-		group2Fields = []huh.Field{tierSelect, targetInput}
-	} else if len(availableTiers) == 1 {
-		tierID = availableTiers[0].ID
+	var fields []huh.Field
+	if len(tiers) > 1 {
+		fields = append(fields,
+			huh.NewSelect[string]().
+				Title("Select tier").
+				Description("Higher tiers include everything from lower tiers").
+				Options(tierOpts...).
+				Value(&m.tierID),
+		)
+	} else if len(tiers) == 1 {
+		m.tierID = tiers[0].ID
 	}
 
-	group2 := huh.NewGroup(group2Fields...).
-		Title(fmt.Sprintf("  2 · Configure — %s v%s", chosen.Name, chosen.Version)).
-		Description("   Choose your tier and destination")
+	fields = append(fields,
+		huh.NewInput().
+			Title("Target directory").
+			Description("Where to install files").
+			Placeholder(defaultTarget).
+			Value(&m.targetDir),
+		huh.NewConfirm().
+			Title("Install?").
+			Affirmative("  Install  ").
+			Negative("  Cancel  ").
+			Value(&m.confirm),
+	)
 
-	// ── Group 3: Confirm ────────────────────────────────────────
-	group3 := huh.NewGroup(confirmField).
-		Title("  3 · Confirm").
-		Description("   Review and install")
+	return huh.NewForm(
+		huh.NewGroup(fields...),
+	).WithTheme(huh.ThemeCharm()).WithShowHelp(false)
+}
 
-	// ── Run the wizard ──────────────────────────────────────────
-	err := huh.NewForm(group2, group3).
-		WithTheme(huh.ThemeCharm()).
-		Run()
+// ── tea.Model implementation ────────────────────────────────────
+
+func (m model) Init() tea.Cmd {
+	return m.form.Init()
+}
+
+func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		m.width = msg.Width
+		m.height = msg.Height
+	case tea.KeyMsg:
+		switch msg.String() {
+		case "ctrl+c":
+			m.quitting = true
+			m.confirm = false
+			return m, tea.Quit
+		}
+	}
+
+	// Delegate to the embedded huh form
+	updated, cmd := m.form.Update(msg)
+	if f, ok := updated.(*huh.Form); ok {
+		m.form = f
+
+		if f.State == huh.StateAborted {
+			m.quitting = true
+			m.confirm = false
+			return m, tea.Quit
+		}
+
+		if f.State == huh.StateCompleted {
+			switch m.phase {
+			case phaseManifest:
+				// Advance to configure phase
+				m.phase = phaseConfigure
+				m.form = m.buildConfigureForm()
+				return m, m.form.Init()
+
+			case phaseConfigure:
+				// Done — exit to stdout for install
+				m.quitting = true
+				return m, tea.Quit
+			}
+		}
+	}
+
+	return m, cmd
+}
+
+func (m model) View() string {
+	if m.quitting {
+		return ""
+	}
+
+	var sections []string
+
+	// Banner
+	sections = append(sections, renderBanner())
+	sections = append(sections, "")
+
+	// Phase header
+	switch m.phase {
+	case phaseManifest:
+		sections = append(sections, dimStyle.Render("  Step 1 of 2 · Select Manifest"))
+	case phaseConfigure:
+		header := fmt.Sprintf("  Step 2 of 2 · %s v%s",
+			brightStyle.Render(m.chosen.Name), m.chosen.Version)
+		sections = append(sections, header)
+	}
+	sections = append(sections, "")
+
+	// Form
+	sections = append(sections, m.form.View())
+
+	// Footer
+	sections = append(sections, "")
+	sections = append(sections, dimStyle.Render("  ↑/↓ navigate · enter select · ctrl+c quit"))
+
+	content := lipgloss.JoinVertical(lipgloss.Left, sections...)
+
+	// Vertically position in upper-third of terminal
+	if m.height > 0 {
+		contentLines := strings.Count(content, "\n") + 1
+		topPad := (m.height - contentLines) / 4
+		if topPad > 1 {
+			content = strings.Repeat("\n", topPad) + content
+		}
+	}
+
+	return content
+}
+
+// ── RunInteractiveInstall ───────────────────────────────────────
+
+// RunInteractiveInstall runs the full-screen TUI installer wizard, then
+// performs the file installation with normal stdout output.
+func RunInteractiveInstall(manifests []Manifest, cfg Config, useRemote bool, repo, branch string) error {
+	m := initialModel(manifests, cfg)
+
+	p := tea.NewProgram(m, tea.WithAltScreen())
+	finalModel, err := p.Run()
 	if err != nil {
 		return err
 	}
 
-	if !confirm {
+	result := finalModel.(model)
+
+	if !result.confirm {
 		fmt.Println(dimStyle.Render("\n  Cancelled.\n"))
 		return nil
 	}
 
 	// ── Resolve target ──────────────────────────────────────────
-	if strings.TrimSpace(targetDir) == "" {
-		targetDir = defaultTarget
+	home, _ := os.UserHomeDir()
+	target := result.targetDir
+	if strings.TrimSpace(target) == "" {
+		target = filepath.Join(home, ".copilot")
 	}
-	if strings.HasPrefix(targetDir, "~/") {
-		targetDir = filepath.Join(home, targetDir[2:])
+	if strings.HasPrefix(target, "~/") {
+		target = filepath.Join(home, target[2:])
 	}
-	targetDir, _ = filepath.Abs(targetDir)
+	target, _ = filepath.Abs(target)
 
 	// ── Show summary ────────────────────────────────────────────
-	files := SelectFiles(chosen.Files, chosen, tierID)
+	files := SelectFiles(result.chosen.Files, result.chosen, result.tierID)
 
 	summary := fmt.Sprintf(
 		"%s  %s v%s\n%s  %s\n%s  %d files\n%s  %s",
 		dimStyle.Render("Manifest:"),
-		brightStyle.Render(chosen.Name),
-		chosen.Version,
+		brightStyle.Render(result.chosen.Name),
+		result.chosen.Version,
 		dimStyle.Render("Tier:    "),
-		brightStyle.Render(tierID),
+		brightStyle.Render(result.tierID),
 		dimStyle.Render("Files:   "),
 		len(files),
 		dimStyle.Render("Target:  "),
-		brightStyle.Render(targetDir),
+		brightStyle.Render(target),
 	)
 	fmt.Println(summaryBox.Render(summary))
 	fmt.Println()
 
 	// ── Install ─────────────────────────────────────────────────
 	if useRemote {
-		if err := InstallFilesFromRemote(files, chosen.BasePath, targetDir, chosen.Version, chosen.ID, repo, branch); err != nil {
+		if err := InstallFilesFromRemote(files, result.chosen.BasePath, target, result.chosen.Version, result.chosen.ID, repo, branch); err != nil {
 			return err
 		}
 	} else {
-		if err := InstallFiles(files, chosen.BasePath, targetDir, chosen.Version, chosen.ID); err != nil {
+		if err := InstallFiles(files, result.chosen.BasePath, target, result.chosen.Version, result.chosen.ID); err != nil {
 			return err
 		}
 	}
 
 	// Persist config
 	cwd, _ := os.Getwd()
-	_ = WriteProjectConfig(cwd, &Config{Manifest: chosen.ID, Tier: tierID})
+	_ = WriteProjectConfig(cwd, &Config{Manifest: result.chosen.ID, Tier: result.tierID})
 	_ = EnsureGitExclude(cwd)
 
-	// ── Success banner ──────────────────────────────────────────
-	result := fmt.Sprintf(
+	// ── Success ─────────────────────────────────────────────────
+	resultMsg := fmt.Sprintf(
 		"%s  %s v%s (%s) installed\n%s  %s",
 		successStyle.Render("✓"),
-		chosen.Name,
-		chosen.Version,
-		tierID,
+		result.chosen.Name,
+		result.chosen.Version,
+		result.tierID,
 		dimStyle.Render("→"),
-		targetDir,
+		target,
 	)
-	fmt.Println(resultBox.Render(result))
+	fmt.Println(resultBox.Render(resultMsg))
 	return nil
 }
 
-// ── List command ────────────────────────────────────────────────
+// ── List command (stdout, no Bubble Tea) ────────────────────────
 
 // RunList displays manifests/files in human or JSON format.
 func RunList(manifests []Manifest, manifestID, tierID, category string, jsonOutput bool) error {
@@ -371,7 +481,6 @@ func RunList(manifests []Manifest, manifestID, tierID, category string, jsonOutp
 
 // ── Helpers ─────────────────────────────────────────────────────
 
-// formatGroups renders category groups for terminal display.
 func formatGroups(groups []CategoryGroup) string {
 	var b strings.Builder
 	for _, g := range groups {
