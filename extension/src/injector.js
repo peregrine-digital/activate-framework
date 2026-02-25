@@ -10,9 +10,15 @@
  * - Tracks what was injected via `.github/.activate-installed.json`
  * - Clean uninstall removes only files we placed
  *
- * PIPELINE: Every file mutation flows through writeSidecar(), which
- * automatically syncs `.git/info/exclude`. No caller ever touches
- * the exclude directly — the sidecar is the single source of truth.
+ * PIPELINE: Every file mutation flows through writeSidecar() /
+ * deleteSidecar(), which automatically handle THREE concerns:
+ *   1. Delete stale files from disk (old sidecar − new sidecar)
+ *   2. Write / remove the sidecar JSON
+ *   3. Sync `.git/info/exclude`
+ *
+ * No caller ever touches exclude or deletes managed files directly —
+ * the sidecar is the single source of truth. Callers describe the
+ * DESIRED end-state; the pipeline diffs and cleans up.
  */
 const vscode = require('vscode');
 const { selectFiles, parseManifestData } = require('./manifest');
@@ -53,32 +59,75 @@ async function readSidecar(wsRoot) {
 }
 
 /**
- * Write the sidecar JSON to the workspace, then AUTOMATICALLY sync
- * `.git/info/exclude` from the sidecar's file list.
+ * Write the sidecar JSON to the workspace.
  *
- * This is the ONLY way exclude gets updated — no other function
- * touches it directly. Single source of truth.
+ * This is the SINGLE COMMIT POINT for all injection mutations.
+ * It automatically handles:
+ *   1. Stale file cleanup — diffs old vs new file lists, deletes
+ *      files that are no longer in the new set from disk.
+ *   2. Sidecar persistence — writes the JSON tracking file.
+ *   3. Git exclude sync — derives exclude paths from the new file list.
+ *
+ * No caller ever deletes managed files or touches exclude directly.
  */
 async function writeSidecar(wsRoot, data) {
+  // 1. Read old state to compute stale files
+  const oldSidecar = await readSidecar(wsRoot);
+  const oldFiles = new Set(oldSidecar?.files || []);
+  const newFiles = new Set(data.files || []);
+
+  // 2. Delete stale files (in old but not in new)
+  for (const oldRel of oldFiles) {
+    if (!newFiles.has(oldRel)) {
+      try {
+        await vscode.workspace.fs.delete(vscode.Uri.joinPath(wsRoot, oldRel));
+      } catch {
+        // file may already be gone
+      }
+    }
+  }
+
+  // 3. Write sidecar
   const uri = vscode.Uri.joinPath(wsRoot, SIDECAR_REL);
   await vscode.workspace.fs.createDirectory(vscode.Uri.joinPath(wsRoot, '.github'));
   await vscode.workspace.fs.writeFile(uri, Buffer.from(JSON.stringify(data, null, 2) + '\n'));
 
-  // Derive exclude paths from sidecar — always in sync
+  // 4. Sync git exclude
   const excludePaths = [SIDECAR_REL, ...(data.files || [])];
   await _syncGitExclude(wsRoot, excludePaths);
 }
 
 /**
- * Delete the sidecar and remove the exclude block.
+ * Delete the sidecar and clean up everything it tracks.
+ *
+ * Automatically handles:
+ *   1. Deletes ALL tracked files from disk.
+ *   2. Removes the sidecar JSON.
+ *   3. Removes the git exclude block.
+ *
+ * Counterpart to writeSidecar() — between the two, no caller
+ * ever needs to delete managed files directly.
  */
 async function deleteSidecar(wsRoot) {
+  // 1. Delete all tracked files
+  const oldSidecar = await readSidecar(wsRoot);
+  for (const relPath of oldSidecar?.files || []) {
+    try {
+      await vscode.workspace.fs.delete(vscode.Uri.joinPath(wsRoot, relPath));
+    } catch {
+      // file may already be gone
+    }
+  }
+
+  // 2. Remove sidecar
   const uri = vscode.Uri.joinPath(wsRoot, SIDECAR_REL);
   try {
     await vscode.workspace.fs.delete(uri);
   } catch {
     // already gone
   }
+
+  // 3. Remove git exclude block
   await _removeGitExclude(wsRoot);
 }
 
@@ -249,22 +298,7 @@ async function injectFiles(context, tier, manifestId) {
     }
   }
 
-  // Remove stale files that were in the old sidecar but not in the new set.
-  // This is critical when switching manifests — old manifest files must be
-  // deleted from disk, not just dropped from the sidecar/exclude.
-  const newFileSet = new Set(injected);
-  for (const oldRel of previouslyInjected) {
-    if (!newFileSet.has(oldRel)) {
-      const staleUri = vscode.Uri.joinPath(wsRoot, oldRel);
-      try {
-        await vscode.workspace.fs.delete(staleUri);
-      } catch {
-        // file may already be gone
-      }
-    }
-  }
-
-  // Write sidecar (this automatically syncs git exclude)
+  // Write sidecar — pipeline auto-deletes stale files and syncs exclude
   await writeSidecar(wsRoot, {
     manifest: chosen.id,
     version: chosen.version,
@@ -328,6 +362,7 @@ async function injectSingleFile(context, file) {
 
 /**
  * Remove a single injected file from the workspace.
+ * Removes it from the sidecar; writeSidecar pipeline deletes from disk.
  * @param {{dest: string}} file
  * @returns {Promise<boolean>}
  */
@@ -336,26 +371,19 @@ async function removeSingleFile(file) {
   if (!wsRoot) return false;
 
   const destRel = `.github/${file.dest}`;
-  const destUri = vscode.Uri.joinPath(wsRoot, destRel);
+  const sidecar = await readSidecar(wsRoot);
+  if (!sidecar) return false;
 
-  try {
-    await vscode.workspace.fs.delete(destUri);
-
-    // Update sidecar (this automatically syncs git exclude)
-    const sidecar = await readSidecar(wsRoot);
-    if (sidecar) {
-      sidecar.files = sidecar.files.filter((p) => p !== destRel);
-      await writeSidecar(wsRoot, sidecar);
-    }
-
-    return true;
-  } catch {
-    return false;
-  }
+  sidecar.files = sidecar.files.filter((p) => p !== destRel);
+  // Pipeline auto-deletes the removed file from disk and syncs exclude
+  await writeSidecar(wsRoot, sidecar);
+  return true;
 }
 
 /**
  * Remove all injected files from the workspace and clean up.
+ * deleteSidecar pipeline handles file deletion, sidecar removal,
+ * and git exclude cleanup.
  */
 async function removeAllInjected() {
   const wsRoot = getWorkspaceRoot();
@@ -364,19 +392,8 @@ async function removeAllInjected() {
   const sidecar = await readSidecar(wsRoot);
   if (!sidecar) return false;
 
-  // Delete each injected file
-  for (const relPath of sidecar.files) {
-    const uri = vscode.Uri.joinPath(wsRoot, relPath);
-    try {
-      await vscode.workspace.fs.delete(uri);
-    } catch {
-      // file may already be gone
-    }
-  }
-
-  // Delete sidecar (this automatically removes git exclude block)
+  // Pipeline auto-deletes all tracked files, sidecar, and exclude block
   await deleteSidecar(wsRoot);
-
   return true;
 }
 
