@@ -199,11 +199,12 @@ class ControlPanelProvider {
     };
 
     /** Build HTML for a category group */
-    const categorySection = (label, icon, files, installed) => {
+    const categorySection = (label, icon, files, installed, sectionPrefix) => {
       if (!files.length) return '';
+      const id = `${sectionPrefix}-${label.toLowerCase()}`;
       const cards = files.map((f) => fileCard(f, installed)).join('');
       return `
-        <details class="category">
+        <details class="category" data-cat-id="${esc(id)}">
           <summary>${icon} ${esc(label)} <span class="count">${files.length}</span></summary>
           ${cards}
         </details>`;
@@ -214,11 +215,11 @@ class ControlPanelProvider {
     const availableGroups = listByCategory(availableFiles);
 
     const installedHtml = installedGroups
-      .map((g) => categorySection(g.label, CATEGORY_ICONS[g.category] || '📄', g.files, true))
+      .map((g) => categorySection(g.label, CATEGORY_ICONS[g.category] || '📄', g.files, true, 'installed'))
       .join('');
 
     const availableHtml = availableGroups
-      .map((g) => categorySection(g.label, CATEGORY_ICONS[g.category] || '📄', g.files, false))
+      .map((g) => categorySection(g.label, CATEGORY_ICONS[g.category] || '📄', g.files, false, 'available'))
       .join('');
 
     return /* html */ `<!DOCTYPE html>
@@ -480,6 +481,25 @@ class ControlPanelProvider {
     function send(command, file) {
       vscode.postMessage({ command, file });
     }
+
+    // Restore open/closed state of category sections
+    (function restoreState() {
+      const prev = vscode.getState() || {};
+      const openCats = prev.openCategories || {};
+      document.querySelectorAll('details[data-cat-id]').forEach(d => {
+        if (openCats[d.dataset.catId]) d.open = true;
+      });
+    })();
+
+    // Persist open/closed state when user toggles a category
+    document.querySelectorAll('details[data-cat-id]').forEach(d => {
+      d.addEventListener('toggle', () => {
+        const prev = vscode.getState() || {};
+        const openCats = prev.openCategories || {};
+        openCats[d.dataset.catId] = d.open;
+        vscode.setState({ ...prev, openCategories: openCats });
+      });
+    });
   </script>
 </body>
 </html>`;
