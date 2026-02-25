@@ -4,119 +4,140 @@
   "version": "0.1.0",
   "basePath": "plugins/ironarch",
   "tiers": [
-    { "id": "core", "label": "Skills" },
-    { "id": "ad-hoc", "label": "Workflow" }
+    { "id": "skills", "label": "Skills" },
+    { "id": "workflow", "label": "Workflow" }
   ],
   "files": [
     {
       "src": "../../skills/ci-debugger/SKILL.md",
       "dest": "skills/ci-debugger/SKILL.md",
-      "tier": "core",
+      "tier": "skills",
       "category": "skills",
       "description": "Diagnose and fix CI/CD pipeline failures from GitHub Actions logs"
     },
     {
       "src": "../../skills/context-discovery/SKILL.md",
       "dest": "skills/context-discovery/SKILL.md",
-      "tier": "core",
+      "tier": "skills",
       "category": "skills",
       "description": "Detect the target repository and identify the specific application or module being worked on"
     },
     {
       "src": "../../skills/github-context-gathering/SKILL.md",
       "dest": "skills/github-context-gathering/SKILL.md",
-      "tier": "core",
+      "tier": "skills",
       "category": "skills",
       "description": "Fetch GitHub resources (PRs, issues, commits) and recursively resolve all linked content"
     },
     {
       "src": "skills/instruction-authoring/SKILL.md",
       "dest": "skills/instruction-authoring/SKILL.md",
-      "tier": "core",
+      "tier": "skills",
       "category": "skills",
       "description": "Create or update app/module-specific instruction files in host repos"
     },
     {
       "src": "skills/instruction-authoring/assets/template.instructions.md",
       "dest": "skills/instruction-authoring/assets/template.instructions.md",
-      "tier": "core",
+      "tier": "skills",
       "category": "skills",
       "description": "Template for scaffolding new instruction files"
     },
     {
       "src": "../../skills/pr-writing/SKILL.md",
       "dest": "skills/pr-writing/SKILL.md",
-      "tier": "core",
+      "tier": "skills",
       "category": "skills",
       "description": "Create a pull request from session context using the repo's PR template"
     },
     {
       "src": "../../skills/session-management/SKILL.md",
       "dest": "skills/session-management/SKILL.md",
-      "tier": "core",
+      "tier": "skills",
       "category": "skills",
       "description": "Manage persistent session state across agent invocations"
     },
     {
       "src": "../../skills/spec-creation/SKILL.md",
       "dest": "skills/spec-creation/SKILL.md",
-      "tier": "core",
+      "tier": "skills",
       "category": "skills",
       "description": "Generate structured implementation specs for planning and handoffs"
     },
     {
       "src": "../../skills/spec-creation/assets/spec.template.md",
       "dest": "skills/spec-creation/assets/spec.template.md",
-      "tier": "core",
+      "tier": "skills",
       "category": "skills",
       "description": "Template for implementation spec documents"
     },
     {
       "src": "../../skills/visual-verification/SKILL.md",
       "dest": "skills/visual-verification/SKILL.md",
-      "tier": "core",
+      "tier": "skills",
       "category": "skills",
       "description": "Write temporary Cypress screenshot tests to visually confirm UI changes"
     },
     {
+      "src": "../../plugins/activate-framework/mcp-servers/github.json",
+      "dest": "mcp-servers/github.json",
+      "tier": "skills",
+      "category": "mcp-servers",
+      "description": "GitHub MCP server for repository operations, issues, PRs, and file access"
+    },
+    {
+      "src": "mcp-server/screenshot-viewer.json",
+      "dest": "mcp-servers/screenshot-viewer.json",
+      "tier": "skills",
+      "category": "mcp-servers",
+      "description": "Screenshot Viewer MCP config for analyzing test failure screenshots"
+    },
+    {
+      "src": "mcp-server/screenshot-viewer.js",
+      "dest": "mcp-server/screenshot-viewer.js",
+      "tier": "skills",
+      "category": "mcp-server",
+      "description": "Screenshot Viewer MCP server implementation"
+    },
+    {
       "src": "agents/documenter.agent.md",
       "dest": "agents/documenter.agent.md",
-      "tier": "ad-hoc",
+      "tier": "workflow",
       "category": "agents",
       "description": "Updates app-specific instructions and agent skills when new reusable patterns emerge"
     },
     {
       "src": "agents/implementer.agent.md",
       "dest": "agents/implementer.agent.md",
-      "tier": "ad-hoc",
+      "tier": "workflow",
       "category": "agents",
       "description": "Implements code exactly to spec using application patterns"
     },
     {
       "src": "agents/planner.agent.md",
       "dest": "agents/planner.agent.md",
-      "tier": "ad-hoc",
+      "tier": "workflow",
       "category": "agents",
       "description": "Determines task type, gathers missing context, and produces spec or review plan"
     },
     {
       "src": "agents/pr_writer.agent.md",
       "dest": "agents/pr_writer.agent.md",
-      "tier": "ad-hoc",
+      "tier": "workflow",
       "category": "agents",
       "description": "Creates minimal, direct PRs using the repo's official template"
     },
     {
       "src": "agents/reviewer.agent.md",
       "dest": "agents/reviewer.agent.md",
-      "tier": "ad-hoc",
+      "tier": "workflow",
       "category": "agents",
       "description": "Final quality gate for code review with different modes for own vs external PRs"
     },
     {
       "src": "agents/tester.agent.md",
       "dest": "agents/tester.agent.md",
-      "tier": "ad-hoc",
+      "tier": "workflow",
       "category": "agents",
       "description": "Writes, runs, and debugs tests — owns the full testing lifecycle"
     }
