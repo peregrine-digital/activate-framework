@@ -399,7 +399,7 @@ async function injectFiles(context, tier, manifestId) {
   const remoteMode = isRemoteMode();
   const basePath = chosen.basePath || '';
 
-  const files = selectFiles(chosen.files, tier);
+  const files = selectFiles(chosen.files, tier, chosen);
   const oldSidecar = await readSidecar(wsRoot);
   const previouslyInjected = new Set(oldSidecar?.files || []);
   const previousMcpServers = oldSidecar?.mcpServers || [];
