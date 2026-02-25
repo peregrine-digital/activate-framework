@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 )
@@ -96,8 +97,8 @@ func isMutating(method string) bool {
 }
 
 func isClosedPipe(err error) bool {
-	return err != nil && (err.Error() == "io: read/write on closed pipe" ||
-		err == io.ErrClosedPipe)
+	return err != nil && (errors.Is(err, io.ErrClosedPipe) ||
+		err.Error() == "io: read/write on closed pipe")
 }
 
 // ── Handlers ───────────────────────────────────────────────────

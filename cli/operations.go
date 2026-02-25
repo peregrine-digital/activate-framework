@@ -102,36 +102,23 @@ func UpdateFiles(m Manifest, sidecar *repoSidecar, cfg Config, projectDir string
 	return updated, skipped, nil
 }
 
-func runUpdateCommand(manifests []Manifest, cfg Config, projectDir string, useRemote bool, repo, branch string, jsonOutput bool) error {
-	chosen := findManifestByID(manifests, cfg.Manifest)
-	if chosen == nil {
-		return fmt.Errorf("unknown manifest: %s", cfg.Manifest)
-	}
-
-	sidecar, _ := readRepoSidecar(projectDir)
-	if sidecar == nil {
-		return fmt.Errorf("no installed files found; run 'repo add' first")
-	}
-
-	updated, skipped, err := UpdateFiles(*chosen, sidecar, cfg, projectDir, useRemote, repo, branch)
+func runUpdateCommand(svc *ActivateService, jsonOutput bool) error {
+	result, err := svc.Update()
 	if err != nil {
 		return err
 	}
 
 	if jsonOutput {
-		return printJSON(map[string]interface{}{
-			"updated": updated,
-			"skipped": skipped,
-		})
+		return printJSON(result)
 	}
 
-	for _, f := range updated {
+	for _, f := range result.Updated {
 		fmt.Printf("  ✓  %s\n", f)
 	}
-	for _, f := range skipped {
+	for _, f := range result.Skipped {
 		fmt.Printf("  ⊘  %s (skipped)\n", f)
 	}
-	fmt.Printf("\nUpdated %d files, skipped %d.\n", len(updated), len(skipped))
+	fmt.Printf("\nUpdated %d files, skipped %d.\n", len(result.Updated), len(result.Skipped))
 	return nil
 }
 
@@ -203,31 +190,16 @@ func UninstallSingleFile(dest string, projectDir string) error {
 	return writeRepoSidecar(projectDir, *sidecar)
 }
 
-func runInstallFileCommand(manifests []Manifest, cfg Config, projectDir, file string, useRemote bool, repo, branch string, jsonOutput bool) error {
-	chosen := findManifestByID(manifests, cfg.Manifest)
-	if chosen == nil {
-		return fmt.Errorf("unknown manifest: %s", cfg.Manifest)
-	}
-
-	target := findManifestFile(chosen.Files, file)
-	if target == nil {
-		return fmt.Errorf("file %q not found in manifest %s", file, chosen.ID)
-	}
-
-	if err := InstallSingleFile(*target, *chosen, projectDir, useRemote, repo, branch); err != nil {
+func runInstallFileCommand(svc *ActivateService, file string, jsonOutput bool) error {
+	result, err := svc.InstallFile(file)
+	if err != nil {
 		return err
 	}
 
-	// Clear skipped version on reinstall
-	if _, ok := cfg.SkippedVersions[target.Dest]; ok {
-		delete(cfg.SkippedVersions, target.Dest)
-		_ = WriteProjectConfig(projectDir, &Config{SkippedVersions: cfg.SkippedVersions})
-	}
-
 	if jsonOutput {
-		return printJSON(map[string]interface{}{"ok": true, "file": target.Dest})
+		return printJSON(result)
 	}
-	fmt.Printf("  ✓  %s\n", target.Dest)
+	fmt.Printf("  ✓  %s\n", result.File)
 	return nil
 }
 
@@ -251,26 +223,16 @@ func DiffFile(f ManifestFile, m Manifest, projectDir string) (string, error) {
 	return unifiedDiff(string(bundled), string(installed), "bundled/"+f.Src, "installed/"+destRel), nil
 }
 
-func runDiffCommand(manifests []Manifest, cfg Config, projectDir, file string) error {
-	chosen := findManifestByID(manifests, cfg.Manifest)
-	if chosen == nil {
-		return fmt.Errorf("unknown manifest: %s", cfg.Manifest)
-	}
-
-	target := findManifestFile(chosen.Files, file)
-	if target == nil {
-		return fmt.Errorf("file %q not found in manifest %s", file, chosen.ID)
-	}
-
-	diff, err := DiffFile(*target, *chosen, projectDir)
+func runDiffCommand(svc *ActivateService, file string) error {
+	result, err := svc.DiffFile(file)
 	if err != nil {
 		return err
 	}
 
-	if diff == "" {
+	if result.Identical {
 		fmt.Println("Files are identical.")
 	} else {
-		fmt.Print(diff)
+		fmt.Print(result.Diff)
 	}
 	return nil
 }
@@ -285,69 +247,32 @@ func SyncNeeded(m Manifest, sidecar *repoSidecar) bool {
 	return sidecar.Version != m.Version
 }
 
-func runSyncCommand(manifests []Manifest, cfg Config, projectDir string, useRemote bool, repo, branch string, jsonOutput bool) error {
-	chosen := findManifestByID(manifests, cfg.Manifest)
-	if chosen == nil {
-		return fmt.Errorf("unknown manifest: %s", cfg.Manifest)
-	}
-
-	sidecar, _ := readRepoSidecar(projectDir)
-	if sidecar == nil {
-		if jsonOutput {
-			return printJSON(map[string]interface{}{
-				"action":  "none",
-				"reason":  "not installed",
-				"message": "No sidecar found; run 'repo add' first",
-			})
-		}
-		fmt.Println("Not installed. Run 'repo add' first.")
-		return nil
-	}
-
-	if !SyncNeeded(*chosen, sidecar) {
-		if jsonOutput {
-			return printJSON(map[string]interface{}{
-				"action":           "none",
-				"reason":           "up to date",
-				"installedVersion": sidecar.Version,
-				"availableVersion": chosen.Version,
-			})
-		}
-		fmt.Printf("Already up to date (v%s).\n", sidecar.Version)
-		return nil
-	}
-
-	if jsonOutput {
-		// For JSON mode, just report the mismatch and run update
-		updated, skipped, err := UpdateFiles(*chosen, sidecar, cfg, projectDir, useRemote, repo, branch)
-		if err != nil {
-			return err
-		}
-		return printJSON(map[string]interface{}{
-			"action":           "updated",
-			"previousVersion":  sidecar.Version,
-			"availableVersion": chosen.Version,
-			"updated":          updated,
-			"skipped":          skipped,
-		})
-	}
-
-	fmt.Printf("Version mismatch: installed v%s, available v%s\n", sidecar.Version, chosen.Version)
-	fmt.Println("Re-injecting managed files...")
-	fmt.Println()
-
-	updated, skipped, err := UpdateFiles(*chosen, sidecar, cfg, projectDir, useRemote, repo, branch)
+func runSyncCommand(svc *ActivateService, jsonOutput bool) error {
+	result, err := svc.Sync()
 	if err != nil {
 		return err
 	}
 
-	for _, f := range updated {
-		fmt.Printf("  ✓  %s\n", f)
+	if jsonOutput {
+		return printJSON(result)
 	}
-	for _, f := range skipped {
-		fmt.Printf("  ⊘  %s (skipped)\n", f)
+
+	switch result.Action {
+	case "none":
+		if result.Reason == "not installed" {
+			fmt.Println("Not installed. Run 'repo add' first.")
+		} else {
+			fmt.Printf("Already up to date (v%s).\n", result.AvailableVersion)
+		}
+	case "updated":
+		fmt.Printf("Updated from v%s to v%s.\n", result.PreviousVersion, result.AvailableVersion)
+		for _, f := range result.Updated {
+			fmt.Printf("  ✓  %s\n", f)
+		}
+		for _, f := range result.Skipped {
+			fmt.Printf("  ⊘  %s (skipped)\n", f)
+		}
 	}
-	fmt.Printf("\nSynced to v%s. Updated %d files, skipped %d.\n", chosen.Version, len(updated), len(skipped))
 	return nil
 }
 

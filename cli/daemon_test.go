@@ -315,8 +315,8 @@ func TestDaemonManifestList(t *testing.T) {
 	if len(manifests) != 1 {
 		t.Fatalf("expected 1 manifest, got %d", len(manifests))
 	}
-	if manifests[0]["ID"] != "test-manifest" {
-		t.Errorf("manifest id = %v, want test-manifest", manifests[0]["ID"])
+	if manifests[0]["id"] != "test-manifest" {
+		t.Errorf("manifest id = %v, want test-manifest", manifests[0]["id"])
 	}
 }
 

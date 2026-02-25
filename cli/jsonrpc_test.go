@@ -167,7 +167,7 @@ func TestTransportWriteNotification(t *testing.T) {
 	var buf bytes.Buffer
 	tr := NewTransport(strings.NewReader(""), &buf)
 
-	notif := ProgressNotification("working", 50)
+	notif := StateChangedNotification()
 	if err := tr.WriteNotification(notif); err != nil {
 		t.Fatalf("WriteNotification: %v", err)
 	}
@@ -184,8 +184,8 @@ func TestTransportWriteNotification(t *testing.T) {
 	if got["jsonrpc"] != "2.0" {
 		t.Errorf("jsonrpc = %v, want 2.0", got["jsonrpc"])
 	}
-	if got["method"] != "activate/progress" {
-		t.Errorf("method = %v, want activate/progress", got["method"])
+	if got["method"] != "activate/stateChanged" {
+		t.Errorf("method = %v, want activate/stateChanged", got["method"])
 	}
 	if _, hasID := got["id"]; hasID {
 		t.Error("notification should not have id field")
@@ -250,44 +250,6 @@ func TestErrorResponse(t *testing.T) {
 	}
 	if resp.Error.Message != "parse error" {
 		t.Errorf("Message = %q, want %q", resp.Error.Message, "parse error")
-	}
-}
-
-func TestErrorResponseWithData(t *testing.T) {
-	data := map[string]string{"detail": "extra info"}
-	resp := ErrorResponseWithData(json.RawMessage(`4`), ErrCodeInternal, "internal", data)
-	if resp.Error == nil {
-		t.Fatal("Error should not be nil")
-	}
-	if resp.Error.Code != ErrCodeInternal {
-		t.Errorf("Code = %d, want %d", resp.Error.Code, ErrCodeInternal)
-	}
-	if resp.Error.Data == nil {
-		t.Fatal("Data should not be nil")
-	}
-	dm, ok := resp.Error.Data.(map[string]string)
-	if !ok {
-		t.Fatalf("Data type = %T, want map[string]string", resp.Error.Data)
-	}
-	if dm["detail"] != "extra info" {
-		t.Errorf("Data[detail] = %q, want %q", dm["detail"], "extra info")
-	}
-}
-
-func TestProgressNotification(t *testing.T) {
-	notif := ProgressNotification("building", 75)
-	if notif.Method != "activate/progress" {
-		t.Errorf("Method = %q, want %q", notif.Method, "activate/progress")
-	}
-	params, ok := notif.Params.(map[string]interface{})
-	if !ok {
-		t.Fatalf("Params type = %T, want map[string]interface{}", notif.Params)
-	}
-	if params["message"] != "building" {
-		t.Errorf("message = %v, want building", params["message"])
-	}
-	if params["percent"] != 75 {
-		t.Errorf("percent = %v, want 75", params["percent"])
 	}
 }
 

@@ -36,13 +36,13 @@ type manifestJSON struct {
 
 // Manifest is the fully resolved in-memory representation.
 type Manifest struct {
-	ID          string
-	Name        string
-	Description string
-	Version     string
-	BasePath    string // resolved absolute path (local) or relative prefix (remote)
-	Tiers       []TierDef
-	Files       []ManifestFile
+	ID          string         `json:"id"`
+	Name        string         `json:"name"`
+	Description string         `json:"description,omitempty"`
+	Version     string         `json:"version"`
+	BasePath    string         `json:"basePath"` // resolved absolute path (local) or relative prefix (remote)
+	Tiers       []TierDef      `json:"tiers,omitempty"`
+	Files       []ManifestFile `json:"files"`
 }
 
 // ── Discovery ───────────────────────────────────────────────────

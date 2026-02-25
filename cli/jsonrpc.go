@@ -159,22 +159,6 @@ func ErrorResponse(id json.RawMessage, code int, message string) *Response {
 	return &Response{ID: id, Error: &RPCError{Code: code, Message: message}}
 }
 
-// ErrorResponseWithData creates an error response with additional data.
-func ErrorResponseWithData(id json.RawMessage, code int, message string, data interface{}) *Response {
-	return &Response{ID: id, Error: &RPCError{Code: code, Message: message, Data: data}}
-}
-
-// ProgressNotification creates a progress notification.
-func ProgressNotification(message string, percent int) *Notification {
-	return &Notification{
-		Method: "activate/progress",
-		Params: map[string]interface{}{
-			"message": message,
-			"percent": percent,
-		},
-	}
-}
-
 // StateChangedNotification creates a state-changed notification.
 func StateChangedNotification() *Notification {
 	return &Notification{

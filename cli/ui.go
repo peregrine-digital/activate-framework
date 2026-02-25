@@ -912,9 +912,10 @@ func RunInteractiveInstall(svc *ActivateService) error {
 // ── List command (stdout, no Bubble Tea) ────────────────────────
 
 // RunList displays manifests/files in human or JSON format.
-func RunList(manifests []Manifest, manifestID, tierID, category string, jsonOutput bool) error {
+func RunList(svc *ActivateService, manifestID, tierID, category string, jsonOutput bool) error {
 	// Overview mode
 	if manifestID == "" && tierID == "" && category == "" {
+		manifests := svc.ListManifests()
 		if jsonOutput {
 			type summary struct {
 				ID          string `json:"id"`
@@ -937,40 +938,29 @@ func RunList(manifests []Manifest, manifestID, tierID, category string, jsonOutp
 		return nil
 	}
 
-	// Pick manifest
-	var chosen *Manifest
-	if manifestID != "" {
-		for i, m := range manifests {
-			if m.ID == manifestID {
-				chosen = &manifests[i]
-				break
-			}
-		}
-		if chosen == nil {
-			return fmt.Errorf("unknown manifest: %s (available: %s)",
-				manifestID, manifestIDs(manifests))
-		}
-	} else {
-		chosen = &manifests[0]
+	// Detail mode via service
+	result, err := svc.ListFiles(manifestID, tierID, category)
+	if err != nil {
+		return err
 	}
-
-	groups := ListByCategory(chosen.Files, *chosen, tierID, category)
 
 	if jsonOutput {
-		return printJSON(map[string]interface{}{
-			"id":      chosen.ID,
-			"name":    chosen.Name,
-			"version": chosen.Version,
-			"groups":  groups,
-		})
+		return printJSON(result)
 	}
 
-	tierLabel := tierID
+	tierLabel := result.Tier
 	if tierLabel == "" {
 		tierLabel = "all tiers"
 	}
-	fmt.Println(titleStyle.Render(fmt.Sprintf("\n%s v%s — %s", chosen.Name, chosen.Version, tierLabel)))
-	fmt.Println(formatGroups(groups))
+	chosen := findManifestByID(svc.Manifests, result.Manifest)
+	name := result.Manifest
+	ver := ""
+	if chosen != nil {
+		name = chosen.Name
+		ver = chosen.Version
+	}
+	fmt.Println(titleStyle.Render(fmt.Sprintf("\n%s v%s — %s", name, ver, tierLabel)))
+	fmt.Println(formatGroups(result.Categories))
 	fmt.Println()
 	return nil
 }
@@ -1003,10 +993,4 @@ func formatGroups(groups []CategoryGroup) string {
 	return b.String()
 }
 
-func manifestIDs(ms []Manifest) string {
-	var ids []string
-	for _, m := range ms {
-		ids = append(ids, m.ID)
-	}
-	return strings.Join(ids, ", ")
-}
+

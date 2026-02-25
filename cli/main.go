@@ -245,25 +245,25 @@ func main() {
 		}
 
 	case "list":
-		if err := RunList(manifests, args.manifest, args.tier, args.category, args.json); err != nil {
+		if err := RunList(svc, args.manifest, args.tier, args.category, args.json); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 			os.Exit(1)
 		}
 
 	case "state":
-		if err := runStateCommand(manifests, projectDir, cfg, args.json); err != nil {
+		if err := runStateCommand(svc, args.json); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 			os.Exit(1)
 		}
 
 	case "update":
-		if err := runUpdateCommand(manifests, cfg, projectDir, args.remote, args.repo, args.branch, args.json); err != nil {
+		if err := runUpdateCommand(svc, args.json); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 			os.Exit(1)
 		}
 
 	case "sync":
-		if err := runSyncCommand(manifests, cfg, projectDir, args.remote, args.repo, args.branch, args.json); err != nil {
+		if err := runSyncCommand(svc, args.json); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 			os.Exit(1)
 		}
@@ -285,19 +285,19 @@ func main() {
 			fmt.Fprintln(os.Stderr, "Error: diff requires --file <path>")
 			os.Exit(1)
 		}
-		if err := runDiffCommand(manifests, cfg, projectDir, args.file); err != nil {
+		if err := runDiffCommand(svc, args.file); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 			os.Exit(1)
 		}
 
 	case "config":
-		if err := runConfigCommand(projectDir, args, args.json); err != nil {
+		if err := runConfigCommand(svc, args, args.json); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 			os.Exit(1)
 		}
 
 	case "repo":
-		if err := runRepoCommand(manifests, cfg, projectDir, args); err != nil {
+		if err := runRepoCommand(svc, args); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 			os.Exit(1)
 		}
@@ -305,7 +305,7 @@ func main() {
 	case "install":
 		// Per-file install
 		if args.file != "" {
-			if err := runInstallFileCommand(manifests, cfg, projectDir, args.file, args.remote, args.repo, args.branch, args.json); err != nil {
+			if err := runInstallFileCommand(svc, args.file, args.json); err != nil {
 				fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 				os.Exit(1)
 			}
@@ -366,40 +366,28 @@ func installWithResolvedConfig(manifests []Manifest, cfg Config, target string, 
 	return nil
 }
 
-func runStateCommand(manifests []Manifest, projectDir string, cfg Config, jsonOutput bool) error {
-	state := DetectInstallState(projectDir)
-	sidecar, _ := readRepoSidecar(projectDir)
-
-	chosen := findManifestByID(manifests, cfg.Manifest)
+func runStateCommand(svc *ActivateService, jsonOutput bool) error {
+	result := svc.GetState()
 
 	if jsonOutput {
-		out := map[string]interface{}{
-			"projectDir": projectDir,
-			"state":      state,
-			"config":     cfg,
-		}
-		if chosen != nil {
-			out["files"] = ComputeFileStatuses(*chosen, sidecar, cfg, projectDir)
-		}
-		return printJSON(out)
+		return printJSON(result)
 	}
 
-	fmt.Printf("Project: %s\n", projectDir)
-	fmt.Printf("Global config:  %t\n", state.HasGlobalConfig)
-	fmt.Printf("Project config: %t\n", state.HasProjectConfig)
-	fmt.Printf("Install marker: %t\n", state.HasInstallMarker)
-	if state.HasInstallMarker {
-		fmt.Printf("Installed: %s v%s\n", state.InstalledManifest, state.InstalledVersion)
+	fmt.Printf("Project: %s\n", result.ProjectDir)
+	fmt.Printf("Global config:  %t\n", result.State.HasGlobalConfig)
+	fmt.Printf("Project config: %t\n", result.State.HasProjectConfig)
+	fmt.Printf("Install marker: %t\n", result.State.HasInstallMarker)
+	if result.State.HasInstallMarker {
+		fmt.Printf("Installed: %s v%s\n", result.State.InstalledManifest, result.State.InstalledVersion)
 	}
-	fmt.Printf("Effective config: manifest=%s tier=%s\n", cfg.Manifest, cfg.Tier)
+	fmt.Printf("Effective config: manifest=%s tier=%s\n", result.Config.Manifest, result.Config.Tier)
 
-	if chosen == nil {
+	if len(result.Files) == 0 {
 		return nil
 	}
 
-	statuses := ComputeFileStatuses(*chosen, sidecar, cfg, projectDir)
 	groups := make(map[string][]FileStatus)
-	for _, s := range statuses {
+	for _, s := range result.Files {
 		groups[s.Category] = append(groups[s.Category], s)
 	}
 
@@ -435,7 +423,7 @@ func runStateCommand(manifests []Manifest, projectDir string, cfg Config, jsonOu
 	return nil
 }
 
-func runConfigCommand(projectDir string, args cliArgs, jsonOutput bool) error {
+func runConfigCommand(svc *ActivateService, args cliArgs, jsonOutput bool) error {
 	action := args.configAction
 	if action == "" {
 		action = "get"
@@ -452,37 +440,15 @@ func runConfigCommand(projectDir string, args cliArgs, jsonOutput bool) error {
 
 	switch action {
 	case "get":
-		switch scope {
-		case "global":
-			cfg, _ := ReadGlobalConfig()
-			if cfg == nil {
-				cfg = &Config{}
-			}
-			if jsonOutput {
-				return printJSON(cfg)
-			}
-			fmt.Printf("global config: manifest=%s tier=%s\n", cfg.Manifest, cfg.Tier)
-			return nil
-
-		case "project":
-			cfg, _ := ReadProjectConfig(projectDir)
-			if cfg == nil {
-				cfg = &Config{}
-			}
-			if jsonOutput {
-				return printJSON(cfg)
-			}
-			fmt.Printf("project config: manifest=%s tier=%s\n", cfg.Manifest, cfg.Tier)
-			return nil
-
-		case "resolved":
-			cfg := ResolveConfig(projectDir, nil)
-			if jsonOutput {
-				return printJSON(cfg)
-			}
-			fmt.Printf("resolved config: manifest=%s tier=%s\n", cfg.Manifest, cfg.Tier)
-			return nil
+		cfg, err := svc.GetConfig(scope)
+		if err != nil {
+			return err
 		}
+		if jsonOutput {
+			return printJSON(cfg)
+		}
+		fmt.Printf("%s config: manifest=%s tier=%s\n", scope, cfg.Manifest, cfg.Tier)
+		return nil
 
 	case "set":
 		updates := &Config{}
@@ -496,35 +462,22 @@ func runConfigCommand(projectDir string, args cliArgs, jsonOutput bool) error {
 			return fmt.Errorf("config set requires --manifest and/or --tier")
 		}
 
-		switch scope {
-		case "global":
-			if err := WriteGlobalConfig(updates); err != nil {
-				return err
-			}
-		case "project":
-			if err := WriteProjectConfig(projectDir, updates); err != nil {
-				return err
-			}
-			_ = EnsureGitExclude(projectDir)
-		default:
-			return fmt.Errorf("invalid --scope for config set: %s (use project|global)", scope)
+		result, err := svc.SetConfig(scope, updates)
+		if err != nil {
+			return err
 		}
 
 		if jsonOutput {
-			return printJSON(map[string]interface{}{
-				"ok":    true,
-				"action": "set",
-				"scope": scope,
-			})
+			return printJSON(result)
 		}
-		fmt.Printf("saved %s config\n", scope)
+		fmt.Printf("saved %s config\n", result.Scope)
 		return nil
 	}
 
 	return fmt.Errorf("invalid config action: %s (use get|set)", action)
 }
 
-func runRepoCommand(manifests []Manifest, cfg Config, projectDir string, args cliArgs) error {
+func runRepoCommand(svc *ActivateService, args cliArgs) error {
 	action := args.repoAction
 	if action == "" {
 		action = "add"
@@ -532,9 +485,10 @@ func runRepoCommand(manifests []Manifest, cfg Config, projectDir string, args cl
 
 	switch action {
 	case "add":
-		return RepoAdd(manifests, cfg, projectDir, args.remote, args.repo, args.branch)
+		_, err := svc.RepoAdd()
+		return err
 	case "remove":
-		return RepoRemove(projectDir)
+		return svc.RepoRemove()
 	default:
 		return fmt.Errorf("invalid repo action: %s (use add|remove)", action)
 	}
