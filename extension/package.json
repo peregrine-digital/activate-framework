@@ -150,27 +150,27 @@
             "Use files bundled with the extension (offline, stable)",
             "Fetch files from GitHub (always latest, requires network)"
           ],
-          "description": "Where to load manifest and files from."
+          "description": "Where Peregrine Activate loads manifest and files from."
         },
         "activate-framework.remoteRepo": {
           "type": "string",
           "default": "peregrine-digital/activate-framework",
-          "description": "GitHub repository (owner/repo) when source is 'remote'."
+          "description": "GitHub repository (owner/repo) for Peregrine Activate when source is 'remote'."
         },
         "activate-framework.remoteBranch": {
           "type": "string",
           "default": "main",
-          "description": "Branch or tag when source is 'remote'."
+          "description": "Git branch or tag for Peregrine Activate when source is 'remote'."
         },
         "activate-framework.telemetry.enabled": {
           "type": "boolean",
           "default": true,
-          "description": "Enable daily logging of GitHub Copilot premium-interaction quota usage to ~/.activate/copilot-telemetry.jsonl."
+          "description": "Enable Peregrine Activate's daily logging of GitHub Copilot premium-interaction quota usage to ~/.activate/copilot-telemetry.jsonl."
         },
         "activate-framework.telemetry.logDirectory": {
           "type": "string",
           "default": "",
-          "description": "Directory for the Copilot telemetry log. Empty uses ~/.activate/. Supports ~ for home directory."
+          "description": "Directory for Peregrine Activate's Copilot telemetry log. Empty uses ~/.activate/. Supports ~ for home directory."
         }
       }
     }

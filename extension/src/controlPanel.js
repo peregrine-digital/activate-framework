@@ -233,6 +233,9 @@ class ControlPanelProvider {
         );
         break;
       }
+      case 'openSettings':
+        vscode.commands.executeCommand('workbench.action.openSettings', '@ext:peregrine.peregrine-activate');
+        break;
     }
   }
 
@@ -389,6 +392,21 @@ class ControlPanelProvider {
       display: inline-flex;
       align-items: center;
       gap: 3px;
+    }
+    .status-bar .spacer {
+      flex-grow: 1;
+    }
+    .status-bar .gear-btn {
+      cursor: pointer;
+      opacity: 0.6;
+      font-size: 14px;
+      padding: 2px 4px;
+      border-radius: 3px;
+      transition: opacity 0.15s, background 0.15s;
+    }
+    .status-bar .gear-btn:hover {
+      opacity: 1;
+      background: var(--vscode-toolbar-hoverBackground);
     }
 
     /* ── Buttons ── */
@@ -609,6 +627,8 @@ class ControlPanelProvider {
     <span class="badge">${esc(manifestName)}</span>
     <span class="dot">·</span>
     <span class="ws-status">${isActive ? '✓' : '○'} Workspace</span>
+    <span class="spacer"></span>
+    <span class="gear-btn" onclick="send('openSettings')" title="Peregrine Activate Settings">⚙</span>
   </div>
 
   <div class="button-row">
