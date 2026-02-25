@@ -1,7 +1,4 @@
 const vscode = require('vscode');
-const { listByCategory, getAllowedFileTiers, getTierLabel } = require('./manifest');
-const { resolveConfig } = require('./config');
-const { readLogEntries, getLogFilePath } = require('./telemetry');
 
 /**
  * Single WebviewView that replaces both the old control-panel and TreeView.
@@ -21,8 +18,9 @@ const { readLogEntries, getLogFilePath } = require('./telemetry');
 class ControlPanelProvider {
   static viewType = 'activate-framework.controlPanel';
 
-  constructor(context) {
-    this._context = context;
+  /** @param {import('./client').ActivateClient} client */
+  constructor(client) {
+    this._client = client;
     this._view = null;
     /** @type {'main'|'usage'} */
     this._currentPage = 'main';
@@ -43,113 +41,59 @@ class ControlPanelProvider {
   // ── data helpers ──────────────────────────────────────
 
   async _gatherState() {
-    const {
-      findActivateWorkspaceFolder,
-      readInstalledVersion,
-      discoverBundledManifests,
-      readBundledManifestById,
-      isFileInstalled,
-      readInstalledFileVersion,
-      readBundledFileVersion,
-    } = require('./installer');
-    const {
-      readInjectedVersion,
-      isFileInjected,
-      readInjectedFileVersion,
-    } = require('./injector');
+    const state = await this._client.getState();
+    const manifests = await this._client.listManifests();
 
-    const cfg = await resolveConfig();
-    const tier = cfg.tier;
-    const version = this._context.extension.packageJSON.version ?? 'unknown';
+    const cfg = state.config || {};
+    const tier = cfg.tier || 'standard';
+    const fileOverrides = cfg.fileOverrides || {};
+    const skippedVersions = cfg.skippedVersions || {};
+    const isActive = state.state?.hasInstallMarker || false;
+    const version = state.state?.installedVersion || '';
+    const manifestName = cfg.manifest || 'activate-framework';
+    const manifestCount = Array.isArray(manifests) ? manifests.length : 1;
 
-    // Determine install state (inject mode is primary, workspace is fallback)
-    let isActive;
-    let installedInfo;
-
-    installedInfo = await readInjectedVersion();
-    if (installedInfo) {
-      isActive = true;
-    } else {
-      isActive = !!findActivateWorkspaceFolder();
-      installedInfo = await readInstalledVersion(this._context);
-    }
-
-    const activeManifestId = cfg.manifest || installedInfo?.manifest || 'activate-framework';
-    const installedVersion = installedInfo?.version || null;
-
-    let manifest = { files: [], name: 'Activate Framework' };
-    let manifestCount = 1;
-    try {
-      manifest = await readBundledManifestById(this._context, activeManifestId);
-    } catch {
-      // Fall back to first discovered manifest
-      try {
-        const all = await discoverBundledManifests(this._context);
-        if (all.length > 0) {
-          manifest = all[0];
-        }
-      } catch {
-        /* empty */
-      }
-    }
-
-    // Count total available manifests for switcher visibility
-    try {
-      const all = await discoverBundledManifests(this._context);
-      manifestCount = all.length;
-    } catch {
-      /* keep default 1 */
-    }
-
-    const files = manifest.files || [];
-    const manifestName = manifest.name || 'Activate Framework';
-
-    // Determine which are currently on disk + version info
-    /** @type {Set<string>} */
-    const installedSet = new Set();
-    /** @type {Map<string, {installed: string|null, bundled: string|null}>} */
+    // Build file lists from daemon FileStatus[]
+    const files = state.files || [];
     const versionMap = new Map();
+    const installedFiles = [];
+    const availableFiles = [];
+    const outsideTierFiles = [];
+
+    // Get allowed tiers for current tier level
+    const tierIncludes = getTierIncludes(tier);
 
     for (const f of files) {
-      // Try inject first, then workspace mode
-      const filePresent = (await isFileInjected(f)) || (await isFileInstalled(this._context, f));
+      if (f.installed) {
+        versionMap.set(f.dest, {
+          installed: f.installedVersion || null,
+          bundled: f.bundledVersion || null,
+        });
+      }
 
-      if (filePresent) {
-        installedSet.add(f.dest);
-        const iv = (await readInjectedFileVersion(f)) || (await readInstalledFileVersion(this._context, f));
-        const bv = await readBundledFileVersion(this._context, f);
-        versionMap.set(f.dest, { installed: iv, bundled: bv });
+      const isExcluded = f.override === 'excluded';
+      const isPinned = f.override === 'pinned';
+      const inTier = isPinned || tierIncludes.has(f.tier);
+
+      if (isExcluded) continue;
+
+      if (f.installed) {
+        installedFiles.push(f);
+      } else if (inTier) {
+        availableFiles.push(f);
+      } else {
+        outsideTierFiles.push(f);
       }
     }
 
-    // Apply file overrides: pinned files are always "installed" tier,
-    // excluded files are filtered out of available
-    const { fileOverrides, skippedVersions } = cfg;
-
-    // Determine which are available for this tier but not installed
-    const allowed = getAllowedFileTiers(manifest, tier);
-    const tierFiles = files.filter((f) => {
-      if (fileOverrides[f.dest] === 'excluded') return false;
-      if (fileOverrides[f.dest] === 'pinned') return true;
-      return allowed.has(f.tier);
-    });
-
-    const installedFiles = files.filter((f) =>
-      installedSet.has(f.dest) && fileOverrides[f.dest] !== 'excluded',
-    );
-    const availableFiles = tierFiles.filter((f) => !installedSet.has(f.dest));
-
-    // Files outside the current tier (not excluded, not pinned, tier not allowed)
-    const outsideTierFiles = files.filter((f) => {
-      if (fileOverrides[f.dest] === 'excluded') return false;
-      if (fileOverrides[f.dest] === 'pinned') return false;
-      return !allowed.has(f.tier);
-    });
+    // Tier label
+    const TIER_LABELS = { minimal: 'Minimal', standard: 'Standard', advanced: 'Advanced' };
+    const tierLabel = TIER_LABELS[tier] || tier;
 
     return {
-      version: installedVersion || version,
+      version,
       tier,
-      tierLabel: getTierLabel(manifest, tier),
+      tierLabel,
       isActive,
       manifestName,
       manifestCount,
@@ -166,12 +110,16 @@ class ControlPanelProvider {
 
   async _render() {
     if (!this._view) return;
-    if (this._currentPage === 'usage') {
-      const entries = await readLogEntries();
-      this._view.webview.html = this._getUsageHtml(entries);
-    } else {
-      const state = await this._gatherState();
-      this._view.webview.html = this._getHtml(state);
+    try {
+      if (this._currentPage === 'usage') {
+        const entries = await this._client.readTelemetryLog();
+        this._view.webview.html = this._getUsageHtml(entries || []);
+      } else {
+        const state = await this._gatherState();
+        this._view.webview.html = this._getHtml(state);
+      }
+    } catch {
+      // Daemon may not be ready yet
     }
   }
 
@@ -226,7 +174,9 @@ class ControlPanelProvider {
         });
         break;
       case 'openLogFile': {
-        const logPath = getLogFilePath();
+        const os = require('os');
+        const path = require('path');
+        const logPath = path.join(os.homedir(), '.activate', 'telemetry.jsonl');
         vscode.commands.executeCommand('vscode.open', vscode.Uri.file(logPath)).then(
           () => {},
           () => vscode.window.showWarningMessage(`Could not open ${logPath}`),
@@ -338,9 +288,9 @@ class ControlPanelProvider {
     };
 
     // Group files by category
-    const installedGroups = listByCategory(installedFiles);
-    const availableGroups = listByCategory(availableFiles);
-    const outsideTierGroups = listByCategory(outsideTierFiles || []);
+    const installedGroups = groupByCategory(installedFiles);
+    const availableGroups = groupByCategory(availableFiles);
+    const outsideTierGroups = groupByCategory(outsideTierFiles || []);
 
     const installedHtml = installedGroups
       .map((g) => categorySection(g.label, CATEGORY_ICONS[g.category] || '📄', g.files, true, 'installed'))
@@ -1006,6 +956,59 @@ function esc(str) {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
+}
+
+// ── Tier helpers (replaces manifest.js dependency) ─────────────
+
+const TIER_DEFS = [
+  { id: 'minimal', includes: ['core'] },
+  { id: 'standard', includes: ['core', 'ad-hoc'] },
+  { id: 'advanced', includes: ['core', 'ad-hoc', 'ad-hoc-advanced'] },
+];
+
+function getTierIncludes(tierId) {
+  const tier = TIER_DEFS.find((t) => t.id === tierId) || TIER_DEFS[1];
+  return new Set(tier.includes);
+}
+
+// ── Category grouping (replaces manifest.js dependency) ────────
+
+const CATEGORY_LABELS = {
+  instructions: 'Instructions',
+  prompts: 'Prompts',
+  skills: 'Skills',
+  agents: 'Agents',
+  'mcp-servers': 'MCP Servers',
+  other: 'Other',
+};
+
+const CATEGORY_ORDER = ['instructions', 'prompts', 'skills', 'agents', 'mcp-servers', 'other'];
+
+function inferCategory(filePath) {
+  for (const cat of ['instructions', 'prompts', 'skills', 'agents', 'mcp-servers']) {
+    if (filePath && filePath.startsWith(cat + '/')) return cat;
+  }
+  return 'other';
+}
+
+function groupByCategory(files) {
+  const groups = {};
+  for (const f of files) {
+    const cat = f.category || inferCategory(f.dest || f.src || '');
+    if (!groups[cat]) groups[cat] = [];
+    groups[cat].push(f);
+  }
+  const result = [];
+  for (const cat of CATEGORY_ORDER) {
+    if (groups[cat]) {
+      result.push({
+        category: cat,
+        label: CATEGORY_LABELS[cat] || cat,
+        files: groups[cat],
+      });
+    }
+  }
+  return result;
 }
 
 module.exports = { ControlPanelProvider };
