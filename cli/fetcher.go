@@ -12,8 +12,12 @@ import (
 const (
 	DefaultRepo   = "peregrine-digital/activate-framework"
 	DefaultBranch = "main"
-	rawBase       = "https://raw.githubusercontent.com"
-	apiBase       = "https://api.github.com"
+)
+
+// Package-level base URLs; overridden in tests to point at httptest servers.
+var (
+	rawBase = "https://raw.githubusercontent.com"
+	apiBase = "https://api.github.com"
 )
 
 // FetchFile downloads a file from GitHub. Uses the API with auth token if
