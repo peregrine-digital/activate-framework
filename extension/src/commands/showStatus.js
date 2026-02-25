@@ -1,16 +1,32 @@
 const vscode = require('vscode');
 const { readInstalledVersion, discoverBundledManifests, readBundledManifestById, getActivateRoot, findActivateWorkspaceFolder } = require('../installer');
+const { readInjectedVersion, getWorkspaceRoot } = require('../injector');
 const { listByCategory, selectFiles } = require('../manifest');
 
 async function showStatusCommand(context) {
-  const installedInfo = await readInstalledVersion(context);
-  const installedVersion = installedInfo?.version || null;
-  const activeManifestId = installedInfo?.manifest || 'activate-framework';
-  const bundledVersion = context.extension.packageJSON.version ?? 'unknown';
   const config = vscode.workspace.getConfiguration('activate-framework');
+  const mode = config.get('deliveryMode', 'inject');
   const tier = config.get('defaultTier', 'standard');
-  const root = getActivateRoot(context);
-  const isActive = !!findActivateWorkspaceFolder();
+
+  let installedVersion, activeManifestId, isActive, storagePath;
+
+  if (mode === 'inject') {
+    const injectedInfo = await readInjectedVersion();
+    installedVersion = injectedInfo?.version || null;
+    activeManifestId = injectedInfo?.manifest || 'activate-framework';
+    isActive = !!injectedInfo;
+    const wsRoot = getWorkspaceRoot();
+    storagePath = wsRoot ? `${wsRoot.fsPath}/.github/` : '(no workspace)';
+  } else {
+    const installedInfo = await readInstalledVersion(context);
+    installedVersion = installedInfo?.version || null;
+    activeManifestId = installedInfo?.manifest || 'activate-framework';
+    isActive = !!findActivateWorkspaceFolder();
+    const root = getActivateRoot(context);
+    storagePath = root.fsPath;
+  }
+
+  const bundledVersion = context.extension.packageJSON.version ?? 'unknown';
 
   // Load active manifest
   let chosen;
@@ -26,10 +42,18 @@ async function showStatusCommand(context) {
     return;
   }
 
-  // Check which files exist in the managed root
+  // Check which files exist
   const installed = new Set();
   for (const f of chosen.files) {
-    const fileUri = vscode.Uri.joinPath(root, '.github', f.dest);
+    let fileUri;
+    if (mode === 'inject') {
+      const wsRoot = getWorkspaceRoot();
+      fileUri = wsRoot ? vscode.Uri.joinPath(wsRoot, '.github', f.dest) : null;
+    } else {
+      const root = getActivateRoot(context);
+      fileUri = vscode.Uri.joinPath(root, '.github', f.dest);
+    }
+    if (!fileUri) continue;
     try {
       await vscode.workspace.fs.stat(fileUri);
       installed.add(f.dest);
@@ -43,13 +67,14 @@ async function showStatusCommand(context) {
   channel.clear();
   channel.appendLine('Peregrine Activate — Status');
   channel.appendLine('═'.repeat(40));
+  channel.appendLine(`Delivery mode:   ${mode}`);
   channel.appendLine(`Bundled version: ${bundledVersion}`);
   channel.appendLine(`Synced version:  ${installedVersion ?? 'not synced'}`);
   channel.appendLine(`Active manifest: ${chosen.name} (${chosen.id})`);
   channel.appendLine(`Manifest version:${chosen.version}`);
   channel.appendLine(`Tier:            ${tier}`);
-  channel.appendLine(`Workspace root:  ${isActive ? 'active' : 'not active'}`);
-  channel.appendLine(`Storage:         ${root.fsPath}`);
+  channel.appendLine(`Active:          ${isActive ? 'yes' : 'no'}`);
+  channel.appendLine(`Storage:         ${storagePath}`);
 
   // Show available manifests
   if (allManifests.length > 1) {

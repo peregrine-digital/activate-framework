@@ -1,5 +1,5 @@
 const vscode = require('vscode');
-const { listByCategory, TIER_MAP, TIER_LABELS } = require('./manifest');
+const { listByCategory, getAllowedFileTiers, getTierLabel } = require('./manifest');
 const { resolveConfig } = require('./config');
 const { readLogEntries, getLogFilePath } = require('./telemetry');
 
@@ -77,20 +77,16 @@ class ControlPanelProvider {
     const activeManifestId = cfg.manifest || installedInfo?.manifest || 'activate-framework';
     const installedVersion = installedInfo?.version || null;
 
-    let files = [];
-    let manifestName = 'Activate Framework';
+    let manifest = { files: [], name: 'Activate Framework' };
     let manifestCount = 1;
     try {
-      const chosen = await readBundledManifestById(this._context, activeManifestId);
-      files = chosen.files;
-      manifestName = chosen.name;
+      manifest = await readBundledManifestById(this._context, activeManifestId);
     } catch {
       // Fall back to first discovered manifest
       try {
         const all = await discoverBundledManifests(this._context);
         if (all.length > 0) {
-          files = all[0].files;
-          manifestName = all[0].name;
+          manifest = all[0];
         }
       } catch {
         /* empty */
@@ -104,6 +100,9 @@ class ControlPanelProvider {
     } catch {
       /* keep default 1 */
     }
+
+    const files = manifest.files || [];
+    const manifestName = manifest.name || 'Activate Framework';
 
     // Determine which are currently on disk + version info
     /** @type {Set<string>} */
@@ -128,7 +127,7 @@ class ControlPanelProvider {
     const { fileOverrides, skippedVersions } = cfg;
 
     // Determine which are available for this tier but not installed
-    const allowed = TIER_MAP[tier] ?? TIER_MAP.standard;
+    const allowed = getAllowedFileTiers(manifest, tier);
     const tierFiles = files.filter((f) => {
       if (fileOverrides[f.dest] === 'excluded') return false;
       if (fileOverrides[f.dest] === 'pinned') return true;
@@ -150,6 +149,7 @@ class ControlPanelProvider {
     return {
       version: installedVersion || version,
       tier,
+      tierLabel: getTierLabel(manifest, tier),
       isActive,
       manifestName,
       manifestCount,
@@ -238,7 +238,7 @@ class ControlPanelProvider {
 
   // ── HTML ──────────────────────────────────────────────
 
-  _getHtml({ version, tier, isActive, manifestName, manifestCount, installedFiles, availableFiles, outsideTierFiles, versionMap, fileOverrides, skippedVersions }) {
+  _getHtml({ version, tier, tierLabel, isActive, manifestName, manifestCount, installedFiles, availableFiles, outsideTierFiles, versionMap, fileOverrides, skippedVersions }) {
     const wsAction = isActive ? 'removeFromWorkspace' : 'addToWorkspace';
     const wsButtonLabel = isActive ? '− Remove Files' : '+ Install Files';
 
@@ -604,7 +604,7 @@ class ControlPanelProvider {
   <div class="status-bar">
     <span>v${esc(version)}</span>
     <span class="dot">·</span>
-    <span class="badge">${esc(TIER_LABELS[tier] || tier)}</span>
+    <span class="badge">${esc(tierLabel)}</span>
     <span class="dot">·</span>
     <span class="badge">${esc(manifestName)}</span>
     <span class="dot">·</span>

@@ -6,12 +6,92 @@
 import { readdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 
-/** Maps tier name to the set of manifest tiers included */
+/**
+ * Default tiers for backward compatibility with manifests that don't define their own.
+ * Maps legacy UI tier names to the file-level tier tags they include.
+ */
+export const DEFAULT_TIERS = [
+  { id: 'minimal', label: 'Minimal', includes: ['core'] },
+  { id: 'standard', label: 'Standard', includes: ['core', 'ad-hoc'] },
+  { id: 'advanced', label: 'Advanced', includes: ['core', 'ad-hoc', 'ad-hoc-advanced'] },
+];
+
+/** Legacy TIER_MAP for backward compatibility */
 export const TIER_MAP = {
   minimal: new Set(['core']),
   standard: new Set(['core', 'ad-hoc']),
   advanced: new Set(['core', 'ad-hoc', 'ad-hoc-advanced']),
 };
+
+/**
+ * Get the tier definitions for a manifest.
+ * If the manifest defines its own tiers, use those (cumulative).
+ * Otherwise fall back to DEFAULT_TIERS for backward compatibility.
+ *
+ * @param {object} manifest - The manifest object (must have files, may have tiers)
+ * @returns {Array<{id: string, label: string, includes: string[]}>}
+ */
+export function getManifestTiers(manifest) {
+  if (manifest.tiers && Array.isArray(manifest.tiers) && manifest.tiers.length > 0) {
+    // Manifest defines custom tiers - make them cumulative
+    const result = [];
+    const cumulativeIncludes = [];
+    for (const tier of manifest.tiers) {
+      cumulativeIncludes.push(tier.id);
+      result.push({
+        id: tier.id,
+        label: tier.label || tier.id,
+        includes: [...cumulativeIncludes],
+      });
+    }
+    return result;
+  }
+  return DEFAULT_TIERS;
+}
+
+/**
+ * Discover which tiers are available for a manifest.
+ * Returns only tiers that have at least one matching file.
+ *
+ * @param {object} manifest - The manifest object (files + optional tiers)
+ * @returns {Array<{id: string, label: string, includes: string[]}>}
+ */
+export function discoverAvailableTiers(manifest) {
+  const tiers = getManifestTiers(manifest);
+  const presentFileTiers = new Set(manifest.files.map((f) => f.tier).filter(Boolean));
+
+  return tiers.filter((tier) =>
+    tier.includes.some((fileTier) => presentFileTiers.has(fileTier)),
+  );
+}
+
+/**
+ * Build a Set of allowed file tiers for a given tier selection.
+ *
+ * @param {object} manifest - The manifest object
+ * @param {string} tierId - The selected tier ID
+ * @returns {Set<string>} Set of file tier values that should be included
+ */
+export function getAllowedFileTiers(manifest, tierId) {
+  const tiers = getManifestTiers(manifest);
+  const tier = tiers.find((t) => t.id === tierId);
+  if (tier) return new Set(tier.includes);
+  // Fallback to standard or first tier
+  const fallback = tiers.find((t) => t.id === 'standard') || tiers[0];
+  return fallback ? new Set(fallback.includes) : new Set(['core']);
+}
+
+/**
+ * Get a tier's label from a manifest.
+ * @param {object} manifest - The manifest object
+ * @param {string} tierId - The tier ID
+ * @returns {string}
+ */
+export function getTierLabel(manifest, tierId) {
+  const tiers = getManifestTiers(manifest);
+  const tier = tiers.find((t) => t.id === tierId);
+  return tier ? tier.label : tierId;
+}
 
 /** Category display labels */
 const CATEGORY_LABELS = {
@@ -30,10 +110,13 @@ const CATEGORY_ORDER = ['instructions', 'prompts', 'skills', 'agents', 'mcp-serv
  * Filter manifest files to those included in the chosen tier.
  * @param {Array<{src: string, dest: string, tier: string}>} files
  * @param {string} tier
+ * @param {object} [manifest] - Optional full manifest object for custom tier support
  * @returns {Array}
  */
-export function selectFiles(files, tier) {
-  const allowed = TIER_MAP[tier] ?? TIER_MAP.standard;
+export function selectFiles(files, tier, manifest) {
+  const allowed = manifest
+    ? getAllowedFileTiers(manifest, tier)
+    : getAllowedFileTiers({ files }, tier);
   return files.filter((f) => allowed.has(f.tier));
 }
 

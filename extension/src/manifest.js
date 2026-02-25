@@ -1,46 +1,76 @@
-/** Maps tier name to the set of manifest tiers included */
-const TIER_MAP = {
-  minimal: new Set(['core']),
-  standard: new Set(['core', 'ad-hoc']),
-  advanced: new Set(['core', 'ad-hoc', 'ad-hoc-advanced']),
-};
-
-/** Default display labels for tiers */
-const TIER_LABELS = {
-  minimal: 'Minimal',
-  standard: 'Standard',
-  advanced: 'Advanced',
-};
-
-/** Ordered tier names (for consistent display order) */
-const TIER_ORDER = ['minimal', 'standard', 'advanced'];
+/**
+ * Default tiers for backward compatibility with manifests that don't define their own.
+ * Maps legacy UI tier names to the file-level tier tags they include.
+ */
+const DEFAULT_TIERS = [
+  { id: 'minimal', label: 'Minimal', includes: ['core'] },
+  { id: 'standard', label: 'Standard', includes: ['core', 'ad-hoc'] },
+  { id: 'advanced', label: 'Advanced', includes: ['core', 'ad-hoc', 'ad-hoc-advanced'] },
+];
 
 /**
- * Discover which tiers are meaningful for a manifest.
- * Returns only tiers that include at least one file tier present in the manifest.
- * @param {Array} files - Manifest file entries
- * @param {Object} [customTiers] - Optional manifest-defined tier labels
- * @returns {Array<{id: string, label: string, fileTiers: Set<string>}>}
+ * Get the tier definitions for a manifest.
+ * If the manifest defines its own tiers, use those (cumulative).
+ * Otherwise fall back to DEFAULT_TIERS for backward compatibility.
+ *
+ * @param {object} manifest - The manifest object (must have files, may have tiers)
+ * @returns {Array<{id: string, label: string, includes: string[]}>}
  */
-function discoverAvailableTiers(files, customTiers = {}) {
-  // Collect unique file tiers from the manifest
-  const presentFileTiers = new Set(files.map((f) => f.tier).filter(Boolean));
-
-  // Determine which UI tiers are meaningful
-  const result = [];
-  for (const tierId of TIER_ORDER) {
-    const allowedFileTiers = TIER_MAP[tierId];
-    // A tier is meaningful if it includes at least one file tier that's in this manifest
-    const hasFiles = [...allowedFileTiers].some((ft) => presentFileTiers.has(ft));
-    if (hasFiles) {
+function getManifestTiers(manifest) {
+  if (manifest.tiers && Array.isArray(manifest.tiers) && manifest.tiers.length > 0) {
+    // Manifest defines custom tiers - make them cumulative
+    // Each tier includes its own files + all files from previous tiers
+    const result = [];
+    const cumulativeIncludes = [];
+    for (const tier of manifest.tiers) {
+      cumulativeIncludes.push(tier.id);
       result.push({
-        id: tierId,
-        label: customTiers[tierId] || TIER_LABELS[tierId] || tierId,
-        fileTiers: allowedFileTiers,
+        id: tier.id,
+        label: tier.label || tier.id,
+        includes: [...cumulativeIncludes],
       });
     }
+    return result;
   }
-  return result;
+
+  // Fall back to default tiers for backward compatibility
+  return DEFAULT_TIERS;
+}
+
+/**
+ * Discover which tiers are available for a manifest.
+ * Returns only tiers that have at least one matching file.
+ *
+ * @param {object} manifest - The manifest object (files + optional tiers)
+ * @returns {Array<{id: string, label: string, includes: string[]}>}
+ */
+function discoverAvailableTiers(manifest) {
+  const tiers = getManifestTiers(manifest);
+  const presentFileTiers = new Set(manifest.files.map((f) => f.tier).filter(Boolean));
+
+  // Return only tiers that include at least one file tier present in the manifest
+  return tiers.filter((tier) =>
+    tier.includes.some((fileTier) => presentFileTiers.has(fileTier)),
+  );
+}
+
+/**
+ * Build a Set of allowed file tiers for a given tier selection.
+ * Works with both manifest-defined tiers and legacy default tiers.
+ *
+ * @param {object} manifest - The manifest object
+ * @param {string} tierId - The selected tier ID
+ * @returns {Set<string>} Set of file tier values that should be included
+ */
+function getAllowedFileTiers(manifest, tierId) {
+  const tiers = getManifestTiers(manifest);
+  const tier = tiers.find((t) => t.id === tierId);
+  if (tier) {
+    return new Set(tier.includes);
+  }
+  // Fallback: if tier not found, use standard tier or first available
+  const fallback = tiers.find((t) => t.id === 'standard') || tiers[0];
+  return fallback ? new Set(fallback.includes) : new Set(['core']);
 }
 
 /** Ordered list of categories for display */
@@ -55,9 +85,17 @@ const CATEGORY_LABELS = {
   other: 'Other',
 };
 
-/** Filter manifest files to those included in the chosen tier */
-function selectFiles(files, tier) {
-  const allowed = TIER_MAP[tier] ?? TIER_MAP.standard;
+/**
+ * Filter manifest files to those included in the chosen tier.
+ * @param {Array} files - The files array from the manifest
+ * @param {string} tier - The selected tier ID
+ * @param {object} [manifest] - Optional full manifest object for custom tier support
+ * @returns {Array}
+ */
+function selectFiles(files, tier, manifest) {
+  const allowed = manifest
+    ? getAllowedFileTiers(manifest, tier)
+    : getAllowedFileTiers({ files }, tier);
   return files.filter((f) => allowed.has(f.tier));
 }
 
@@ -99,7 +137,7 @@ function listByCategory(files, { tier, category } = {}) {
  * Parse a manifest JSON object into a normalized manifest entry.
  * @param {string} id - The manifest id (derived from filename)
  * @param {object} data - The parsed JSON object
- * @returns {{id: string, name: string, description: string, version: string, files: Array}}
+ * @returns {{id: string, name: string, description: string, version: string, files: Array, tiers: Array|undefined}}
  */
 function parseManifestData(id, data) {
   return {
@@ -108,17 +146,31 @@ function parseManifestData(id, data) {
     description: data.description || '',
     version: data.version || 'unknown',
     files: data.files || [],
+    tiers: data.tiers || undefined,
   };
 }
 
+/**
+ * Get a tier's label from a manifest.
+ * @param {object} manifest - The manifest object
+ * @param {string} tierId - The tier ID
+ * @returns {string}
+ */
+function getTierLabel(manifest, tierId) {
+  const tiers = getManifestTiers(manifest);
+  const tier = tiers.find((t) => t.id === tierId);
+  return tier ? tier.label : tierId;
+}
+
 module.exports = {
-  TIER_MAP,
-  TIER_LABELS,
-  TIER_ORDER,
+  DEFAULT_TIERS,
   CATEGORY_ORDER,
   selectFiles,
   inferCategory,
   listByCategory,
   parseManifestData,
   discoverAvailableTiers,
+  getManifestTiers,
+  getAllowedFileTiers,
+  getTierLabel,
 };

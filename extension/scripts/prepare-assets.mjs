@@ -24,8 +24,8 @@ const defaultPluginDir = path.join(repoRoot, 'plugins', 'activate-framework');
 async function main() {
   await mkdir(assetsDir, { recursive: true });
 
-  // fileEntry → resolved source dir, so we can copy from the right place
-  // Map<srcRelative, absoluteSourceDir>
+  // fileEntry → { baseDir, dest } for resolving source and destination
+  // Map<srcRelative, { baseDir: absolutePath, dest: relativePath }>
   const fileSources = new Map();
   let hasManifests = false;
 
@@ -51,7 +51,8 @@ async function main() {
           : defaultPluginDir;
 
         for (const f of manifest.files || []) {
-          fileSources.set(f.src, baseDir);
+          // Use dest for the target path (no relative escaping), src for source resolution
+          fileSources.set(f.src, { baseDir, dest: f.dest });
         }
       }
     }
@@ -78,7 +79,7 @@ async function main() {
 
           const manifest = JSON.parse(await readFile(src, 'utf8'));
           for (const f of manifest.files || []) {
-            fileSources.set(f.src, defaultPluginDir);
+            fileSources.set(f.src, { baseDir: defaultPluginDir, dest: f.dest });
           }
         }
       }
@@ -95,7 +96,7 @@ async function main() {
     console.log('  ✓ manifest.json');
 
     for (const f of manifest.files || []) {
-      fileSources.set(f.src, defaultPluginDir);
+      fileSources.set(f.src, { baseDir: defaultPluginDir, dest: f.dest });
     }
   }
 
@@ -111,16 +112,17 @@ async function main() {
   // Copy each unique file referenced across all manifests
   let copied = 0;
   let skipped = 0;
-  for (const [fileSrc, baseDir] of [...fileSources.entries()].sort(([a], [b]) => a.localeCompare(b))) {
+  for (const [fileSrc, { baseDir, dest: fileDest }] of [...fileSources.entries()].sort(([a], [b]) => a.localeCompare(b))) {
     const src = path.join(baseDir, fileSrc);
-    const dest = path.join(assetsDir, fileSrc);
+    // Use dest path (not src) to avoid relative paths escaping the assets dir
+    const dest = path.join(assetsDir, fileDest);
     try {
       await mkdir(path.dirname(dest), { recursive: true });
       await copyFile(src, dest);
-      console.log(`  ✓ ${fileSrc}`);
+      console.log(`  ✓ ${fileDest}`);
       copied++;
     } catch {
-      console.warn(`  ⚠ ${fileSrc} — skipped (not found)`);
+      console.warn(`  ⚠ ${fileDest} — skipped (not found at ${fileSrc})`);
       skipped++;
     }
   }

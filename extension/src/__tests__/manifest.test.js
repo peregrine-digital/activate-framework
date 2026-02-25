@@ -1,6 +1,6 @@
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
-const { selectFiles, TIER_MAP, listByCategory, inferCategory, parseManifestData } = require('../manifest');
+const { selectFiles, DEFAULT_TIERS, listByCategory, inferCategory, parseManifestData } = require('../manifest');
 
 /**
  * Inline copy of parseFrontmatterVersion for testing without vscode dependency.
@@ -48,15 +48,16 @@ describe('selectFiles', () => {
   });
 });
 
-describe('TIER_MAP', () => {
+describe('DEFAULT_TIERS', () => {
   it('contains the three expected tiers', () => {
-    assert.deepEqual(Object.keys(TIER_MAP).sort(), ['advanced', 'minimal', 'standard']);
+    const tierIds = DEFAULT_TIERS.map((t) => t.id).sort();
+    assert.deepEqual(tierIds, ['advanced', 'minimal', 'standard']);
   });
 
-  it('each tier is a superset of the previous', () => {
-    const minimal = TIER_MAP.minimal;
-    const standard = TIER_MAP.standard;
-    const advanced = TIER_MAP.advanced;
+  it('each tier includes all previous tier file tags (cumulative)', () => {
+    const minimal = new Set(DEFAULT_TIERS.find((t) => t.id === 'minimal').includes);
+    const standard = new Set(DEFAULT_TIERS.find((t) => t.id === 'standard').includes);
+    const advanced = new Set(DEFAULT_TIERS.find((t) => t.id === 'advanced').includes);
 
     for (const t of minimal) assert.ok(standard.has(t), `standard should include "${t}"`);
     for (const t of standard) assert.ok(advanced.has(t), `advanced should include "${t}"`);
