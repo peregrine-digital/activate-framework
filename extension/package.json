@@ -126,19 +126,6 @@
           ],
           "description": "Default installation tier for Peregrine Activate."
         },
-        "activate-framework.deliveryMode": {
-          "type": "string",
-          "default": "inject",
-          "enum": [
-            "inject",
-            "workspace"
-          ],
-          "enumDescriptions": [
-            "Silently inject files into .github/ (no multi-root workspace, no restart)",
-            "Classic mode: add a Peregrine Activate workspace root (multi-root workspace)"
-          ],
-          "description": "How Activate delivers configuration files to Copilot."
-        },
         "activate-framework.source": {
           "type": "string",
           "default": "bundled",

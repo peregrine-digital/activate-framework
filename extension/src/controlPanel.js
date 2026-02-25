@@ -242,8 +242,8 @@ class ControlPanelProvider {
   // ── HTML ──────────────────────────────────────────────
 
   _getHtml({ version, tier, tierLabel, isActive, manifestName, manifestCount, installedFiles, availableFiles, outsideTierFiles, versionMap, fileOverrides, skippedVersions }) {
-    const wsAction = isActive ? 'removeFromWorkspace' : 'addToWorkspace';
-    const wsButtonLabel = isActive ? '− Remove Files' : '+ Install Files';
+    const installAction = isActive ? 'removeFromWorkspace' : 'addToWorkspace';
+    const installButtonLabel = isActive ? '− Remove' : '+ Install';
 
     const CATEGORY_ICONS = {
       instructions: '📝',
@@ -626,7 +626,7 @@ class ControlPanelProvider {
     <span class="dot">·</span>
     <span class="badge">${esc(manifestName)}</span>
     <span class="dot">·</span>
-    <span class="ws-status">${isActive ? '✓' : '○'} Workspace</span>
+    <span class="ws-status">${isActive ? '✓' : '○'} Installed</span>
     <span class="spacer"></span>
     <span class="gear-btn" onclick="send('openSettings')" title="Peregrine Activate Settings">⚙</span>
   </div>
@@ -634,7 +634,7 @@ class ControlPanelProvider {
   <div class="button-row">
     <button class="secondary" onclick="send('changeTier')">◆ Tier</button>
     ${manifestCount > 1 ? `<button class="secondary" onclick="send('changeManifest')">⇋ Manifest</button>` : ''}
-    <button class="secondary" onclick="send('${wsAction}')">${esc(wsButtonLabel)}</button>
+    <button class="secondary" onclick="send('${installAction}')">${esc(installButtonLabel)}</button>
     <button class="primary" onclick="send('updateAll')">↻ Update</button>
     <button class="secondary" onclick="send('showUsage')">📊 Usage</button>
   </div>

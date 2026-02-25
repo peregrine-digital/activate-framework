@@ -451,7 +451,6 @@ async function updateInstalledFiles(context) {
 }
 
 module.exports = {
-  WORKSPACE_ROOT_NAME,
   // Smart manifest discovery (respects remote mode setting)
   discoverManifests,
   readManifestById,
@@ -464,9 +463,10 @@ module.exports = {
   readInstalledVersion,
   getActivateRoot,
   syncFiles,
+  // Legacy workspace cleanup (for migration)
   findActivateWorkspaceFolder,
-  addWorkspaceRoot,
   removeWorkspaceRoot,
+  // File operations
   installFile,
   uninstallFile,
   isFileInstalled,
