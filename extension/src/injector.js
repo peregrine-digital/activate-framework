@@ -21,12 +21,15 @@
  * DESIRED end-state; the pipeline diffs and cleans up.
  */
 const vscode = require('vscode');
-const { selectFiles, parseManifestData } = require('./manifest');
+const { selectFiles, parseManifestData, inferCategory } = require('./manifest');
 
 // ── Constants ───────────────────────────────────────────────────
 
 /** Sidecar file that records which files we injected */
 const SIDECAR_REL = '.github/.activate-installed.json';
+
+/** VS Code MCP server config file (workspace-level) */
+const MCP_CONFIG_REL = '.vscode/mcp.json';
 
 /** Marker comment used in .git/info/exclude */
 const EXCLUDE_MARKER_START = '# >>> Peregrine Activate (managed — do not edit)';
@@ -46,7 +49,7 @@ function getWorkspaceRoot() {
  * Read the sidecar JSON from the workspace.
  * Returns null if not present.
  *
- * Shape: { manifest: string, version: string, tier: string, files: string[] }
+ * Shape: { manifest: string, version: string, tier: string, files: string[], mcpServers?: string[] }
  */
 async function readSidecar(wsRoot) {
   const uri = vscode.Uri.joinPath(wsRoot, SIDECAR_REL);
@@ -102,8 +105,9 @@ async function writeSidecar(wsRoot, data) {
  *
  * Automatically handles:
  *   1. Deletes ALL tracked files from disk.
- *   2. Removes the sidecar JSON.
- *   3. Removes the git exclude block.
+ *   2. Removes managed MCP servers from .vscode/mcp.json.
+ *   3. Removes the sidecar JSON.
+ *   4. Removes the git exclude block.
  *
  * Counterpart to writeSidecar() — between the two, no caller
  * ever needs to delete managed files directly.
@@ -119,7 +123,13 @@ async function deleteSidecar(wsRoot) {
     }
   }
 
-  // 2. Remove sidecar
+  // 2. Remove managed MCP servers from .vscode/mcp.json
+  const mcpServers = oldSidecar?.mcpServers || [];
+  if (mcpServers.length > 0) {
+    await removeMcpServers(wsRoot, mcpServers);
+  }
+
+  // 3. Remove sidecar
   const uri = vscode.Uri.joinPath(wsRoot, SIDECAR_REL);
   try {
     await vscode.workspace.fs.delete(uri);
@@ -127,7 +137,7 @@ async function deleteSidecar(wsRoot) {
     // already gone
   }
 
-  // 3. Remove git exclude block
+  // 4. Remove git exclude block
   await _removeGitExclude(wsRoot);
 }
 
@@ -140,6 +150,112 @@ async function fileExists(uri) {
     return true;
   } catch {
     return false;
+  }
+}
+
+// ── MCP Server Config Helpers ───────────────────────────────────
+
+/**
+ * Read the workspace's `.vscode/mcp.json` file.
+ * Returns the parsed config or an empty object if not present.
+ * @param {vscode.Uri} wsRoot
+ * @returns {Promise<{servers?: object, inputs?: object}>}
+ */
+async function readMcpConfig(wsRoot) {
+  const uri = vscode.Uri.joinPath(wsRoot, MCP_CONFIG_REL);
+  try {
+    const raw = await vscode.workspace.fs.readFile(uri);
+    return JSON.parse(Buffer.from(raw).toString('utf8'));
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * Write the workspace's `.vscode/mcp.json` file.
+ * Merges managed servers into the existing config, preserving user-defined servers.
+ * @param {vscode.Uri} wsRoot
+ * @param {object} managedServers - Server configs to inject (keyed by server name)
+ * @param {string[]} previousManagedNames - Previously managed server names (to clean up stale)
+ */
+async function writeMcpConfig(wsRoot, managedServers, previousManagedNames = []) {
+  const config = await readMcpConfig(wsRoot);
+
+  // Ensure servers object exists
+  config.servers = config.servers || {};
+
+  // Remove previously managed servers that are no longer in the managed set
+  const newNames = new Set(Object.keys(managedServers));
+  for (const oldName of previousManagedNames) {
+    if (!newNames.has(oldName)) {
+      delete config.servers[oldName];
+    }
+  }
+
+  // Merge in managed servers (overwrite managed ones, don't touch user servers)
+  for (const [name, serverConfig] of Object.entries(managedServers)) {
+    config.servers[name] = serverConfig;
+  }
+
+  // Write the file
+  const uri = vscode.Uri.joinPath(wsRoot, MCP_CONFIG_REL);
+  await vscode.workspace.fs.createDirectory(vscode.Uri.joinPath(wsRoot, '.vscode'));
+  await vscode.workspace.fs.writeFile(uri, Buffer.from(JSON.stringify(config, null, 2) + '\n'));
+}
+
+/**
+ * Remove all managed MCP servers from the workspace config.
+ * @param {vscode.Uri} wsRoot
+ * @param {string[]} serverNames - Names of servers to remove
+ */
+async function removeMcpServers(wsRoot, serverNames) {
+  if (serverNames.length === 0) return;
+
+  const config = await readMcpConfig(wsRoot);
+  if (!config.servers) return;
+
+  let changed = false;
+  for (const name of serverNames) {
+    if (config.servers[name]) {
+      delete config.servers[name];
+      changed = true;
+    }
+  }
+
+  if (!changed) return;
+
+  // If no servers left, consider removing the entire file or just the servers key
+  if (Object.keys(config.servers).length === 0) {
+    delete config.servers;
+  }
+
+  const uri = vscode.Uri.joinPath(wsRoot, MCP_CONFIG_REL);
+  if (Object.keys(config).length === 0) {
+    // Config is empty, remove the file
+    try {
+      await vscode.workspace.fs.delete(uri);
+    } catch {
+      // file may already be gone
+    }
+  } else {
+    await vscode.workspace.fs.writeFile(uri, Buffer.from(JSON.stringify(config, null, 2) + '\n'));
+  }
+}
+
+/**
+ * Load MCP server definitions from a JSON asset file.
+ * Returns an object mapping server names to their configs.
+ * @param {vscode.ExtensionContext} context
+ * @param {string} srcPath - Relative path to the JSON file in assets/
+ * @returns {Promise<object>}
+ */
+async function loadMcpServerConfig(context, srcPath) {
+  const srcUri = vscode.Uri.joinPath(context.extensionUri, 'assets', srcPath);
+  try {
+    const raw = await vscode.workspace.fs.readFile(srcUri);
+    return JSON.parse(Buffer.from(raw).toString('utf8'));
+  } catch {
+    return {};
   }
 }
 
@@ -237,13 +353,14 @@ const {
 
 /**
  * Inject managed files into the workspace's `.github/` directory.
+ * MCP server configs are merged into `.vscode/mcp.json` instead.
  *
- * Pipeline: copy files → write sidecar → exclude auto-synced.
+ * Pipeline: copy files → merge mcp servers → write sidecar → exclude auto-synced.
  *
  * @param {vscode.ExtensionContext} context
  * @param {string} tier
  * @param {string} [manifestId]
- * @returns {Promise<{injected: string[], skipped: string[], version: string, manifestId: string}>}
+ * @returns {Promise<{injected: string[], skipped: string[], mcpServers: string[], version: string, manifestId: string}>}
  */
 async function injectFiles(context, tier, manifestId) {
   const wsRoot = getWorkspaceRoot();
@@ -258,11 +375,25 @@ async function injectFiles(context, tier, manifestId) {
   const files = selectFiles(chosen.files, tier);
   const oldSidecar = await readSidecar(wsRoot);
   const previouslyInjected = new Set(oldSidecar?.files || []);
+  const previousMcpServers = oldSidecar?.mcpServers || [];
+
+  // Separate MCP server files from regular files
+  const regularFiles = [];
+  const mcpFiles = [];
+  for (const f of files) {
+    const cat = f.category || inferCategory(f.src);
+    if (cat === 'mcp-servers') {
+      mcpFiles.push(f);
+    } else {
+      regularFiles.push(f);
+    }
+  }
 
   const injected = [];
   const skipped = [];
 
-  for (const f of files) {
+  // Handle regular files (copy to .github/)
+  for (const f of regularFiles) {
     const destRel = `.github/${f.dest}`;
     const destUri = vscode.Uri.joinPath(wsRoot, destRel);
     const srcUri = vscode.Uri.joinPath(context.extensionUri, 'assets', f.src);
@@ -298,15 +429,37 @@ async function injectFiles(context, tier, manifestId) {
     }
   }
 
+  // Handle MCP server configs (merge into .vscode/mcp.json)
+  const injectedMcpServers = [];
+  const managedServers = {};
+
+  for (const f of mcpFiles) {
+    try {
+      const serverConfigs = await loadMcpServerConfig(context, f.src);
+      for (const [name, config] of Object.entries(serverConfigs)) {
+        managedServers[name] = config;
+        injectedMcpServers.push(name);
+      }
+    } catch {
+      // MCP server config may not exist or be invalid
+    }
+  }
+
+  // Write MCP config if we have any servers to manage
+  if (injectedMcpServers.length > 0 || previousMcpServers.length > 0) {
+    await writeMcpConfig(wsRoot, managedServers, previousMcpServers);
+  }
+
   // Write sidecar — pipeline auto-deletes stale files and syncs exclude
   await writeSidecar(wsRoot, {
     manifest: chosen.id,
     version: chosen.version,
     tier,
     files: injected,
+    mcpServers: injectedMcpServers,
   });
 
-  return { injected, skipped, version: chosen.version, manifestId: chosen.id };
+  return { injected, skipped, mcpServers: injectedMcpServers, version: chosen.version, manifestId: chosen.id };
 }
 
 /**
@@ -381,6 +534,81 @@ async function removeSingleFile(file) {
 }
 
 /**
+ * Inject a single MCP server into the workspace.
+ * @param {vscode.ExtensionContext} context
+ * @param {{src: string, dest: string}} file - MCP server manifest file entry
+ * @returns {Promise<{serverNames: string[]}>}
+ */
+async function injectSingleMcpServer(context, file) {
+  const wsRoot = getWorkspaceRoot();
+  if (!wsRoot) return { serverNames: [] };
+
+  try {
+    const serverConfigs = await loadMcpServerConfig(context, file.src);
+    const serverNames = Object.keys(serverConfigs);
+
+    if (serverNames.length === 0) return { serverNames: [] };
+
+    // Read current sidecar for previous MCP servers
+    const sidecar = (await readSidecar(wsRoot)) || { manifest: '', version: '', tier: '', files: [], mcpServers: [] };
+    const previousMcpServers = sidecar.mcpServers || [];
+
+    // Merge with existing managed servers
+    const currentConfig = await readMcpConfig(wsRoot);
+    const managedServers = {};
+
+    // Keep previously managed servers that are still in the sidecar
+    for (const prevName of previousMcpServers) {
+      if (currentConfig.servers?.[prevName]) {
+        managedServers[prevName] = currentConfig.servers[prevName];
+      }
+    }
+
+    // Add the new servers
+    for (const [name, config] of Object.entries(serverConfigs)) {
+      managedServers[name] = config;
+    }
+
+    // Write MCP config
+    await writeMcpConfig(wsRoot, managedServers, previousMcpServers);
+
+    // Update sidecar
+    const newMcpServers = [...new Set([...previousMcpServers, ...serverNames])];
+    sidecar.mcpServers = newMcpServers;
+    await writeSidecar(wsRoot, sidecar);
+
+    return { serverNames };
+  } catch {
+    return { serverNames: [] };
+  }
+}
+
+/**
+ * Remove a single MCP server from the workspace.
+ * @param {string} serverName - Name of the MCP server to remove
+ * @returns {Promise<boolean>}
+ */
+async function removeSingleMcpServer(serverName) {
+  const wsRoot = getWorkspaceRoot();
+  if (!wsRoot) return false;
+
+  const sidecar = await readSidecar(wsRoot);
+  if (!sidecar) return false;
+
+  const mcpServers = sidecar.mcpServers || [];
+  if (!mcpServers.includes(serverName)) return false;
+
+  // Remove from MCP config
+  await removeMcpServers(wsRoot, [serverName]);
+
+  // Update sidecar
+  sidecar.mcpServers = mcpServers.filter((n) => n !== serverName);
+  await writeSidecar(wsRoot, sidecar);
+
+  return true;
+}
+
+/**
  * Remove all injected files from the workspace and clean up.
  * deleteSidecar pipeline handles file deletion, sidecar removal,
  * and git exclude cleanup.
@@ -446,6 +674,35 @@ async function updateInjectedFiles(context) {
       const agentsDest = vscode.Uri.joinPath(wsRoot, 'AGENTS.md');
       await vscode.workspace.fs.copy(agentsSrc, agentsDest, { overwrite: true });
     } catch {}
+  }
+
+  // Update MCP servers that were previously injected
+  const previousMcpServers = sidecar?.mcpServers || [];
+  if (previousMcpServers.length > 0) {
+    const managedServers = {};
+
+    // Find MCP server files in the manifest and reload their configs
+    for (const f of chosen.files) {
+      const cat = f.category || inferCategory(f.src);
+      if (cat !== 'mcp-servers') continue;
+
+      try {
+        const serverConfigs = await loadMcpServerConfig(context, f.src);
+        for (const [name, config] of Object.entries(serverConfigs)) {
+          // Only update servers that were previously injected
+          if (previousMcpServers.includes(name)) {
+            managedServers[name] = config;
+          }
+        }
+      } catch {
+        // Skip invalid configs
+      }
+    }
+
+    // Write updated MCP config if we have servers to update
+    if (Object.keys(managedServers).length > 0) {
+      await writeMcpConfig(wsRoot, managedServers, previousMcpServers);
+    }
   }
 
   // Update sidecar version (this automatically syncs git exclude)
@@ -517,6 +774,7 @@ async function skipInjectedFileUpdate(context, file) {
 
 module.exports = {
   SIDECAR_REL,
+  MCP_CONFIG_REL,
   getWorkspaceRoot,
   readSidecar,
   readInjectedVersion,
@@ -528,4 +786,7 @@ module.exports = {
   updateInjectedFiles,
   readInjectedFileVersion,
   skipInjectedFileUpdate,
+  readMcpConfig,
+  injectSingleMcpServer,
+  removeSingleMcpServer,
 };

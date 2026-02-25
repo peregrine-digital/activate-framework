@@ -19,11 +19,12 @@ const CATEGORY_LABELS = {
   prompts: 'Prompts',
   skills: 'Skills',
   agents: 'Agents',
+  'mcp-servers': 'MCP Servers',
   other: 'Other',
 };
 
 /** Ordered list of categories for display */
-const CATEGORY_ORDER = ['instructions', 'prompts', 'skills', 'agents', 'other'];
+const CATEGORY_ORDER = ['instructions', 'prompts', 'skills', 'agents', 'mcp-servers', 'other'];
 
 /**
  * Filter manifest files to those included in the chosen tier.
@@ -76,6 +77,7 @@ export function inferCategory(filePath) {
   if (filePath.startsWith('prompts/')) return 'prompts';
   if (filePath.startsWith('skills/')) return 'skills';
   if (filePath.startsWith('agents/')) return 'agents';
+  if (filePath.startsWith('mcp-servers/')) return 'mcp-servers';
   return 'other';
 }
 

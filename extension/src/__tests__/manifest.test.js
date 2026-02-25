@@ -80,6 +80,10 @@ describe('inferCategory', () => {
     assert.equal(inferCategory('agents/agent.md'), 'agents');
   });
 
+  it('infers mcp-servers from path', () => {
+    assert.equal(inferCategory('mcp-servers/github.json'), 'mcp-servers');
+  });
+
   it('returns other for unknown paths', () => {
     assert.equal(inferCategory('AGENTS.md'), 'other');
   });
