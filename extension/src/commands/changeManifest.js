@@ -31,13 +31,20 @@ async function changeManifestCommand(context) {
     label: m.name,
     description: `v${m.version} · ${m.files.length} files`,
     detail: m.description || undefined,
-    picked: m.id === activeId,
     manifestId: m.id,
   }));
 
-  const pick = await vscode.window.showQuickPick(items, {
-    placeHolder: 'Select a manifest',
-    title: 'Switch Manifest',
+  const pick = await new Promise((resolve) => {
+    const qp = vscode.window.createQuickPick();
+    qp.items = items;
+    qp.title = 'Switch Manifest';
+    qp.placeholder = 'Select a manifest';
+    // Pre-select the active manifest
+    const active = items.find((i) => i.manifestId === activeId);
+    if (active) qp.activeItems = [active];
+    qp.onDidAccept(() => { resolve(qp.selectedItems[0]); qp.dispose(); });
+    qp.onDidHide(() => { resolve(undefined); qp.dispose(); });
+    qp.show();
   });
 
   if (!pick || pick.manifestId === activeId) return false;

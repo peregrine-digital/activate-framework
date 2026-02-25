@@ -10,12 +10,19 @@ async function changeTierCommand(context) {
   const tierItems = Object.keys(TIER_MAP).map((tier) => ({
     label: tier,
     description: tier === currentTier ? '(current)' : '',
-    picked: tier === currentTier,
   }));
 
-  const pick = await vscode.window.showQuickPick(tierItems, {
-    placeHolder: `Current tier: ${currentTier}`,
-    title: 'Peregrine Activate — Change Tier',
+  const pick = await new Promise((resolve) => {
+    const qp = vscode.window.createQuickPick();
+    qp.items = tierItems;
+    qp.title = 'Peregrine Activate — Change Tier';
+    qp.placeholder = `Current tier: ${currentTier}`;
+    // Pre-select the current tier
+    const active = tierItems.find((i) => i.label === currentTier);
+    if (active) qp.activeItems = [active];
+    qp.onDidAccept(() => { resolve(qp.selectedItems[0]); qp.dispose(); });
+    qp.onDidHide(() => { resolve(undefined); qp.dispose(); });
+    qp.show();
   });
   if (!pick || pick.label === currentTier) return;
 
