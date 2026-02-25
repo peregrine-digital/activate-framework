@@ -111,7 +111,7 @@
     "configuration": {
       "title": "Peregrine Activate",
       "properties": {
-        "activate-framework.defaultTier": {
+        "peregrine-activate.defaultTier": {
           "type": "string",
           "default": "standard",
           "enum": [
@@ -126,7 +126,7 @@
           ],
           "description": "Default installation tier for Peregrine Activate."
         },
-        "activate-framework.source": {
+        "peregrine-activate.source": {
           "type": "string",
           "default": "bundled",
           "enum": [
@@ -139,22 +139,22 @@
           ],
           "description": "Where Peregrine Activate loads manifest and files from."
         },
-        "activate-framework.remoteRepo": {
+        "peregrine-activate.remoteRepo": {
           "type": "string",
           "default": "peregrine-digital/activate-framework",
           "description": "GitHub repository (owner/repo) for Peregrine Activate when source is 'remote'."
         },
-        "activate-framework.remoteBranch": {
+        "peregrine-activate.remoteBranch": {
           "type": "string",
           "default": "main",
           "description": "Git branch or tag for Peregrine Activate when source is 'remote'."
         },
-        "activate-framework.telemetry.enabled": {
+        "peregrine-activate.telemetry.enabled": {
           "type": "boolean",
           "default": true,
           "description": "Enable Peregrine Activate's daily logging of GitHub Copilot premium-interaction quota usage to ~/.activate/copilot-telemetry.jsonl."
         },
-        "activate-framework.telemetry.logDirectory": {
+        "peregrine-activate.telemetry.logDirectory": {
           "type": "string",
           "default": "",
           "description": "Directory for Peregrine Activate's Copilot telemetry log. Empty uses ~/.activate/. Supports ~ for home directory."

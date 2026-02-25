@@ -4,7 +4,7 @@ const { readInjectedVersion, getWorkspaceRoot } = require('../injector');
 const { listByCategory, selectFiles } = require('../manifest');
 
 async function showStatusCommand(context) {
-  const config = vscode.workspace.getConfiguration('activate-framework');
+  const config = vscode.workspace.getConfiguration('peregrine-activate');
   const tier = config.get('defaultTier', 'standard');
 
   const injectedInfo = await readInjectedVersion();

@@ -166,18 +166,18 @@ function getLogFilePath() {
  * @returns {boolean}
  */
 function _isEnabled() {
-  const config = vscode.workspace.getConfiguration('activate-framework');
+  const config = vscode.workspace.getConfiguration('peregrine-activate');
   return config.get('telemetry.enabled', true);
 }
 
 /**
  * Resolve the directory for log files.
- * Uses `activate-framework.telemetry.logDirectory` setting, defaulting
+ * Uses `peregrine-activate.telemetry.logDirectory` setting, defaulting
  * to `~/.activate`.
  * @returns {string}
  */
 function _resolveLogDir() {
-  const config = vscode.workspace.getConfiguration('activate-framework');
+  const config = vscode.workspace.getConfiguration('peregrine-activate');
   const configured = config.get('telemetry.logDirectory', '');
   const trimmed = configured.trim();
 

@@ -21,7 +21,7 @@ const KNOWN_MANIFESTS = ['activate-framework', 'ironarch'];
  * @returns {{source: string, repo: string, branch: string}}
  */
 function getSourceConfig() {
-  const config = vscode.workspace.getConfiguration('activate-framework');
+  const config = vscode.workspace.getConfiguration('peregrine-activate');
   return {
     source: config.get('source', 'bundled'),
     repo: config.get('remoteRepo', DEFAULT_REPO),
