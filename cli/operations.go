@@ -10,6 +10,7 @@ import (
 // ── Update command ──────────────────────────────────────────────
 
 // UpdateFiles re-installs only currently-tracked files, respecting skipped versions.
+// Also refreshes MCP server entries from manifest.
 func UpdateFiles(m Manifest, sidecar *repoSidecar, cfg Config, projectDir string, useRemote bool, repo, branch string) (updated []string, skipped []string, err error) {
 	if sidecar == nil {
 		return nil, nil, fmt.Errorf("no sidecar found; nothing to update")
@@ -20,7 +21,19 @@ func UpdateFiles(m Manifest, sidecar *repoSidecar, cfg Config, projectDir string
 		installedSet[f] = true
 	}
 
+	// Collect MCP files for batch injection
+	var mcpFiles []ManifestFile
+
 	for _, f := range m.Files {
+		cat := f.Category
+		if cat == "" {
+			cat = InferCategory(f.Src)
+		}
+		if cat == "mcp-servers" {
+			mcpFiles = append(mcpFiles, f)
+			continue
+		}
+
 		destRel := ".github/" + f.Dest
 		if !installedSet[destRel] {
 			continue
@@ -68,6 +81,16 @@ func UpdateFiles(m Manifest, sidecar *repoSidecar, cfg Config, projectDir string
 		}
 
 		updated = append(updated, f.Dest)
+	}
+
+	// Re-inject MCP servers
+	if len(mcpFiles) > 0 || len(sidecar.McpServers) > 0 {
+		names, mcpErr := InjectMcpFromManifest(mcpFiles, m.BasePath, projectDir, sidecar.McpServers)
+		if mcpErr != nil {
+			fmt.Fprintf(os.Stderr, "  ✗  MCP config: %s\n", mcpErr)
+		} else {
+			sidecar.McpServers = names
+		}
 	}
 
 	// Update sidecar version
@@ -249,6 +272,82 @@ func runDiffCommand(manifests []Manifest, cfg Config, projectDir, file string) e
 	} else {
 		fmt.Print(diff)
 	}
+	return nil
+}
+
+// ── Sync command (auto-setup equivalent) ────────────────────────
+
+// SyncNeeded checks if the installed manifest version differs from the available version.
+func SyncNeeded(m Manifest, sidecar *repoSidecar) bool {
+	if sidecar == nil {
+		return false
+	}
+	return sidecar.Version != m.Version
+}
+
+func runSyncCommand(manifests []Manifest, cfg Config, projectDir string, useRemote bool, repo, branch string, jsonOutput bool) error {
+	chosen := findManifestByID(manifests, cfg.Manifest)
+	if chosen == nil {
+		return fmt.Errorf("unknown manifest: %s", cfg.Manifest)
+	}
+
+	sidecar, _ := readRepoSidecar(projectDir)
+	if sidecar == nil {
+		if jsonOutput {
+			return printJSON(map[string]interface{}{
+				"action":  "none",
+				"reason":  "not installed",
+				"message": "No sidecar found; run 'repo add' first",
+			})
+		}
+		fmt.Println("Not installed. Run 'repo add' first.")
+		return nil
+	}
+
+	if !SyncNeeded(*chosen, sidecar) {
+		if jsonOutput {
+			return printJSON(map[string]interface{}{
+				"action":           "none",
+				"reason":           "up to date",
+				"installedVersion": sidecar.Version,
+				"availableVersion": chosen.Version,
+			})
+		}
+		fmt.Printf("Already up to date (v%s).\n", sidecar.Version)
+		return nil
+	}
+
+	if jsonOutput {
+		// For JSON mode, just report the mismatch and run update
+		updated, skipped, err := UpdateFiles(*chosen, sidecar, cfg, projectDir, useRemote, repo, branch)
+		if err != nil {
+			return err
+		}
+		return printJSON(map[string]interface{}{
+			"action":           "updated",
+			"previousVersion":  sidecar.Version,
+			"availableVersion": chosen.Version,
+			"updated":          updated,
+			"skipped":          skipped,
+		})
+	}
+
+	fmt.Printf("Version mismatch: installed v%s, available v%s\n", sidecar.Version, chosen.Version)
+	fmt.Println("Re-injecting managed files...")
+	fmt.Println()
+
+	updated, skipped, err := UpdateFiles(*chosen, sidecar, cfg, projectDir, useRemote, repo, branch)
+	if err != nil {
+		return err
+	}
+
+	for _, f := range updated {
+		fmt.Printf("  ✓  %s\n", f)
+	}
+	for _, f := range skipped {
+		fmt.Printf("  ⊘  %s (skipped)\n", f)
+	}
+	fmt.Printf("\nSynced to v%s. Updated %d files, skipped %d.\n", chosen.Version, len(updated), len(skipped))
 	return nil
 }
 

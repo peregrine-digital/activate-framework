@@ -140,7 +140,11 @@ func mergeInto(dst, src *Config) {
 			dst.FileOverrides = make(map[string]string)
 		}
 		for k, v := range src.FileOverrides {
-			dst.FileOverrides[k] = v
+			if v == "" {
+				delete(dst.FileOverrides, k) // empty string = clear override
+			} else {
+				dst.FileOverrides[k] = v
+			}
 		}
 	}
 	if src.SkippedVersions != nil {
@@ -148,10 +152,36 @@ func mergeInto(dst, src *Config) {
 			dst.SkippedVersions = make(map[string]string)
 		}
 		for k, v := range src.SkippedVersions {
-			dst.SkippedVersions[k] = v
+			if v == "" {
+				delete(dst.SkippedVersions, k) // empty string = clear skip
+			} else {
+				dst.SkippedVersions[k] = v
+			}
 		}
 	}
 	if src.TelemetryEnabled != nil {
 		dst.TelemetryEnabled = src.TelemetryEnabled
 	}
+}
+
+// SetFileOverride sets a file override ("pinned" or "excluded") in project config.
+// Pass empty value to clear the override.
+func SetFileOverride(projectDir, dest, override string) error {
+	return WriteProjectConfig(projectDir, &Config{
+		FileOverrides: map[string]string{dest: override},
+	})
+}
+
+// SetSkippedVersion marks a file's version as skipped in project config.
+func SetSkippedVersion(projectDir, dest, version string) error {
+	return WriteProjectConfig(projectDir, &Config{
+		SkippedVersions: map[string]string{dest: version},
+	})
+}
+
+// ClearSkippedVersion removes a skip entry for a file.
+func ClearSkippedVersion(projectDir, dest string) error {
+	return WriteProjectConfig(projectDir, &Config{
+		SkippedVersions: map[string]string{dest: ""},
+	})
 }

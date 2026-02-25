@@ -44,7 +44,7 @@ func parseArgs(args []string) cliArgs {
 	// Check for subcommand
 	if i < len(args) && !strings.HasPrefix(args[i], "-") {
 		switch args[i] {
-		case "menu", "install", "list", "state", "config", "repo", "update", "diff", "version", "help":
+		case "menu", "install", "list", "state", "config", "repo", "update", "diff", "sync", "version", "help":
 			a.command = args[i]
 			i++
 		}
@@ -146,6 +146,7 @@ Commands:
 	menu        State-aware interactive menu (default)
 	install     Interactive installer (or --file for single file)
 	update      Re-install currently installed files
+	sync        Detect version mismatch and re-inject if needed
 	diff        Show diff between bundled and installed file
   list        List available manifests and files
 	state       Print install/config state (human or JSON)
@@ -251,6 +252,12 @@ func main() {
 
 	case "update":
 		if err := runUpdateCommand(manifests, cfg, projectDir, args.remote, args.repo, args.branch, args.json); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+			os.Exit(1)
+		}
+
+	case "sync":
+		if err := runSyncCommand(manifests, cfg, projectDir, args.remote, args.repo, args.branch, args.json); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 			os.Exit(1)
 		}

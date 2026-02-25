@@ -86,6 +86,10 @@ func deleteRepoSidecar(projectDir string) error {
 		for _, rel := range sc.Files {
 			_ = os.Remove(filepath.Join(projectDir, rel))
 		}
+		// Clean up managed MCP servers from .vscode/mcp.json
+		if len(sc.McpServers) > 0 {
+			_ = RemoveMcpServers(projectDir, sc.McpServers)
+		}
 	}
 	_ = os.Remove(sidecarPath(projectDir))
 	return removeRepoGitExcludeBlockIfPresent(projectDir)
@@ -145,10 +149,33 @@ func RepoAdd(manifests []Manifest, cfg Config, projectDir string, useRemote bool
 	if chosen == nil {
 		return fmt.Errorf("unknown manifest: %s", cfg.Manifest)
 	}
+
 	files := SelectFiles(chosen.Files, *chosen, cfg.Tier)
 	installed := make([]string, 0, len(files)+1)
 
+	// Separate MCP server files from regular files
+	var regularFiles []ManifestFile
+	var mcpFiles []ManifestFile
 	for _, f := range files {
+		cat := f.Category
+		if cat == "" {
+			cat = InferCategory(f.Src)
+		}
+		if cat == "mcp-servers" {
+			mcpFiles = append(mcpFiles, f)
+		} else {
+			regularFiles = append(regularFiles, f)
+		}
+	}
+
+	// Read previous sidecar for MCP cleanup
+	prevSidecar, _ := readRepoSidecar(projectDir)
+	var previousMcpNames []string
+	if prevSidecar != nil {
+		previousMcpNames = prevSidecar.McpServers
+	}
+
+	for _, f := range regularFiles {
 		destRel := filepath.ToSlash(filepath.Join(".github", f.Dest))
 		destPath := filepath.Join(projectDir, destRel)
 		if err := os.MkdirAll(filepath.Dir(destPath), 0755); err != nil {
@@ -183,6 +210,20 @@ func RepoAdd(manifests []Manifest, cfg Config, projectDir string, useRemote bool
 		installed = append(installed, destRel)
 	}
 
+	// Handle MCP server files
+	var mcpServerNames []string
+	if len(mcpFiles) > 0 || len(previousMcpNames) > 0 {
+		names, err := InjectMcpFromManifest(mcpFiles, chosen.BasePath, projectDir, previousMcpNames)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "  ✗  MCP config: %s\n", err)
+		} else {
+			mcpServerNames = names
+			for _, name := range names {
+				fmt.Printf("  ✓  MCP server: %s\n", name)
+			}
+		}
+	}
+
 	marker := map[string]string{"manifest": chosen.ID, "version": chosen.Version}
 	if useRemote {
 		marker["remote"] = repo + "@" + branch
@@ -202,11 +243,12 @@ func RepoAdd(manifests []Manifest, cfg Config, projectDir string, useRemote bool
 		source = "remote"
 	}
 	if err := writeRepoSidecar(projectDir, repoSidecar{
-		Manifest: chosen.ID,
-		Version:  chosen.Version,
-		Tier:     cfg.Tier,
-		Files:    installed,
-		Source:   source,
+		Manifest:   chosen.ID,
+		Version:    chosen.Version,
+		Tier:       cfg.Tier,
+		Files:      installed,
+		McpServers: mcpServerNames,
+		Source:     source,
 	}); err != nil {
 		return err
 	}
