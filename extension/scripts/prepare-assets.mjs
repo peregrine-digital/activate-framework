@@ -1,9 +1,11 @@
 /**
- * Copies the plugin bundle (manifests, referenced files, .activate-version)
- * from plugins/activate-framework/ into extension/assets/ at build time.
+ * Copies manifests and their referenced source files into extension/assets/
+ * at build time.
  *
- * Supports both the new multi-manifest layout (manifests/*.json) and
- * the legacy single manifest.json for backward compatibility.
+ * Manifest discovery order:
+ *   1. Root manifests/ directory (each *.json has a basePath for source files)
+ *   2. Legacy plugins/activate-framework/manifests/ (basePath defaults to that dir)
+ *   3. Legacy plugins/activate-framework/manifest.json (single-file fallback)
  *
  * Run: node scripts/prepare-assets.mjs
  */
@@ -12,58 +14,94 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const repoRoot = path.resolve(__dirname, '..');
-const pluginDir = path.join(repoRoot, '..', 'plugins', 'activate-framework');
-const assetsDir = path.join(repoRoot, 'assets');
+const extensionDir = path.resolve(__dirname, '..');
+const repoRoot = path.resolve(extensionDir, '..');
+const assetsDir = path.join(extensionDir, 'assets');
+
+/** Default plugin directory (used when basePath is not specified) */
+const defaultPluginDir = path.join(repoRoot, 'plugins', 'activate-framework');
 
 async function main() {
   await mkdir(assetsDir, { recursive: true });
 
-  // Collect all manifest files (from manifests/ or legacy manifest.json)
-  const allFiles = new Set();
-  const manifestsDir = path.join(pluginDir, 'manifests');
-  let hasManifestsDir = false;
+  // fileEntry → resolved source dir, so we can copy from the right place
+  // Map<srcRelative, absoluteSourceDir>
+  const fileSources = new Map();
+  let hasManifests = false;
 
+  // 1. Check root manifests/ directory
+  const rootManifestsDir = path.join(repoRoot, 'manifests');
   try {
-    const entries = await readdir(manifestsDir);
+    const entries = await readdir(rootManifestsDir);
     const jsonFiles = entries.filter((e) => e.endsWith('.json'));
     if (jsonFiles.length > 0) {
-      hasManifestsDir = true;
+      hasManifests = true;
       const assetsManifestsDir = path.join(assetsDir, 'manifests');
       await mkdir(assetsManifestsDir, { recursive: true });
 
       for (const file of jsonFiles) {
-        const src = path.join(manifestsDir, file);
+        const src = path.join(rootManifestsDir, file);
         const dest = path.join(assetsManifestsDir, file);
         await copyFile(src, dest);
         console.log(`  ✓ manifests/${file}`);
 
-        // Collect referenced files
         const manifest = JSON.parse(await readFile(src, 'utf8'));
+        const baseDir = manifest.basePath
+          ? path.resolve(repoRoot, manifest.basePath)
+          : defaultPluginDir;
+
         for (const f of manifest.files || []) {
-          allFiles.add(f.src);
+          fileSources.set(f.src, baseDir);
         }
       }
     }
   } catch {
-    // No manifests/ directory
+    // No root manifests/ directory
   }
 
-  // Legacy fallback: copy manifest.json if no manifests/ dir
-  if (!hasManifestsDir) {
-    const manifestPath = path.join(pluginDir, 'manifest.json');
+  // 2. Legacy fallback: plugin manifests/ dir
+  if (!hasManifests) {
+    const pluginManifestsDir = path.join(defaultPluginDir, 'manifests');
+    try {
+      const entries = await readdir(pluginManifestsDir);
+      const jsonFiles = entries.filter((e) => e.endsWith('.json'));
+      if (jsonFiles.length > 0) {
+        hasManifests = true;
+        const assetsManifestsDir = path.join(assetsDir, 'manifests');
+        await mkdir(assetsManifestsDir, { recursive: true });
+
+        for (const file of jsonFiles) {
+          const src = path.join(pluginManifestsDir, file);
+          const dest = path.join(assetsManifestsDir, file);
+          await copyFile(src, dest);
+          console.log(`  ✓ manifests/${file}`);
+
+          const manifest = JSON.parse(await readFile(src, 'utf8'));
+          for (const f of manifest.files || []) {
+            fileSources.set(f.src, defaultPluginDir);
+          }
+        }
+      }
+    } catch {
+      // No plugin manifests/ dir
+    }
+  }
+
+  // 3. Legacy fallback: single manifest.json
+  if (!hasManifests) {
+    const manifestPath = path.join(defaultPluginDir, 'manifest.json');
     const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
     await copyFile(manifestPath, path.join(assetsDir, 'manifest.json'));
     console.log('  ✓ manifest.json');
 
     for (const f of manifest.files || []) {
-      allFiles.add(f.src);
+      fileSources.set(f.src, defaultPluginDir);
     }
   }
 
-  // Copy .activate-version if it exists
+  // Copy .activate-version if it exists (legacy)
   try {
-    const versionSrc = path.join(pluginDir, '.activate-version');
+    const versionSrc = path.join(defaultPluginDir, '.activate-version');
     await copyFile(versionSrc, path.join(assetsDir, '.activate-version'));
     console.log('  ✓ .activate-version');
   } catch {
@@ -73,8 +111,8 @@ async function main() {
   // Copy each unique file referenced across all manifests
   let copied = 0;
   let skipped = 0;
-  for (const fileSrc of [...allFiles].sort()) {
-    const src = path.join(pluginDir, fileSrc);
+  for (const [fileSrc, baseDir] of [...fileSources.entries()].sort(([a], [b]) => a.localeCompare(b))) {
+    const src = path.join(baseDir, fileSrc);
     const dest = path.join(assetsDir, fileSrc);
     try {
       await mkdir(path.dirname(dest), { recursive: true });
@@ -87,8 +125,7 @@ async function main() {
     }
   }
 
-  const extraCount = hasManifestsDir ? 0 : 1; // manifest.json counts as extra if legacy
-  console.log(`\nDone. ${copied + extraCount + (hasManifestsDir ? [...allFiles].length === copied ? 0 : 0 : 1)} assets copied to extension/assets/`);
+  console.log(`\nDone. ${copied} source files + ${hasManifests ? fileSources.size > 0 ? 'manifests' : '0 manifests' : 'manifest.json'} copied to extension/assets/`);
   if (skipped > 0) {
     console.warn(`${skipped} manifest entries skipped (source files missing).`);
   }

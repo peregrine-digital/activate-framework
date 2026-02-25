@@ -27,40 +27,49 @@ export function resolveTargetDir(rawTarget, { assistant, homeDir = process.env.H
 }
 
 export async function resolveBundleDir(startDir) {
-  // Check for manifests/ directory first (new multi-manifest layout)
-  try {
-    const { readdir } = await import('node:fs/promises');
-    const manifestsDir = path.join(startDir, 'manifests');
-    const entries = await readdir(manifestsDir);
-    if (entries.some((e) => e.endsWith('.json'))) return startDir;
-  } catch { /* no manifests/ dir here */ }
+  const { readdir } = await import('node:fs/promises');
 
-  // Fall back to legacy manifest.json
-  try {
-    await readFile(path.join(startDir, 'manifest.json'));
-    return startDir;
-  } catch {}
+  /**
+   * Check a directory for manifests/ or legacy manifest.json.
+   * Returns the directory if found, null otherwise.
+   */
+  async function probe(dir) {
+    try {
+      const entries = await readdir(path.join(dir, 'manifests'));
+      if (entries.some((e) => e.endsWith('.json'))) return dir;
+    } catch { /* no manifests/ dir here */ }
+    try {
+      await readFile(path.join(dir, 'manifest.json'));
+      return dir;
+    } catch { /* no manifest.json here */ }
+    return null;
+  }
 
-  // Check nested plugins directory
+  // 1. Check startDir itself
+  const direct = await probe(startDir);
+  if (direct) return direct;
+
+  // 2. Walk up parent directories (e.g. manifests/ at repo root)
+  let dir = path.dirname(startDir);
+  const root = path.parse(dir).root;
+  while (dir !== root) {
+    const found = await probe(dir);
+    if (found) return found;
+    dir = path.dirname(dir);
+  }
+
+  // 3. Legacy: check nested plugins directory from startDir
   const pluginDir = path.join(startDir, 'plugins', 'activate-framework');
-  try {
-    const { readdir } = await import('node:fs/promises');
-    const manifestsDir = path.join(pluginDir, 'manifests');
-    const entries = await readdir(manifestsDir);
-    if (entries.some((e) => e.endsWith('.json'))) return pluginDir;
-  } catch { /* no manifests/ dir here */ }
+  const pluginResult = await probe(pluginDir);
+  if (pluginResult) return pluginResult;
 
-  try {
-    await readFile(path.join(pluginDir, 'manifest.json'));
-    return pluginDir;
-  } catch {}
-
-  throw new Error(`Could not locate manifests/ or manifest.json under ${startDir}`);
+  throw new Error(`Could not locate manifests/ or manifest.json from ${startDir}`);
 }
 
-export async function installFiles({ files, bundleDir, targetDir, version, manifestId }) {
+export async function installFiles({ files, bundleDir, basePath, targetDir, version, manifestId }) {
+  const sourceDir = basePath || bundleDir;
   for (const f of files) {
-    const src = path.join(bundleDir, f.src);
+    const src = path.join(sourceDir, f.src);
     const dest = path.join(targetDir, f.dest);
     await mkdir(path.dirname(dest), { recursive: true });
     await copyFile(src, dest);
@@ -75,7 +84,36 @@ async function prompt(rl, question) {
   return new Promise((resolve) => rl.question(question, resolve));
 }
 
+function parseArgs(argv) {
+  const args = { manifest: null, tier: null, target: null, assistant: null, list: false, help: false };
+  for (let i = 2; i < argv.length; i++) {
+    if (argv[i] === '--manifest' && argv[i + 1]) { args.manifest = argv[++i]; continue; }
+    if (argv[i] === '--tier' && argv[i + 1]) { args.tier = argv[++i]; continue; }
+    if (argv[i] === '--target' && argv[i + 1]) { args.target = argv[++i]; continue; }
+    if (argv[i] === '--assistant' && argv[i + 1]) { args.assistant = argv[++i]; continue; }
+    if (argv[i] === '--list') { args.list = true; continue; }
+    if (argv[i] === '--help' || argv[i] === '-h') { args.help = true; continue; }
+  }
+  return args;
+}
+
 async function main() {
+  const args = parseArgs(process.argv);
+
+  if (args.help) {
+    console.log(`Usage: node install.mjs [options]
+
+Options:
+  --manifest <id>     Select manifest by id (skip interactive prompt)
+  --tier <tier>       Select tier: minimal, standard, advanced (default: standard)
+  --target <dir>      Target directory (default: ~/.copilot)
+  --assistant <name>  Assistant type: github-copilot, vs-code
+  --list              List available manifests and exit
+  -h, --help          Show this help message
+`);
+    process.exit(0);
+  }
+
   const bundleDir = await resolveBundleDir(path.dirname(fileURLToPath(import.meta.url)));
   const manifests = await discoverManifests(bundleDir);
 
@@ -84,11 +122,28 @@ async function main() {
     process.exit(1);
   }
 
+  // --list: show available manifests and exit
+  if (args.list) {
+    console.log('\nAvailable manifests:\n');
+    console.log(formatManifestList(manifests));
+    console.log();
+    return;
+  }
+
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
 
   // ── Manifest selection ──
   let chosen;
-  if (manifests.length === 1) {
+  if (args.manifest) {
+    chosen = manifests.find((m) => m.id === args.manifest);
+    if (!chosen) {
+      console.error(`Unknown manifest: ${args.manifest}`);
+      console.error(`Available: ${manifests.map((m) => m.id).join(', ')}`);
+      rl.close();
+      process.exit(1);
+    }
+    console.log(`\n${chosen.name} v${chosen.version} Installer\n`);
+  } else if (manifests.length === 1) {
     chosen = manifests[0];
     console.log(`\n${chosen.name} v${chosen.version} Installer\n`);
   } else {
@@ -107,23 +162,32 @@ async function main() {
   }
 
   // ── Tier selection ──
-  console.log('Tiers:');
-  console.log('  minimal   — Core workflow guidance (AGENTS.md, instructions, prompts)');
-  console.log('  standard  — Core + ad-hoc instructions, skills, and agents');
-  console.log('  advanced  — Standard + advanced tooling\n');
+  let tier, assistant, targetDir;
 
-  const rawAssistant = await prompt(rl, 'Assistant? [GitHub Copilot/VS Code] (default: GitHub Copilot): ');
-  const assistant = resolveAssistant(rawAssistant);
-  const rawTier = (await prompt(rl, 'Which tier? [minimal/standard/advanced] (default: standard): ')).trim() || 'standard';
-  const tier = Object.keys(TIER_MAP).includes(rawTier) ? rawTier : 'standard';
-  const rawTarget = await prompt(rl, 'Target directory? (default: ~/.copilot): ');
-  const targetDir = resolveTargetDir(rawTarget, { assistant });
+  if (args.tier && args.target) {
+    // Fully non-interactive
+    tier = Object.keys(TIER_MAP).includes(args.tier) ? args.tier : 'standard';
+    assistant = resolveAssistant(args.assistant || '');
+    targetDir = resolveTargetDir(args.target, { assistant });
+  } else {
+    console.log('Tiers:');
+    console.log('  minimal   — Core workflow guidance (AGENTS.md, instructions, prompts)');
+    console.log('  standard  — Core + ad-hoc instructions, skills, and agents');
+    console.log('  advanced  — Standard + advanced tooling\n');
+
+    const rawAssistant = args.assistant || await prompt(rl, 'Assistant? [GitHub Copilot/VS Code] (default: GitHub Copilot): ');
+    assistant = resolveAssistant(rawAssistant);
+    const rawTier = args.tier || (await prompt(rl, 'Which tier? [minimal/standard/advanced] (default: standard): ')).trim() || 'standard';
+    tier = Object.keys(TIER_MAP).includes(rawTier) ? rawTier : 'standard';
+    const rawTarget = args.target || await prompt(rl, 'Target directory? (default: ~/.copilot): ');
+    targetDir = resolveTargetDir(rawTarget, { assistant });
+  }
 
   rl.close();
 
   const files = selectFiles(chosen.files, tier);
   console.log(`\nInstalling ${files.length} files to ${targetDir}:\n`);
-  await installFiles({ files, bundleDir, targetDir, version: chosen.version, manifestId: chosen.id });
+  await installFiles({ files, bundleDir, basePath: chosen.basePath, targetDir, version: chosen.version, manifestId: chosen.id });
   console.log(`\nDone. ${chosen.name} v${chosen.version} (${tier}) installed.`);
 }
 

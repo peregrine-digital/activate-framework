@@ -72,6 +72,7 @@ class ControlPanelProvider {
 
     let files = [];
     let manifestName = 'Activate Framework';
+    let manifestCount = 1;
     try {
       const chosen = await readBundledManifestById(this._context, activeManifestId);
       files = chosen.files;
@@ -87,6 +88,14 @@ class ControlPanelProvider {
       } catch {
         /* empty */
       }
+    }
+
+    // Count total available manifests for switcher visibility
+    try {
+      const all = await discoverBundledManifests(this._context);
+      manifestCount = all.length;
+    } catch {
+      /* keep default 1 */
     }
 
     // Determine which are currently on disk + version info
@@ -115,6 +124,8 @@ class ControlPanelProvider {
       version: installedVersion || version,
       tier,
       isActive,
+      manifestName,
+      manifestCount,
       installedFiles,
       availableFiles,
       versionMap,
@@ -135,6 +146,9 @@ class ControlPanelProvider {
     switch (msg.command) {
       case 'changeTier':
         vscode.commands.executeCommand('activate-framework.changeTier');
+        break;
+      case 'changeManifest':
+        vscode.commands.executeCommand('activate-framework.changeManifest');
         break;
       case 'addToWorkspace':
         vscode.commands.executeCommand('activate-framework.addToWorkspace');
@@ -171,7 +185,7 @@ class ControlPanelProvider {
 
   // ── HTML ──────────────────────────────────────────────
 
-  _getHtml({ version, tier, isActive, installedFiles, availableFiles, versionMap }) {
+  _getHtml({ version, tier, isActive, manifestName, manifestCount, installedFiles, availableFiles, versionMap }) {
     const dirty = this._dirty;
     const wsAction = isActive ? 'removeFromWorkspace' : 'addToWorkspace';
     const wsButtonLabel = isActive ? '− Remove Workspace' : '+ Add Workspace';
@@ -524,11 +538,14 @@ class ControlPanelProvider {
     <span class="dot">·</span>
     <span class="badge">${esc(tier)}</span>
     <span class="dot">·</span>
+    <span class="badge">${esc(manifestName)}</span>
+    <span class="dot">·</span>
     <span class="ws-status">${isActive ? '✓' : '○'} Workspace</span>
   </div>
 
   <div class="button-row">
     <button class="secondary" onclick="send('changeTier')">◆ Tier</button>
+    ${manifestCount > 1 ? `<button class="secondary" onclick="send('changeManifest')">⇋ Manifest</button>` : ''}
     <button class="secondary" onclick="send('${wsAction}')">${esc(wsButtonLabel)}</button>
     <button class="primary" onclick="send('updateAll')">↻ Update</button>
   </div>

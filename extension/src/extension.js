@@ -10,8 +10,18 @@ const {
   updateInstalledFiles,
   getActivateRoot,
   skipFileUpdate,
+  readBundledManifestById,
+  discoverBundledManifests,
 } = require('./installer');
+const { selectFiles } = require('./manifest');
+const {
+  registerActivateFs,
+  addVirtualWorkspaceRoot,
+  removeVirtualWorkspaceRoot,
+  findVirtualWorkspaceFolder,
+} = require('./activateFs');
 const { changeTierCommand } = require('./commands/changeTier');
+const { changeManifestCommand } = require('./commands/changeManifest');
 const { showStatusCommand } = require('./commands/showStatus');
 const { ControlPanelProvider } = require('./controlPanel');
 
@@ -37,6 +47,13 @@ function activate(context) {
       await changeTierCommand(context);
       markDirty();
       refreshAll();
+    }),
+    vscode.commands.registerCommand('activate-framework.changeManifest', async () => {
+      const changed = await changeManifestCommand(context);
+      if (changed) {
+        markDirty();
+        refreshAll();
+      }
     }),
     vscode.commands.registerCommand('activate-framework.showStatus', () =>
       showStatusCommand(context),
@@ -208,29 +225,64 @@ async function autoSetup(context) {
 
   const config = vscode.workspace.getConfiguration('activate-framework');
   const tier = config.get('defaultTier', 'standard');
+  const useVirtualFs = config.get('useVirtualFs', false);
 
   const installedInfo = await readInstalledVersion(context);
   const installedVersion = installedInfo?.version || null;
   const bundledVersion = context.extension.packageJSON.version ?? 'unknown';
 
-  // Sync files if first run or version mismatch
-  if (installedVersion !== bundledVersion) {
+  if (useVirtualFs) {
+    // ── Virtual FS mode (experimental) ──────────────────────────
+    // Serve files from an in-memory filesystem instead of globalStorage.
+    // This avoids writing to disk entirely.
     const manifestId = installedInfo?.manifest || undefined;
-    await syncFiles(context, tier, manifestId);
+    const manifest = manifestId
+      ? await readBundledManifestById(context, manifestId)
+      : (await discoverBundledManifests(context))[0];
 
-    if (installedVersion) {
+    if (manifest) {
+      const files = selectFiles(manifest.files, tier);
+      const provider = registerActivateFs(context);
+      await provider.populateFromBundle(context, files);
+
+      // Remove old-style globalStorage root if present
+      if (findActivateWorkspaceFolder()) {
+        removeWorkspaceRoot();
+      }
+
+      const added = addVirtualWorkspaceRoot();
+      if (added) {
+        vscode.window.showInformationMessage(
+          `Peregrine Activate ${bundledVersion} (${tier}) ready — virtual FS mode.`,
+        );
+      }
+    }
+  } else {
+    // ── Classic globalStorage mode ──────────────────────────────
+    // Sync files if first run or version mismatch
+    if (installedVersion !== bundledVersion) {
+      const manifestId = installedInfo?.manifest || undefined;
+      await syncFiles(context, tier, manifestId);
+
+      if (installedVersion) {
+        vscode.window.showInformationMessage(
+          `Peregrine Activate updated: ${installedVersion} → ${bundledVersion}`,
+        );
+      }
+    }
+
+    // Remove VFS root if switching back from virtual mode
+    if (findVirtualWorkspaceFolder()) {
+      removeVirtualWorkspaceRoot();
+    }
+
+    // Ensure the root is in the workspace
+    const added = addWorkspaceRoot(context);
+    if (added && !installedVersion) {
       vscode.window.showInformationMessage(
-        `Peregrine Activate updated: ${installedVersion} → ${bundledVersion}`,
+        `Peregrine Activate ${bundledVersion} (${tier}) is ready.`,
       );
     }
-  }
-
-  // Ensure the root is in the workspace
-  const added = addWorkspaceRoot(context);
-  if (added && !installedVersion) {
-    vscode.window.showInformationMessage(
-      `Peregrine Activate ${bundledVersion} (${tier}) is ready.`,
-    );
   }
 }
 

@@ -104,72 +104,94 @@ export function formatList(groups) {
 // ── Multi-manifest discovery ──────────────────────────────────────────
 
 /**
- * Discover all manifests in a `manifests/` directory.
- * Each *.json file becomes a manifest whose id is derived from the filename.
- * Falls back to a single root `manifest.json` for backward compatibility.
+ * Discover all manifests.
  *
- * @param {string} baseDir - The bundle directory (e.g. plugins/activate-framework)
- * @returns {Promise<Array<{id: string, name: string, description: string, version: string, files: Array}>>}
+ * Search order:
+ *   1. `baseDir/manifests/` — new canonical location (root manifests/)
+ *   2. Walk up from `baseDir` to find a parent `manifests/` directory
+ *   3. `baseDir/manifest.json` — legacy single file
+ *
+ * Each manifest may include a `basePath` (relative to the repo root) that
+ * tells callers where source files live.  If omitted, basePath defaults to
+ * `baseDir` (backward compatible).
+ *
+ * @param {string} baseDir - Starting directory for discovery
+ * @returns {Promise<Array<{id: string, name: string, description: string, version: string, basePath: string, files: Array}>>}
  */
 export async function discoverManifests(baseDir) {
-  const manifestsDir = path.join(baseDir, 'manifests');
+  // Try baseDir/manifests/ directly
+  const localManifestsDir = path.join(baseDir, 'manifests');
+  const result = await _loadManifestsFromDir(localManifestsDir, baseDir);
+  if (result.length > 0) return result;
 
+  // Walk up to find a manifests/ directory (e.g. repo root)
+  let dir = path.dirname(baseDir);
+  const root = path.parse(dir).root;
+  while (dir !== root) {
+    const candidate = path.join(dir, 'manifests');
+    const found = await _loadManifestsFromDir(candidate, dir);
+    if (found.length > 0) return found;
+    dir = path.dirname(dir);
+  }
+
+  // Legacy fallback
+  return loadLegacyManifest(baseDir);
+}
+
+/**
+ * Try to load all *.json manifests from a directory.
+ * @param {string} manifestsDir - Absolute path to the manifests/ directory
+ * @param {string} repoRoot - Repo root used to resolve basePath
+ * @returns {Promise<Array>}
+ */
+async function _loadManifestsFromDir(manifestsDir, repoRoot) {
   try {
     const entries = await readdir(manifestsDir);
     const jsonFiles = entries.filter((e) => e.endsWith('.json')).sort();
-
-    if (jsonFiles.length === 0) {
-      return loadLegacyManifest(baseDir);
-    }
+    if (jsonFiles.length === 0) return [];
 
     const manifests = [];
     for (const file of jsonFiles) {
       const raw = await readFile(path.join(manifestsDir, file), 'utf8');
       const data = JSON.parse(raw);
       const id = file.replace(/\.json$/, '');
+      const basePath = data.basePath
+        ? path.resolve(repoRoot, data.basePath)
+        : repoRoot;
       manifests.push({
         id,
         name: data.name || id,
         description: data.description || '',
         version: data.version || 'unknown',
+        basePath,
         files: data.files || [],
       });
     }
     return manifests;
   } catch {
-    // manifests/ directory does not exist — fall back to legacy
-    return loadLegacyManifest(baseDir);
+    return [];
   }
 }
 
 /**
- * Load a single manifest by id from the manifests/ directory.
- * Falls back to legacy manifest.json if the directory doesn't exist.
+ * Load a single manifest by id.
+ * Searches the same locations as discoverManifests.
  *
  * @param {string} baseDir
  * @param {string} manifestId
- * @returns {Promise<{id: string, name: string, description: string, version: string, files: Array}>}
+ * @returns {Promise<{id: string, name: string, description: string, version: string, basePath: string, files: Array}>}
  */
 export async function loadManifest(baseDir, manifestId) {
-  const manifestPath = path.join(baseDir, 'manifests', `${manifestId}.json`);
-  try {
-    const raw = await readFile(manifestPath, 'utf8');
-    const data = JSON.parse(raw);
-    return {
-      id: manifestId,
-      name: data.name || manifestId,
-      description: data.description || '',
-      version: data.version || 'unknown',
-      files: data.files || [],
-    };
-  } catch {
-    // Fall back to legacy manifest.json if requested id is not found
-    const legacy = await loadLegacyManifest(baseDir);
-    if (legacy.length > 0 && (legacy[0].id === manifestId || manifestId === 'default')) {
-      return legacy[0];
-    }
-    throw new Error(`Manifest "${manifestId}" not found in ${baseDir}/manifests/`);
+  const all = await discoverManifests(baseDir);
+  const found = all.find((m) => m.id === manifestId);
+  if (found) return found;
+
+  // Legacy fallback
+  const legacy = await loadLegacyManifest(baseDir);
+  if (legacy.length > 0 && (legacy[0].id === manifestId || manifestId === 'default')) {
+    return legacy[0];
   }
+  throw new Error(`Manifest "${manifestId}" not found`);
 }
 
 /**
@@ -193,6 +215,7 @@ async function loadLegacyManifest(baseDir) {
       name: 'Activate Framework',
       description: '',
       version,
+      basePath: baseDir,
       files: data.files || [],
     }];
   } catch {

@@ -98,6 +98,10 @@
       {
         "command": "activate-framework.skipFileUpdate",
         "title": "Peregrine Activate: Skip File Update"
+      },
+      {
+        "command": "activate-framework.changeManifest",
+        "title": "Peregrine Activate: Change Manifest"
       }
     ],
     "configuration": {
@@ -117,6 +121,11 @@
             "Standard + advanced tooling"
           ],
           "description": "Default installation tier for Peregrine Activate."
+        },
+        "activate-framework.useVirtualFs": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "**Experimental.** Serve Activate files via an in-memory virtual filesystem instead of writing to globalStorage. Avoids disk writes but may not be discovered by all Copilot features. Toggle this on, reload, and test."
         }
       }
     }

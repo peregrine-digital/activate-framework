@@ -2,6 +2,7 @@
   "name": "Activate Framework",
   "description": "Core AI-assisted development framework with instructions, prompts, skills, and agents",
   "version": "0.5.0",
+  "basePath": "plugins/activate-framework",
   "files": [
     {
       "src": "AGENTS.md",
