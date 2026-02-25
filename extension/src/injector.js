@@ -22,6 +22,12 @@
  */
 const vscode = require('vscode');
 const { selectFiles, parseManifestData, inferCategory } = require('./manifest');
+const {
+  isRemoteMode,
+  getSourceConfig,
+  fetchFileAsBuffer,
+  fetchJSONAuth,
+} = require('./fetcher');
 
 // ── Constants ───────────────────────────────────────────────────
 
@@ -245,11 +251,25 @@ async function removeMcpServers(wsRoot, serverNames) {
 /**
  * Load MCP server definitions from a JSON asset file.
  * Returns an object mapping server names to their configs.
+ * Supports both bundled assets and remote fetch based on settings.
  * @param {vscode.ExtensionContext} context
  * @param {string} srcPath - Relative path to the JSON file in assets/
+ * @param {string} [basePath] - Base path in repo (for remote mode)
  * @returns {Promise<object>}
  */
-async function loadMcpServerConfig(context, srcPath) {
+async function loadMcpServerConfig(context, srcPath, basePath) {
+  if (isRemoteMode()) {
+    try {
+      // Build the full remote path
+      const remotePath = basePath ? `${basePath}/${srcPath}` : srcPath;
+      const data = await fetchJSONAuth(remotePath);
+      if (data) return data;
+    } catch {
+      // Fall back to bundled
+    }
+  }
+
+  // Bundled mode
   const srcUri = vscode.Uri.joinPath(context.extensionUri, 'assets', srcPath);
   try {
     const raw = await vscode.workspace.fs.readFile(srcUri);
@@ -344,6 +364,8 @@ async function _removeGitExclude(wsRoot) {
 // ── Manifest reading (reuse from installer) ─────────────────────
 
 const {
+  discoverManifests,
+  readManifestById,
   discoverBundledManifests,
   readBundledManifestById,
   parseFrontmatterVersion,
@@ -354,6 +376,7 @@ const {
 /**
  * Inject managed files into the workspace's `.github/` directory.
  * MCP server configs are merged into `.vscode/mcp.json` instead.
+ * Supports both bundled and remote sources based on settings.
  *
  * Pipeline: copy files → merge mcp servers → write sidecar → exclude auto-synced.
  *
@@ -366,11 +389,15 @@ async function injectFiles(context, tier, manifestId) {
   const wsRoot = getWorkspaceRoot();
   if (!wsRoot) throw new Error('No workspace folder open');
 
+  // Use smart discovery (respects remote mode setting)
   const chosen = manifestId
-    ? await readBundledManifestById(context, manifestId)
-    : (await discoverBundledManifests(context))[0];
+    ? await readManifestById(context, manifestId)
+    : (await discoverManifests(context))[0];
 
   if (!chosen) throw new Error('No manifest available');
+
+  const remoteMode = isRemoteMode();
+  const basePath = chosen.basePath || '';
 
   const files = selectFiles(chosen.files, tier);
   const oldSidecar = await readSidecar(wsRoot);
@@ -396,7 +423,6 @@ async function injectFiles(context, tier, manifestId) {
   for (const f of regularFiles) {
     const destRel = `.github/${f.dest}`;
     const destUri = vscode.Uri.joinPath(wsRoot, destRel);
-    const srcUri = vscode.Uri.joinPath(context.extensionUri, 'assets', f.src);
 
     // If file exists and we didn't put it there, skip
     if ((await fileExists(destUri)) && !previouslyInjected.has(destRel)) {
@@ -406,26 +432,48 @@ async function injectFiles(context, tier, manifestId) {
 
     try {
       await vscode.workspace.fs.createDirectory(vscode.Uri.joinPath(destUri, '..'));
-      await vscode.workspace.fs.copy(srcUri, destUri, { overwrite: true });
-      injected.push(destRel);
+
+      if (remoteMode) {
+        // Fetch from GitHub
+        const remotePath = basePath ? `${basePath}/${f.src}` : f.src;
+        const content = await fetchFileAsBuffer(remotePath);
+        if (content) {
+          await vscode.workspace.fs.writeFile(destUri, content);
+          injected.push(destRel);
+        }
+      } else {
+        // Copy from bundled assets
+        const srcUri = vscode.Uri.joinPath(context.extensionUri, 'assets', f.src);
+        await vscode.workspace.fs.copy(srcUri, destUri, { overwrite: true });
+        injected.push(destRel);
+      }
     } catch {
-      // Asset may not exist in bundle
+      // Asset may not exist in bundle or remote
     }
   }
 
   // Inject AGENTS.md at workspace root
   const agentsRel = 'AGENTS.md';
   const agentsDestUri = vscode.Uri.joinPath(wsRoot, agentsRel);
-  const agentsSrcUri = vscode.Uri.joinPath(context.extensionUri, 'assets', 'AGENTS.md');
 
   if ((await fileExists(agentsDestUri)) && !previouslyInjected.has(agentsRel)) {
     skipped.push(agentsRel);
   } else {
     try {
-      await vscode.workspace.fs.copy(agentsSrcUri, agentsDestUri, { overwrite: true });
-      injected.push(agentsRel);
+      if (remoteMode) {
+        const remotePath = basePath ? `${basePath}/AGENTS.md` : 'AGENTS.md';
+        const content = await fetchFileAsBuffer(remotePath);
+        if (content) {
+          await vscode.workspace.fs.writeFile(agentsDestUri, content);
+          injected.push(agentsRel);
+        }
+      } else {
+        const agentsSrcUri = vscode.Uri.joinPath(context.extensionUri, 'assets', 'AGENTS.md');
+        await vscode.workspace.fs.copy(agentsSrcUri, agentsDestUri, { overwrite: true });
+        injected.push(agentsRel);
+      }
     } catch {
-      // AGENTS.md may not be in the bundle
+      // AGENTS.md may not be in the bundle or remote
     }
   }
 
@@ -435,7 +483,7 @@ async function injectFiles(context, tier, manifestId) {
 
   for (const f of mcpFiles) {
     try {
-      const serverConfigs = await loadMcpServerConfig(context, f.src);
+      const serverConfigs = await loadMcpServerConfig(context, f.src, basePath);
       for (const [name, config] of Object.entries(serverConfigs)) {
         managedServers[name] = config;
         injectedMcpServers.push(name);
@@ -457,6 +505,7 @@ async function injectFiles(context, tier, manifestId) {
     tier,
     files: injected,
     mcpServers: injectedMcpServers,
+    source: remoteMode ? 'remote' : 'bundled',
   });
 
   return { injected, skipped, mcpServers: injectedMcpServers, version: chosen.version, manifestId: chosen.id };
@@ -484,21 +533,33 @@ async function isFileInjected(file) {
 
 /**
  * Inject a single file into the workspace.
+ * Supports both bundled and remote sources based on settings.
  * @param {vscode.ExtensionContext} context
  * @param {{src: string, dest: string}} file
+ * @param {string} [basePath] - Base path in repo (for remote mode)
  * @returns {Promise<boolean>}
  */
-async function injectSingleFile(context, file) {
+async function injectSingleFile(context, file, basePath) {
   const wsRoot = getWorkspaceRoot();
   if (!wsRoot) return false;
 
   const destRel = `.github/${file.dest}`;
   const destUri = vscode.Uri.joinPath(wsRoot, destRel);
-  const srcUri = vscode.Uri.joinPath(context.extensionUri, 'assets', file.src);
 
   try {
     await vscode.workspace.fs.createDirectory(vscode.Uri.joinPath(destUri, '..'));
-    await vscode.workspace.fs.copy(srcUri, destUri, { overwrite: true });
+
+    if (isRemoteMode()) {
+      // Fetch from GitHub
+      const remotePath = basePath ? `${basePath}/${file.src}` : file.src;
+      const content = await fetchFileAsBuffer(remotePath);
+      if (!content) return false;
+      await vscode.workspace.fs.writeFile(destUri, content);
+    } else {
+      // Copy from bundled assets
+      const srcUri = vscode.Uri.joinPath(context.extensionUri, 'assets', file.src);
+      await vscode.workspace.fs.copy(srcUri, destUri, { overwrite: true });
+    }
 
     // Update sidecar (this automatically syncs git exclude)
     const sidecar = (await readSidecar(wsRoot)) || { manifest: '', version: '', tier: '', files: [] };
@@ -628,6 +689,7 @@ async function removeAllInjected() {
 /**
  * Update only the files that are currently injected.
  * Does not re-add files the user removed.
+ * Supports both bundled and remote sources based on settings.
  *
  * @param {vscode.ExtensionContext} context
  * @returns {Promise<{updated: string[], version: string}>}
@@ -639,15 +701,18 @@ async function updateInjectedFiles(context) {
   const sidecar = await readSidecar(wsRoot);
   const manifestId = sidecar?.manifest || 'activate-framework';
 
+  // Use smart manifest discovery (respects remote mode)
   let chosen;
   try {
-    chosen = await readBundledManifestById(context, manifestId);
+    chosen = await readManifestById(context, manifestId);
   } catch {
-    const all = await discoverBundledManifests(context);
+    const all = await discoverManifests(context);
     chosen = all[0];
   }
   if (!chosen) throw new Error('No manifest available for update');
 
+  const remoteMode = isRemoteMode();
+  const basePath = chosen.basePath || '';
   const previousFiles = new Set(sidecar?.files || []);
   const updated = [];
 
@@ -655,24 +720,44 @@ async function updateInjectedFiles(context) {
     const destRel = `.github/${f.dest}`;
     if (!previousFiles.has(destRel)) continue;
 
-    const srcUri = vscode.Uri.joinPath(context.extensionUri, 'assets', f.src);
     const destUri = vscode.Uri.joinPath(wsRoot, destRel);
 
     try {
       await vscode.workspace.fs.createDirectory(vscode.Uri.joinPath(destUri, '..'));
-      await vscode.workspace.fs.copy(srcUri, destUri, { overwrite: true });
-      updated.push(f.dest);
+
+      if (remoteMode) {
+        // Fetch from GitHub
+        const remotePath = basePath ? `${basePath}/${f.src}` : f.src;
+        const content = await fetchFileAsBuffer(remotePath);
+        if (content) {
+          await vscode.workspace.fs.writeFile(destUri, content);
+          updated.push(f.dest);
+        }
+      } else {
+        // Copy from bundled assets
+        const srcUri = vscode.Uri.joinPath(context.extensionUri, 'assets', f.src);
+        await vscode.workspace.fs.copy(srcUri, destUri, { overwrite: true });
+        updated.push(f.dest);
+      }
     } catch {
-      // file may not exist in bundle
+      // file may not exist in bundle or remote
     }
   }
 
   // Re-copy AGENTS.md if it was injected
   if (previousFiles.has('AGENTS.md')) {
     try {
-      const agentsSrc = vscode.Uri.joinPath(context.extensionUri, 'assets', 'AGENTS.md');
-      const agentsDest = vscode.Uri.joinPath(wsRoot, 'AGENTS.md');
-      await vscode.workspace.fs.copy(agentsSrc, agentsDest, { overwrite: true });
+      if (remoteMode) {
+        const remotePath = basePath ? `${basePath}/AGENTS.md` : 'AGENTS.md';
+        const content = await fetchFileAsBuffer(remotePath);
+        if (content) {
+          await vscode.workspace.fs.writeFile(vscode.Uri.joinPath(wsRoot, 'AGENTS.md'), content);
+        }
+      } else {
+        const agentsSrc = vscode.Uri.joinPath(context.extensionUri, 'assets', 'AGENTS.md');
+        const agentsDest = vscode.Uri.joinPath(wsRoot, 'AGENTS.md');
+        await vscode.workspace.fs.copy(agentsSrc, agentsDest, { overwrite: true });
+      }
     } catch {}
   }
 
@@ -687,7 +772,7 @@ async function updateInjectedFiles(context) {
       if (cat !== 'mcp-servers') continue;
 
       try {
-        const serverConfigs = await loadMcpServerConfig(context, f.src);
+        const serverConfigs = await loadMcpServerConfig(context, f.src, basePath);
         for (const [name, config] of Object.entries(serverConfigs)) {
           // Only update servers that were previously injected
           if (previousMcpServers.includes(name)) {
@@ -708,6 +793,7 @@ async function updateInjectedFiles(context) {
   // Update sidecar version (this automatically syncs git exclude)
   if (sidecar) {
     sidecar.version = chosen.version;
+    sidecar.source = remoteMode ? 'remote' : 'bundled';
     await writeSidecar(wsRoot, sidecar);
   }
 

@@ -139,6 +139,29 @@
           ],
           "description": "How Activate delivers configuration files to Copilot."
         },
+        "activate-framework.source": {
+          "type": "string",
+          "default": "bundled",
+          "enum": [
+            "bundled",
+            "remote"
+          ],
+          "enumDescriptions": [
+            "Use files bundled with the extension (offline, stable)",
+            "Fetch files from GitHub (always latest, requires network)"
+          ],
+          "description": "Where to load manifest and files from."
+        },
+        "activate-framework.remoteRepo": {
+          "type": "string",
+          "default": "peregrine-digital/activate-framework",
+          "description": "GitHub repository (owner/repo) when source is 'remote'."
+        },
+        "activate-framework.remoteBranch": {
+          "type": "string",
+          "default": "main",
+          "description": "Branch or tag when source is 'remote'."
+        },
         "activate-framework.telemetry.enabled": {
           "type": "boolean",
           "default": true,

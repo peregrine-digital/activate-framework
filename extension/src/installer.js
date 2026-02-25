@@ -1,5 +1,11 @@
 const vscode = require('vscode');
 const { selectFiles, parseManifestData } = require('./manifest');
+const {
+  isRemoteMode,
+  getSourceConfig,
+  discoverRemoteManifests,
+  loadRemoteManifest,
+} = require('./fetcher');
 
 const WORKSPACE_ROOT_NAME = 'Peregrine Activate';
 
@@ -62,6 +68,43 @@ async function readBundledManifestById(context, manifestId) {
     const version = await readBundledVersion(context);
     return parseManifestData('activate-framework', { ...manifest, version });
   }
+}
+
+// ── Smart manifest discovery (bundled or remote) ────────────────
+
+/**
+ * Discover all available manifests (bundled or remote based on settings).
+ * @param {vscode.ExtensionContext} context
+ * @returns {Promise<Array<{id: string, name: string, description: string, version: string, files: Array, tiers: Array|undefined}>>}
+ */
+async function discoverManifests(context) {
+  if (isRemoteMode()) {
+    try {
+      const manifests = await discoverRemoteManifests();
+      if (manifests.length > 0) return manifests;
+    } catch (err) {
+      console.warn('Failed to fetch remote manifests, falling back to bundled:', err.message);
+    }
+  }
+  return discoverBundledManifests(context);
+}
+
+/**
+ * Read a single manifest by ID (bundled or remote based on settings).
+ * @param {vscode.ExtensionContext} context
+ * @param {string} manifestId
+ * @returns {Promise<{id: string, name: string, description: string, version: string, files: Array, tiers: Array|undefined}>}
+ */
+async function readManifestById(context, manifestId) {
+  if (isRemoteMode()) {
+    try {
+      const manifest = await loadRemoteManifest(manifestId);
+      if (manifest) return manifest;
+    } catch (err) {
+      console.warn(`Failed to fetch remote manifest ${manifestId}, falling back to bundled:`, err.message);
+    }
+  }
+  return readBundledManifestById(context, manifestId);
 }
 
 // ── Legacy helpers (backward compatible) ────────────────────────
@@ -409,10 +452,15 @@ async function updateInstalledFiles(context) {
 
 module.exports = {
   WORKSPACE_ROOT_NAME,
+  // Smart manifest discovery (respects remote mode setting)
+  discoverManifests,
+  readManifestById,
+  // Bundled-only (direct access)
   discoverBundledManifests,
   readBundledManifestById,
   readBundledManifest,
   readBundledVersion,
+  // Install state
   readInstalledVersion,
   getActivateRoot,
   syncFiles,
