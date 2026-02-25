@@ -30,6 +30,9 @@ activate-framework/
 ├── install.mjs                      # root CLI entry point (thin wrapper)
 ├── mise.toml                        # Node 20 toolchain
 │
+├── skills/                          # shared skills (cross-plugin)
+├── mcp-servers/                     # shared MCP server configs (cross-plugin)
+│
 ├── framework/                       # shared CLI engine (plugin-agnostic)
 │   ├── install.mjs                  #   interactive CLI installer
 │   ├── core.mjs                     #   manifest discovery, tier maps, category grouping
@@ -46,10 +49,12 @@ activate-framework/
 │   ├── activate-framework/          #   core plugin
 │   │   ├── instructions/            #     .instructions.md files
 │   │   ├── prompts/                 #     .prompt.md files
-│   │   ├── skills/                  #     SKILL.md per skill
-│   │   ├── agents/                  #     .agent.md files
-│   │   └── mcp-servers/             #     MCP server configs
+│   │   ├── skills/                  #     plugin-specific skills
+│   │   └── agents/                  #     .agent.md files
 │   └── ironarch/                    #   VA copilot-config plugin
+│       ├── skills/                  #     ironarch-specific skills
+│       ├── agents/                  #     workflow agents (planner, implementer, etc.)
+│       └── mcp-server/              #     screenshot-viewer MCP server
 │
 ├── extension/                       # VS Code extension (GUI wrapper around CLI logic)
 │   ├── package.json                 #   extension manifest, commands, views
