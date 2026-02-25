@@ -30,22 +30,25 @@ activate-framework/
 ├── install.mjs                      # root CLI entry point (thin wrapper)
 ├── mise.toml                        # Node 20 toolchain
 │
+├── framework/                       # shared CLI engine (plugin-agnostic)
+│   ├── install.mjs                  #   interactive CLI installer
+│   ├── core.mjs                     #   manifest discovery, tier maps, category grouping
+│   ├── config.mjs                   #   config read/write (ESM) — shared schema
+│   ├── fetcher.mjs                  #   GitHub fetcher for remote installs
+│   ├── list.mjs                     #   list files as JSON
+│   └── __tests__/                   #   framework-side tests (node --test, ESM)
+│
 ├── manifests/                       # manifest registry (one JSON per plugin)
 │   ├── activate-framework.json      #   basePath → plugins/activate-framework
 │   └── ironarch.json                #   basePath → plugins/ironarch
 │
-├── plugins/                         # content plugins (CLI is primary)
+├── plugins/                         # content plugins (deliverable assets)
 │   ├── activate-framework/          #   core plugin
-│   │   ├── install.mjs              #     interactive CLI installer
-│   │   ├── core.mjs                 #     manifest discovery, tier maps, category grouping
-│   │   ├── config.mjs               #     config read/write (ESM) — shared schema
-│   │   ├── list.mjs                 #     list files as JSON
-│   │   ├── manifest.json            #     legacy manifest (superseded by manifests/)
 │   │   ├── instructions/            #     .instructions.md files
 │   │   ├── prompts/                 #     .prompt.md files
 │   │   ├── skills/                  #     SKILL.md per skill
 │   │   ├── agents/                  #     .agent.md files
-│   │   └── __tests__/               #     CLI-side tests (node --test, ESM)
+│   │   └── mcp-servers/             #     MCP server configs
 │   └── ironarch/                    #   VA copilot-config plugin
 │
 ├── extension/                       # VS Code extension (GUI wrapper around CLI logic)
@@ -92,7 +95,7 @@ Two-layer JSON config, same schema everywhere:
 ```
 
 - `.activate.json` is **auto-excluded from git** via `.git/info/exclude` (managed marker block). It must never be committed.
-- CLI module: `plugins/activate-framework/config.mjs` (ESM, takes `projectDir`)
+- CLI module: `framework/config.mjs` (ESM, takes `projectDir`)
 - Extension module: `extension/src/config.js` (CJS, auto-discovers workspace root)
 
 ### Delivery Mode

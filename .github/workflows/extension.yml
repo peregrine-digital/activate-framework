@@ -3,9 +3,9 @@ name: Build VS Code Extension
 on:
   push:
     branches: [main, 'feat/**']
-    paths: ['extension/**', 'plugins/activate-framework/**']
+    paths: ['extension/**', 'framework/**', 'plugins/**', 'manifests/**']
   pull_request:
-    paths: ['extension/**', 'plugins/activate-framework/**']
+    paths: ['extension/**', 'framework/**', 'plugins/**', 'manifests/**']
   release:
     types: [published]
 

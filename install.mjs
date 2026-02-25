@@ -3,7 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const rootDir = path.dirname(fileURLToPath(import.meta.url));
-const installer = path.join(rootDir, 'plugins', 'activate-framework', 'install.mjs');
+const installer = path.join(rootDir, 'framework', 'install.mjs');
 const child = spawn(process.execPath, [installer, ...process.argv.slice(2)], { stdio: 'inherit' });
 
 child.on('exit', (code) => {

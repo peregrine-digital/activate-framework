@@ -134,9 +134,9 @@ Show user the file list:
 Bundle includes:
 
 ✓ install.mjs (root shim)
+✓ framework/install.mjs (CLI engine)
 ✓ docs/README.md
-✓ plugins/activate-framework/manifest.json
-✓ plugins/activate-framework/install.mjs
+✓ manifests/activate-framework.json
 ```
 
 ### Step 5: Install Files
