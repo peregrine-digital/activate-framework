@@ -1,6 +1,6 @@
 const vscode = require('vscode');
-const { listByCategory, selectFiles, CATEGORY_ORDER } = require('./manifest');
-const { readBundledManifest, readInstalledVersion, getActivateRoot, findActivateWorkspaceFolder } = require('./installer');
+const { listByCategory } = require('./manifest');
+const { readBundledManifest, getActivateRoot, isFileInstalled } = require('./installer');
 
 const CATEGORY_ICONS = {
   instructions: 'book',
@@ -11,24 +11,20 @@ const CATEGORY_ICONS = {
 };
 
 /**
- * TreeDataProvider for the Peregrine Activate sidebar.
+ * TreeDataProvider for the Peregrine Activate sidebar file browser.
+ *
+ * Status/actions live in the WebviewView control panel above.
+ * This tree shows only Installed and Available file sections.
  *
  * Tree structure:
- *   Status (root item — collapsible)
- *     Version: 0.5.0
- *     Tier: standard
- *     Workspace root: active
- *   Instructions (4)
- *     general — Universal coding conventions...
- *     security — Security guardrails...
- *   Prompts (3)
- *     ...
- *   Skills (5)
- *     ...
- *   Agents (1)
- *     ...
- *   ── Higher tier ──
- *     ...
+ *   ▸ Installed (15)
+ *       ▸ Instructions (3)
+ *           ✓ general              [🗑]
+ *       ▸ Prompts (3)
+ *       ...
+ *   ▸ Available (7)
+ *       ▸ Skills (4)
+ *           ⬇ ato-compliant        [⬇]
  */
 class ActivateTreeProvider {
   constructor(context) {
@@ -59,131 +55,120 @@ class ActivateTreeProvider {
   }
 
   async getChildren(element) {
-    // Root level — return status + category groups + higher tier section
-    if (!element) {
-      return this._getRootItems();
-    }
-
-    // Children of a category group
-    if (element.contextValue === 'category') {
-      return element.fileItems || [];
-    }
-
-    // Children of status
-    if (element.contextValue === 'status') {
-      return element.statusItems || [];
-    }
-
-    // Children of higher-tier section
-    if (element.contextValue === 'higher-tier') {
-      return element.fileItems || [];
-    }
-
+    if (!element) return this._getRootSections();
+    if (typeof element.getChildren === 'function') return element.getChildren();
+    if (element.childItems) return element.childItems;
     return [];
   }
 
-  async _getRootItems() {
+  async _getRootSections() {
     const manifest = await this._getManifest();
-    const config = vscode.workspace.getConfiguration('activate-framework');
-    const tier = config.get('defaultTier', 'standard');
-    const version = this._context.extension.packageJSON.version ?? 'unknown';
-    const installedVersion = await readInstalledVersion(this._context);
-    const isActive = !!findActivateWorkspaceFolder();
     const root = getActivateRoot(this._context);
 
-    const items = [];
-
-    // Status section
-    const statusItem = new vscode.TreeItem('Status', vscode.TreeItemCollapsibleState.Collapsed);
-    statusItem.iconPath = new vscode.ThemeIcon('info');
-    statusItem.contextValue = 'status';
-    statusItem.statusItems = [
-      this._infoItem('Version', installedVersion || version),
-      this._infoItem('Tier', tier),
-      this._infoItem('Workspace root', isActive ? 'active' : 'not active'),
-      this._infoItem('Storage', root.fsPath),
-    ];
-    items.push(statusItem);
-
-    // Installed file groups
-    const groups = listByCategory(manifest.files, { tier });
-    const installed = new Set();
-    for (const f of selectFiles(manifest.files, tier)) {
-      const fileUri = vscode.Uri.joinPath(root, '.github', f.dest);
-      try {
-        await vscode.workspace.fs.stat(fileUri);
-        installed.add(f.dest);
-      } catch {}
+    // Scan which files are actually on disk
+    const installedSet = new Set();
+    for (const f of manifest.files) {
+      if (await isFileInstalled(this._context, f)) {
+        installedSet.add(f.dest);
+      }
     }
 
-    for (const { category, label, files } of groups) {
-      const catItem = new vscode.TreeItem(
-        `${label} (${files.length})`,
-        vscode.TreeItemCollapsibleState.Expanded,
-      );
-      catItem.iconPath = new vscode.ThemeIcon(CATEGORY_ICONS[category] || 'file');
-      catItem.contextValue = 'category';
-      catItem.fileItems = files.map((f) => this._fileItem(f, installed.has(f.dest), root));
-      items.push(catItem);
-    }
+    const installedFiles = manifest.files.filter((f) => installedSet.has(f.dest));
+    const availableFiles = manifest.files.filter((f) => !installedSet.has(f.dest));
 
-    // Higher-tier files
-    const currentFiles = selectFiles(manifest.files, tier);
-    const currentDests = new Set(currentFiles.map((f) => f.dest));
-    const higherFiles = manifest.files.filter((f) => !currentDests.has(f.dest));
+    // ── Installed section ──
+    const installedSection = this._section(
+      `Installed`,
+      'folder-opened',
+      installedFiles.length > 0
+        ? vscode.TreeItemCollapsibleState.Collapsed
+        : vscode.TreeItemCollapsibleState.None,
+    );
+    installedSection.description = `${installedFiles.length} files`;
+    installedSection.childItems = this._buildCategoryGroups(installedFiles, root, true);
 
-    if (higherFiles.length > 0) {
-      const higherItem = new vscode.TreeItem(
-        `Available at higher tier (${higherFiles.length})`,
-        vscode.TreeItemCollapsibleState.Collapsed,
-      );
-      higherItem.iconPath = new vscode.ThemeIcon('lock');
-      higherItem.contextValue = 'higher-tier';
-      higherItem.fileItems = higherFiles.map((f) => {
-        const item = new vscode.TreeItem(this._displayName(f));
-        item.description = `[${f.tier}]`;
-        item.tooltip = f.description || f.dest;
-        item.iconPath = new vscode.ThemeIcon('circle-outline');
-        item.contextValue = 'locked-file';
-        return item;
-      });
-      items.push(higherItem);
-    }
+    // ── Available section ──
+    const availableSection = this._section(
+      `Available`,
+      'cloud',
+      availableFiles.length > 0
+        ? vscode.TreeItemCollapsibleState.Collapsed
+        : vscode.TreeItemCollapsibleState.None,
+    );
+    availableSection.description = `${availableFiles.length} files`;
+    availableSection.childItems = this._buildCategoryGroups(availableFiles, root, false);
 
-    return items;
+    return [installedSection, availableSection];
   }
 
-  _fileItem(f, isSynced, root) {
+  _buildCategoryGroups(files, root, isInstalled) {
+    if (files.length === 0) return [];
+
+    const groups = listByCategory(files);
+    return groups.map(({ category, label, files: groupFiles }) => {
+      const catItem = new vscode.TreeItem(
+        `${label}`,
+        vscode.TreeItemCollapsibleState.Collapsed,
+      );
+      catItem.description = `${groupFiles.length}`;
+      catItem.iconPath = new vscode.ThemeIcon(CATEGORY_ICONS[category] || 'file');
+      catItem.contextValue = 'category';
+      catItem.childItems = groupFiles.map((f) =>
+        isInstalled ? this._installedFileItem(f, root) : this._availableFileItem(f),
+      );
+      return catItem;
+    });
+  }
+
+  _installedFileItem(f, root) {
     const item = new vscode.TreeItem(this._displayName(f));
     item.description = f.description || '';
     item.tooltip = new vscode.MarkdownString(
-      `**${f.dest}**\n\n${f.description || ''}\n\nTier: \`${f.tier}\` | Synced: ${isSynced ? 'Yes' : 'No'}`,
+      `**${f.dest}**\n\n${f.description || ''}\n\nTier: \`${f.tier}\`\n\n*Click to open*`,
     );
-    item.iconPath = new vscode.ThemeIcon(isSynced ? 'check' : 'circle-outline');
-    item.contextValue = isSynced ? 'synced-file' : 'missing-file';
+    item.iconPath = new vscode.ThemeIcon('pass-filled', new vscode.ThemeColor('testing.iconPassed'));
+    item.contextValue = 'installed-file';
+    item.fileData = f;
 
-    if (isSynced) {
-      const fileUri = vscode.Uri.joinPath(root, '.github', f.dest);
-      item.command = {
-        command: 'vscode.open',
-        title: 'Open file',
-        arguments: [fileUri],
-      };
-    }
+    const fileUri = vscode.Uri.joinPath(root, '.github', f.dest);
+    item.command = {
+      command: 'vscode.open',
+      title: 'Open file',
+      arguments: [fileUri],
+    };
 
     return item;
   }
 
-  _infoItem(label, value) {
-    const item = new vscode.TreeItem(`${label}: ${value}`);
-    item.contextValue = 'info';
+  _availableFileItem(f) {
+    const item = new vscode.TreeItem(this._displayName(f));
+    item.description = f.description || '';
+    item.tooltip = new vscode.MarkdownString(
+      `**${f.dest}**\n\n${f.description || ''}\n\nTier: \`${f.tier}\`\n\n*Click to install*`,
+    );
+    item.iconPath = new vscode.ThemeIcon('circle-outline');
+    item.contextValue = 'available-file';
+    item.fileData = f;
+
+    item.command = {
+      command: 'activate-framework.installFile',
+      title: 'Install',
+      arguments: [f],
+    };
+
+    return item;
+  }
+
+  _section(label, iconId, collapsibleState) {
+    const item = new vscode.TreeItem(label, collapsibleState);
+    item.iconPath = new vscode.ThemeIcon(iconId);
+    item.contextValue = 'section';
     return item;
   }
 
   _displayName(f) {
     const parts = f.dest.split('/');
     const filename = parts[parts.length - 1];
-    // For skills, use the directory name instead of SKILL.md
     if (filename === 'SKILL.md' && parts.length >= 2) {
       return parts[parts.length - 2];
     }

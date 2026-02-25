@@ -37,6 +37,11 @@
     "views": {
       "peregrine-activate": [
         {
+          "type": "webview",
+          "id": "activate-framework.controlPanel",
+          "name": "Controls"
+        },
+        {
           "id": "activate-framework.filesView",
           "name": "Files"
         }
@@ -60,6 +65,31 @@
         "command": "activate-framework.refresh",
         "title": "Refresh",
         "icon": "$(refresh)"
+      },
+      {
+        "command": "activate-framework.addToWorkspace",
+        "title": "Add to Workspace",
+        "icon": "$(add)"
+      },
+      {
+        "command": "activate-framework.removeFromWorkspace",
+        "title": "Remove from Workspace",
+        "icon": "$(remove)"
+      },
+      {
+        "command": "activate-framework.updateAll",
+        "title": "Update All Installed Files",
+        "icon": "$(sync)"
+      },
+      {
+        "command": "activate-framework.installFile",
+        "title": "Install",
+        "icon": "$(cloud-download)"
+      },
+      {
+        "command": "activate-framework.uninstallFile",
+        "title": "Uninstall",
+        "icon": "$(trash)"
       }
     ],
     "menus": {
@@ -73,6 +103,18 @@
           "command": "activate-framework.changeTier",
           "when": "view == activate-framework.filesView",
           "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "activate-framework.uninstallFile",
+          "when": "view == activate-framework.filesView && viewItem == installed-file",
+          "group": "inline"
+        },
+        {
+          "command": "activate-framework.installFile",
+          "when": "view == activate-framework.filesView && viewItem == available-file",
+          "group": "inline"
         }
       ]
     },

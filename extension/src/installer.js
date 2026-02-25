@@ -126,6 +126,106 @@ function removeWorkspaceRoot() {
   return true;
 }
 
+/**
+ * Install a single file from the bundle into globalStorage.
+ * @param {vscode.ExtensionContext} context
+ * @param {{src: string, dest: string}} file
+ * @returns {Promise<boolean>} true if installed successfully
+ */
+async function installFile(context, file) {
+  const root = getActivateRoot(context);
+  const src = vscode.Uri.joinPath(context.extensionUri, 'assets', file.src);
+  const dest = vscode.Uri.joinPath(root, '.github', file.dest);
+
+  try {
+    await vscode.workspace.fs.createDirectory(vscode.Uri.joinPath(dest, '..'));
+    await vscode.workspace.fs.copy(src, dest, { overwrite: true });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Remove a single file from globalStorage.
+ * @param {vscode.ExtensionContext} context
+ * @param {{dest: string}} file
+ * @returns {Promise<boolean>} true if removed successfully
+ */
+async function uninstallFile(context, file) {
+  const root = getActivateRoot(context);
+  const dest = vscode.Uri.joinPath(root, '.github', file.dest);
+
+  try {
+    await vscode.workspace.fs.delete(dest);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Check if a file is installed in globalStorage.
+ * @param {vscode.ExtensionContext} context
+ * @param {{dest: string}} file
+ * @returns {Promise<boolean>}
+ */
+async function isFileInstalled(context, file) {
+  const root = getActivateRoot(context);
+  const dest = vscode.Uri.joinPath(root, '.github', file.dest);
+  try {
+    await vscode.workspace.fs.stat(dest);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Update only the files that are currently installed on disk.
+ * Unlike syncFiles(), this does NOT re-add files the user has removed.
+ *
+ * @param {vscode.ExtensionContext} context
+ * @returns {Promise<{updated: string[], version: string}>}
+ */
+async function updateInstalledFiles(context) {
+  const manifest = await readBundledManifest(context);
+  const version = await readBundledVersion(context);
+  const root = getActivateRoot(context);
+
+  const updated = [];
+
+  for (const f of manifest.files) {
+    if (!(await isFileInstalled(context, f))) continue;
+
+    const src = vscode.Uri.joinPath(context.extensionUri, 'assets', f.src);
+    const dest = vscode.Uri.joinPath(root, '.github', f.dest);
+
+    try {
+      await vscode.workspace.fs.createDirectory(vscode.Uri.joinPath(dest, '..'));
+      await vscode.workspace.fs.copy(src, dest, { overwrite: true });
+      updated.push(f.dest);
+    } catch {
+      // file may not exist in the bundle
+    }
+  }
+
+  // Re-copy AGENTS.md if it exists
+  try {
+    const agentsSrc = vscode.Uri.joinPath(context.extensionUri, 'assets', 'AGENTS.md');
+    const agentsDest = vscode.Uri.joinPath(root, 'AGENTS.md');
+    await vscode.workspace.fs.copy(agentsSrc, agentsDest, { overwrite: true });
+  } catch {
+    // AGENTS.md may not be in the bundle
+  }
+
+  // Write version file
+  const versionUri = vscode.Uri.joinPath(root, '.activate-version');
+  await vscode.workspace.fs.writeFile(versionUri, Buffer.from(version + '\n'));
+
+  return { updated, version };
+}
+
 module.exports = {
   WORKSPACE_ROOT_NAME,
   readBundledManifest,
@@ -136,5 +236,9 @@ module.exports = {
   findActivateWorkspaceFolder,
   addWorkspaceRoot,
   removeWorkspaceRoot,
+  installFile,
+  uninstallFile,
+  isFileInstalled,
+  updateInstalledFiles,
 };
 
