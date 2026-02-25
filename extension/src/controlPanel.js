@@ -203,7 +203,7 @@ class ControlPanelProvider {
       if (!files.length) return '';
       const cards = files.map((f) => fileCard(f, installed)).join('');
       return `
-        <details class="category" open>
+        <details class="category">
           <summary>${icon} ${esc(label)} <span class="count">${files.length}</span></summary>
           ${cards}
         </details>`;
