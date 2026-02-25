@@ -27,19 +27,33 @@ Legend (from RFC2119): !=MUST, ~=SHOULD, ≉=SHOULD NOT, ⊗=MUST NOT, ?=MAY.
 ```
 activate-framework/
 ├── AGENTS.md                        # ← you are here
-├── install.mjs                      # root CLI entry point (thin wrapper)
-├── mise.toml                        # Node 20 toolchain
+├── mise.toml                        # Go + Node toolchain
+│
+├── cli/                             # Go CLI (zero-dep, single binary)
+│   ├── main.go                      #   entry point, arg parsing, subcommands
+│   ├── manifest.go                  #   manifest types, discovery, loading
+│   ├── tiers.go                     #   tier system, file selection, categories
+│   ├── config.go                    #   two-layer config (global + project)
+│   ├── installer.go                 #   local file copy, bundle dir resolution
+│   ├── fetcher.go                   #   GitHub remote fetch (raw + API)
+│   ├── gitexclude.go                #   .git/info/exclude management
+│   ├── ui.go                        #   Charm huh TUI (interactive prompts)
+│   ├── helpers.go                   #   JSON output, path utils
+│   ├── Makefile                     #   cross-compile, npm-stage, publish
+│   ├── go.mod / go.sum              #   Go module (Charm dependencies)
+│   └── npm/                         #   npm distribution wrapper
+│       ├── package.json             #     @anthropic/activate-cli
+│       ├── bin/activate             #     JS shim → spawns Go binary
+│       ├── install.js               #     postinstall: validate binary
+│       └── platforms/               #     per-platform packages
+│           ├── darwin-arm64/         #       @anthropic/activate-cli-darwin-arm64
+│           ├── darwin-x64/           #       @anthropic/activate-cli-darwin-x64
+│           ├── linux-arm64/          #       @anthropic/activate-cli-linux-arm64
+│           ├── linux-x64/            #       @anthropic/activate-cli-linux-x64
+│           └── win32-x64/            #       @anthropic/activate-cli-win32-x64
 │
 ├── skills/                          # shared skills (cross-plugin)
 ├── mcp-servers/                     # shared MCP server configs (cross-plugin)
-│
-├── framework/                       # shared CLI engine (plugin-agnostic)
-│   ├── install.mjs                  #   interactive CLI installer
-│   ├── core.mjs                     #   manifest discovery, tier maps, category grouping
-│   ├── config.mjs                   #   config read/write (ESM) — shared schema
-│   ├── fetcher.mjs                  #   GitHub fetcher for remote installs
-│   ├── list.mjs                     #   list files as JSON
-│   └── __tests__/                   #   framework-side tests (node --test, ESM)
 │
 ├── manifests/                       # manifest registry (one JSON per plugin)
 │   ├── activate-framework.json      #   basePath → plugins/activate-framework
@@ -100,7 +114,7 @@ Two-layer JSON config, same schema everywhere:
 ```
 
 - `.activate.json` is **auto-excluded from git** via `.git/info/exclude` (managed marker block). It must never be committed.
-- CLI module: `framework/config.mjs` (ESM, takes `projectDir`)
+- CLI module: `cli/config.go` (Go, takes `projectDir`)
 - Extension module: `extension/src/config.js` (CJS, auto-discovers workspace root)
 
 ### Delivery Mode
