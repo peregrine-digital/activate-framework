@@ -58,6 +58,8 @@ class ControlPanelProvider {
       discoverBundledManifests,
       readBundledManifestById,
       isFileInstalled,
+      readInstalledFileVersion,
+      readBundledFileVersion,
     } = require('./installer');
 
     const config = vscode.workspace.getConfiguration('activate-framework');
@@ -87,11 +89,19 @@ class ControlPanelProvider {
       }
     }
 
-    // Determine which are currently on disk
+    // Determine which are currently on disk + version info
     /** @type {Set<string>} */
     const installedSet = new Set();
+    /** @type {Map<string, {installed: string|null, bundled: string|null}>} */
+    const versionMap = new Map();
+
     for (const f of files) {
-      if (await isFileInstalled(this._context, f)) installedSet.add(f.dest);
+      if (await isFileInstalled(this._context, f)) {
+        installedSet.add(f.dest);
+        const iv = await readInstalledFileVersion(this._context, f);
+        const bv = await readBundledFileVersion(this._context, f);
+        versionMap.set(f.dest, { installed: iv, bundled: bv });
+      }
     }
 
     // Determine which are available for this tier but not installed
@@ -107,6 +117,7 @@ class ControlPanelProvider {
       isActive,
       installedFiles,
       availableFiles,
+      versionMap,
     };
   }
 
@@ -149,12 +160,18 @@ class ControlPanelProvider {
       case 'openFile':
         vscode.commands.executeCommand('activate-framework.openFile', msg.file);
         break;
+      case 'diffFile':
+        vscode.commands.executeCommand('activate-framework.diffFile', msg.file);
+        break;
+      case 'skipUpdate':
+        vscode.commands.executeCommand('activate-framework.skipFileUpdate', msg.file);
+        break;
     }
   }
 
   // ── HTML ──────────────────────────────────────────────
 
-  _getHtml({ version, tier, isActive, installedFiles, availableFiles }) {
+  _getHtml({ version, tier, isActive, installedFiles, availableFiles, versionMap }) {
     const dirty = this._dirty;
     const wsAction = isActive ? 'removeFromWorkspace' : 'addToWorkspace';
     const wsButtonLabel = isActive ? '− Remove Workspace' : '+ Add Workspace';
@@ -174,26 +191,55 @@ class ControlPanelProvider {
       const tierBadge = esc(f.tier);
       const json = esc(JSON.stringify(f));
 
-      const action = installed
-        ? `<button class="icon-btn danger" title="Uninstall" onclick="send('uninstallFile', ${json})">✕</button>`
-        : `<button class="icon-btn" title="Install" onclick="send('installFile', ${json})">↓</button>`;
+      // Version info for installed files
+      let versionHtml = '';
+      let outdated = false;
+      if (installed && versionMap) {
+        const vi = versionMap.get(f.dest);
+        if (vi) {
+          const iv = vi.installed || '?';
+          const bv = vi.bundled || '?';
+          outdated = vi.installed && vi.bundled && vi.installed !== vi.bundled;
+          versionHtml = outdated
+            ? `<span class="file-version outdated" title="Installed: ${esc(iv)} → Available: ${esc(bv)}">v${esc(iv)} → v${esc(bv)}</span>`
+            : `<span class="file-version" title="Version ${esc(iv)}">v${esc(iv)}</span>`;
+        }
+      }
+
+      // Action buttons
+      let actionButtons = '';
+      if (installed) {
+        if (outdated) {
+          actionButtons = `
+            <button class="icon-btn" title="Show diff" onclick="event.stopPropagation(); send('diffFile', ${json})">⇔</button>
+            <button class="icon-btn" title="Skip this update" onclick="event.stopPropagation(); send('skipUpdate', ${json})">✓</button>
+            <button class="icon-btn" title="Update to latest" onclick="event.stopPropagation(); send('installFile', ${json})">↑</button>
+            <button class="icon-btn danger" title="Uninstall" onclick="event.stopPropagation(); send('uninstallFile', ${json})">✕</button>`;
+        } else {
+          actionButtons = `
+            <button class="icon-btn danger" title="Uninstall" onclick="event.stopPropagation(); send('uninstallFile', ${json})">✕</button>`;
+        }
+      } else {
+        actionButtons = `
+          <button class="icon-btn" title="Install" onclick="event.stopPropagation(); send('installFile', ${json})">↓</button>`;
+      }
 
       const openClick = installed
         ? `onclick="send('openFile', ${json})"` : '';
       const cursorClass = installed ? 'clickable' : '';
 
       return `
-        <div class="file-card ${installed ? 'installed' : 'available'}">
+        <div class="file-card ${installed ? 'installed' : 'available'}${outdated ? ' outdated-card' : ''}">
           <div class="file-main ${cursorClass}" ${openClick}>
-            <span class="file-status">${installed ? '✓' : '○'}</span>
+            <span class="file-status">${installed ? (outdated ? '⬆' : '✓') : '○'}</span>
             <div class="file-info">
-              <span class="file-name">${name}</span>
+              <span class="file-name">${name} ${versionHtml}</span>
               <span class="file-desc">${desc}</span>
             </div>
           </div>
           <div class="file-actions">
             <span class="file-tier">${tierBadge}</span>
-            ${action}
+            ${actionButtons}
           </div>
         </div>`;
     };
@@ -445,6 +491,25 @@ class ControlPanelProvider {
       font-style: italic;
       padding: 8px 20px;
       font-size: 12px;
+    }
+
+    /* ── Version badges ── */
+    .file-version {
+      font-size: 10px;
+      opacity: 0.45;
+      font-weight: 400;
+      margin-left: 4px;
+    }
+    .file-version.outdated {
+      color: var(--vscode-editorWarning-foreground, #cca700);
+      opacity: 0.9;
+      font-weight: 500;
+    }
+    .outdated-card {
+      border-left: 2px solid var(--vscode-editorWarning-foreground, #cca700);
+    }
+    .outdated-card .file-status {
+      color: var(--vscode-editorWarning-foreground, #cca700);
     }
   </style>
 </head>

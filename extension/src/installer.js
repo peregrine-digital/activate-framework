@@ -263,6 +263,92 @@ async function isFileInstalled(context, file) {
 }
 
 /**
+ * Parse the `version` field from YAML frontmatter in a markdown buffer.
+ * Returns the version string or null if not found.
+ */
+function parseFrontmatterVersion(buffer) {
+  const text = Buffer.from(buffer).toString('utf8');
+  const match = text.match(/^---\s*\n([\s\S]*?)\n---/);
+  if (!match) return null;
+  const fm = match[1];
+  const versionLine = fm.match(/^version:\s*['"]?([^'"\n]+)['"]?\s*$/m);
+  return versionLine ? versionLine[1].trim() : null;
+}
+
+/**
+ * Read the frontmatter version from an installed file in globalStorage.
+ * @param {vscode.ExtensionContext} context
+ * @param {{dest: string}} file
+ * @returns {Promise<string|null>}
+ */
+async function readInstalledFileVersion(context, file) {
+  const root = getActivateRoot(context);
+  const dest = vscode.Uri.joinPath(root, '.github', file.dest);
+  try {
+    const raw = await vscode.workspace.fs.readFile(dest);
+    return parseFrontmatterVersion(raw);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Read the frontmatter version from a bundled (source) file.
+ * @param {vscode.ExtensionContext} context
+ * @param {{src: string}} file
+ * @returns {Promise<string|null>}
+ */
+async function readBundledFileVersion(context, file) {
+  const src = vscode.Uri.joinPath(context.extensionUri, 'assets', file.src);
+  try {
+    const raw = await vscode.workspace.fs.readFile(src);
+    return parseFrontmatterVersion(raw);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * "Skip" an update by rewriting the frontmatter version in the installed
+ * copy to match the bundled version, without changing any other content.
+ * @param {vscode.ExtensionContext} context
+ * @param {{src: string, dest: string}} file
+ * @returns {Promise<boolean>}
+ */
+async function skipFileUpdate(context, file) {
+  const bundledVersion = await readBundledFileVersion(context, file);
+  if (!bundledVersion) return false;
+
+  const root = getActivateRoot(context);
+  const dest = vscode.Uri.joinPath(root, '.github', file.dest);
+
+  try {
+    const raw = await vscode.workspace.fs.readFile(dest);
+    let text = Buffer.from(raw).toString('utf8');
+
+    // Replace the version line in frontmatter
+    const fmMatch = text.match(/^(---\s*\n)([\s\S]*?)(\n---)/);
+    if (!fmMatch) return false;
+
+    const before = fmMatch[1];
+    let fm = fmMatch[2];
+    const after = fmMatch[3];
+
+    if (fm.match(/^version:\s/m)) {
+      fm = fm.replace(/^version:\s*['"]?[^'"\n]+['"]?\s*$/m, `version: '${bundledVersion}'`);
+    } else {
+      fm += `\nversion: '${bundledVersion}'`;
+    }
+
+    text = before + fm + after + text.slice(fmMatch[0].length);
+    await vscode.workspace.fs.writeFile(dest, Buffer.from(text));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Update only the files that are currently installed on disk.
  * Unlike syncFiles(), this does NOT re-add files the user has removed.
  *
@@ -337,5 +423,9 @@ module.exports = {
   uninstallFile,
   isFileInstalled,
   updateInstalledFiles,
+  parseFrontmatterVersion,
+  readInstalledFileVersion,
+  readBundledFileVersion,
+  skipFileUpdate,
 };
 

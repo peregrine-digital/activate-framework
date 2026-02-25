@@ -90,6 +90,14 @@
       {
         "command": "activate-framework.openFile",
         "title": "Open File"
+      },
+      {
+        "command": "activate-framework.diffFile",
+        "title": "Peregrine Activate: Diff File (Installed vs Bundled)"
+      },
+      {
+        "command": "activate-framework.skipFileUpdate",
+        "title": "Peregrine Activate: Skip File Update"
       }
     ],
     "configuration": {

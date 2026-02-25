@@ -8,6 +8,8 @@ const {
   installFile,
   uninstallFile,
   updateInstalledFiles,
+  getActivateRoot,
+  skipFileUpdate,
 } = require('./installer');
 const { changeTierCommand } = require('./commands/changeTier');
 const { showStatusCommand } = require('./commands/showStatus');
@@ -148,7 +150,6 @@ function activate(context) {
       'activate-framework.openFile',
       async (file) => {
         if (!file?.dest) return;
-        const { getActivateRoot } = require('./installer');
         const root = getActivateRoot(context);
         const fileUri = vscode.Uri.joinPath(root, '.github', file.dest);
         try {
@@ -156,6 +157,43 @@ function activate(context) {
         } catch {
           vscode.window.showWarningMessage(`Could not open ${file.dest}`);
         }
+      },
+    ),
+
+    // Diff installed vs bundled version
+    vscode.commands.registerCommand(
+      'activate-framework.diffFile',
+      async (file) => {
+        if (!file?.src || !file?.dest) return;
+        const root = getActivateRoot(context);
+        const installedUri = vscode.Uri.joinPath(root, '.github', file.dest);
+        const bundledUri = vscode.Uri.joinPath(context.extensionUri, 'assets', file.src);
+        try {
+          const name = file.dest.split('/').pop();
+          await vscode.commands.executeCommand(
+            'vscode.diff',
+            bundledUri,
+            installedUri,
+            `${name} (bundled ↔ installed)`,
+          );
+        } catch {
+          vscode.window.showWarningMessage(`Could not diff ${file.dest}`);
+        }
+      },
+    ),
+
+    // Skip update — stamp local frontmatter with bundled version
+    vscode.commands.registerCommand(
+      'activate-framework.skipFileUpdate',
+      async (file) => {
+        if (!file?.src || !file?.dest) return;
+        const ok = await skipFileUpdate(context, file);
+        if (ok) {
+          vscode.window.showInformationMessage(`Skipped update for ${file.dest}`);
+        } else {
+          vscode.window.showWarningMessage(`Could not skip update for ${file.dest}`);
+        }
+        refreshAll();
       },
     ),
   );

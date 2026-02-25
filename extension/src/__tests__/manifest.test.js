@@ -2,6 +2,19 @@ const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
 const { selectFiles, TIER_MAP, listByCategory, inferCategory, parseManifestData } = require('../manifest');
 
+/**
+ * Inline copy of parseFrontmatterVersion for testing without vscode dependency.
+ * Must stay in sync with installer.js implementation.
+ */
+function parseFrontmatterVersion(buffer) {
+  const text = Buffer.from(buffer).toString('utf8');
+  const match = text.match(/^---\s*\n([\s\S]*?)\n---/);
+  if (!match) return null;
+  const fm = match[1];
+  const versionLine = fm.match(/^version:\s*['"]?([^'"\n]+)['"]?\s*$/m);
+  return versionLine ? versionLine[1].trim() : null;
+}
+
 const mockFiles = [
   { src: 'AGENTS.md', dest: 'AGENTS.md', tier: 'core', category: 'other', description: 'Agent guidelines' },
   { src: 'instructions/general.instructions.md', dest: 'instructions/general.instructions.md', tier: 'core', category: 'instructions', description: 'Universal conventions' },
@@ -133,5 +146,27 @@ describe('parseManifestData', () => {
   it('defaults files to empty array when missing', () => {
     const result = parseManifestData('no-files', {});
     assert.deepEqual(result.files, []);
+  });
+});
+
+describe('parseFrontmatterVersion', () => {
+  it('extracts version from standard frontmatter', () => {
+    const buf = Buffer.from("---\ndescription: 'test'\nversion: '0.5.0'\n---\n# Hello");
+    assert.equal(parseFrontmatterVersion(buf), '0.5.0');
+  });
+
+  it('extracts version without quotes', () => {
+    const buf = Buffer.from('---\nversion: 1.2.3\n---\n# Hello');
+    assert.equal(parseFrontmatterVersion(buf), '1.2.3');
+  });
+
+  it('returns null when no frontmatter', () => {
+    const buf = Buffer.from('# Just a heading\nSome content');
+    assert.equal(parseFrontmatterVersion(buf), null);
+  });
+
+  it('returns null when no version in frontmatter', () => {
+    const buf = Buffer.from("---\ndescription: 'test'\n---\n# Hello");
+    assert.equal(parseFrontmatterVersion(buf), null);
   });
 });
