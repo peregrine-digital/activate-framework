@@ -16,10 +16,11 @@ const (
 
 // Config is the unified configuration shape used at both layers.
 type Config struct {
-	Manifest        string            `json:"manifest"`
-	Tier            string            `json:"tier"`
-	FileOverrides   map[string]string `json:"fileOverrides,omitempty"`
-	SkippedVersions map[string]string `json:"skippedVersions,omitempty"`
+	Manifest         string            `json:"manifest"`
+	Tier             string            `json:"tier"`
+	FileOverrides    map[string]string `json:"fileOverrides,omitempty"`
+	SkippedVersions  map[string]string `json:"skippedVersions,omitempty"`
+	TelemetryEnabled *bool             `json:"telemetryEnabled,omitempty"`
 }
 
 // globalConfigPath returns ~/.activate/config.json.
@@ -149,5 +150,8 @@ func mergeInto(dst, src *Config) {
 		for k, v := range src.SkippedVersions {
 			dst.SkippedVersions[k] = v
 		}
+	}
+	if src.TelemetryEnabled != nil {
+		dst.TelemetryEnabled = src.TelemetryEnabled
 	}
 }
