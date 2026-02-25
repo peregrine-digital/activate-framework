@@ -51,37 +51,100 @@ var (
 
 // ── Logo ────────────────────────────────────────────────────────
 
-// falconArt is a peregrine falcon in flight, front-facing with spread wings.
-// Designed on a 25-column grid centered at column 12.
-const falconArt = `          ▄███▄
-         █▀   ▀█
-          ▀▄ ▄▀
-           ███
-       ▄▄▀▀███▀▀▄▄
-     ▄▀   █████   ▀▄
-   ▄▀    ███████    ▀▄
-  ▀     █████████     ▀
-       ████   ████
-        ██▀   ▀██
-         ▀     ▀`
+// falconArtRaw stores the imported pixel map for the peregrine mark.
+const falconArtRaw = `
+●●●●●●●●●●◐◐◐◐◐●●●●●●●●●●
+●●●●●●●●◐◐◐◐◐◐◐◐◐◐●●●●●●●
+●●●●●◐●●●●●●●●●●●◐◐◐●●●●●
+●●●●●◐◐●●●●●●●●●●●●◐◐●●●●
+●●◐●●●◐◐●●●●●●●●●●●●◐◐●●●
+●●●◐●●●◐◐◐●●●●●●●●●●●◐◐●●
+●●●◐◐◐●◐◐◐◐●●●●●●●●●●●◐●●
+●●●●◐◐◐◐◐◐◐◐◐●●●●●●●●●◐◐●
+●◐◐●●◐◐◐◐◐◐◐◐◐◐●●●●●●●●◐●
+●●◐◐◐●◐◐◐◐◐◐◐◐◐◐◐◐●●●●●◐●
+●●●◐◐◐◐◐◐◐◐◐◐◐◐◐◐◐◐◐◐◐◐◐◐
+●●●●◐◐◐◐◐◐◐◐◐◐◐◐◐◐◐◐◐◐◐◐◐
+●●◐●●●◐◐◐◐◐◐◐◐◐◐◐◐◐◐◐◐◐◐◐
+●●●◐◐◐◐◐◐◐◐◐◐◐◐◐◐◐◐◐◐◐◐◐◐
+●●●●◐◐◐◐◐◐◐◐◐◐◐◐◐◐◐◐◐◐◐◐◐
+●◐●●●●◐◐◐◐◐◐◐◐◐◐◐◐◐◐◐◐◐◐●
+●◐◐●●●●●◐◐◐◐◐◐◐◐◐◐◐◐◐◐◐◐●
+●●◐●●●◐◐◐◐◐◐◐◐◐◐◐◐◐◐◐◐◐◐●
+●●◐◐●●●◐◐◐◐◐◐◐◐◐◐◐◐◐◐◐◐●●
+●●●◐●●●●◐◐◐◐◐◐◐◐◐◐◐◐◐◐◐●●
+●●●◐◐●●●●●◐◐◐◐◐◐◐◐◐◐◐◐●●●
+●●●●◐◐◐●●●●●●●●●●●◐◐◐●●●●
+●●●●●◐◐◐●●●●●●●●●◐◐◐●●●●●
+●●●●●●●◐◐◐◐◐◐◐◐◐◐◐●●●●●●●
+●●●●●●●●●●◐◐◐◐◐●●●●●●●●●●`
+
+func renderFalconLogo() string {
+	raw := strings.Trim(falconArtRaw, "\n")
+	lines := strings.Split(raw, "\n")
+
+	// Preserve source shape while correcting terminal cell stretch by
+	// packing two source rows into one display row with half-block glyphs.
+	packed := make([]string, 0, (len(lines)+1)/2)
+	for i := 0; i < len(lines); i += 2 {
+		upper := []rune(lines[i])
+		var lower []rune
+		if i+1 < len(lines) {
+			lower = []rune(lines[i+1])
+		}
+
+		maxLen := len(upper)
+		if len(lower) > maxLen {
+			maxLen = len(lower)
+		}
+
+		row := make([]rune, maxLen)
+		for j := 0; j < maxLen; j++ {
+			upOn := j < len(upper) && upper[j] == '◐'
+			dnOn := j < len(lower) && lower[j] == '◐'
+
+			switch {
+			case upOn && dnOn:
+				row[j] = '█'
+			case upOn:
+				row[j] = '▀'
+			case dnOn:
+				row[j] = '▄'
+			default:
+				row[j] = ' '
+			}
+		}
+
+		packed = append(packed, string(row))
+	}
+
+	return goldStyle.Render(strings.Join(packed, "\n"))
+}
+
+// wordmarkArt is the "PEREGRINE" title in a clean ASCII style.
+const wordmarkArt = `
+██████  ███████ ██████  ███████  ██████  ██████  ██ ███    ██ ███████
+██   ██ ██      ██   ██ ██      ██       ██   ██ ██ ████   ██ ██
+██████  █████   ██████  █████   ██   ███ ██████  ██ ██ ██  ██ █████
+██      ██      ██   ██ ██      ██    ██ ██   ██ ██ ██  ██ ██ ██
+██      ███████ ██   ██ ███████  ██████  ██   ██ ██ ██   ████ ███████`
 
 func renderBanner() string {
-	falcon := goldStyle.Render(falconArt)
+	falcon := renderFalconLogo()
 
-	wordmark := brightStyle.Render("P E R E G R I N E")
-	subtitle := dimStyle.Render("D I G I T A L   S E R V I C E S")
-	tagline := dimStyle.Render("─── Activate Framework ───")
+	// Render the large ASCII text
+	wordmark := brightStyle.Render(strings.Trim(wordmarkArt, "\n"))
+	
+	// Subtitle shown under the wordmark
+	subtitle := dimStyle.Render("                     DIGITAL SERVICES")
 
 	text := lipgloss.JoinVertical(lipgloss.Left,
-		"",
-		"",
 		wordmark,
 		subtitle,
-		"",
-		tagline,
 	)
 
-	logo := lipgloss.JoinHorizontal(lipgloss.Center, falcon, "   ", text)
+	// Combine logo and text with padding
+	logo := lipgloss.JoinHorizontal(lipgloss.Center, falcon, "    ", text)
 	return bannerBox.Render(logo)
 }
 
