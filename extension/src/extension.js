@@ -11,11 +11,9 @@ const {
 } = require('./installer');
 const { changeTierCommand } = require('./commands/changeTier');
 const { showStatusCommand } = require('./commands/showStatus');
-const { ActivateTreeProvider } = require('./treeView');
 const { ControlPanelProvider } = require('./controlPanel');
 
 function activate(context) {
-  // Control panel (WebviewView with real buttons)
   const controlPanel = new ControlPanelProvider(context);
   context.subscriptions.push(
     vscode.window.registerWebviewViewProvider(
@@ -24,26 +22,15 @@ function activate(context) {
     ),
   );
 
-  // File browser tree
-  const treeProvider = new ActivateTreeProvider(context);
-  const treeView = vscode.window.createTreeView('activate-framework.filesView', {
-    treeDataProvider: treeProvider,
-    showCollapseAll: true,
-  });
-
-  /** Mark config dirty → refresh both views + show banner */
   function markDirty() {
     controlPanel.markDirty();
   }
 
-  /** Refresh both sidebar views */
   function refreshAll() {
-    treeProvider.refresh();
     controlPanel.refresh();
   }
 
   context.subscriptions.push(
-    treeView,
     vscode.commands.registerCommand('activate-framework.changeTier', async () => {
       await changeTierCommand(context);
       markDirty();
@@ -139,8 +126,8 @@ function activate(context) {
     // Uninstall a single file
     vscode.commands.registerCommand(
       'activate-framework.uninstallFile',
-      async (treeItem) => {
-        const file = treeItem?.fileData;
+      async (arg) => {
+        const file = arg?.fileData || arg;
         if (!file?.dest) {
           vscode.window.showWarningMessage('No file selected.');
           return;
@@ -153,6 +140,22 @@ function activate(context) {
         }
         markDirty();
         refreshAll();
+      },
+    ),
+
+    // Open an installed file in the editor
+    vscode.commands.registerCommand(
+      'activate-framework.openFile',
+      async (file) => {
+        if (!file?.dest) return;
+        const { getActivateRoot } = require('./installer');
+        const root = getActivateRoot(context);
+        const fileUri = vscode.Uri.joinPath(root, '.github', file.dest);
+        try {
+          await vscode.commands.executeCommand('vscode.open', fileUri);
+        } catch {
+          vscode.window.showWarningMessage(`Could not open ${file.dest}`);
+        }
       },
     ),
   );
@@ -168,12 +171,14 @@ async function autoSetup(context) {
   const config = vscode.workspace.getConfiguration('activate-framework');
   const tier = config.get('defaultTier', 'standard');
 
-  const installedVersion = await readInstalledVersion(context);
+  const installedInfo = await readInstalledVersion(context);
+  const installedVersion = installedInfo?.version || null;
   const bundledVersion = context.extension.packageJSON.version ?? 'unknown';
 
   // Sync files if first run or version mismatch
   if (installedVersion !== bundledVersion) {
-    await syncFiles(context, tier);
+    const manifestId = installedInfo?.manifest || undefined;
+    await syncFiles(context, tier, manifestId);
 
     if (installedVersion) {
       vscode.window.showInformationMessage(

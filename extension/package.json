@@ -39,11 +39,7 @@
         {
           "type": "webview",
           "id": "activate-framework.controlPanel",
-          "name": "Controls"
-        },
-        {
-          "id": "activate-framework.filesView",
-          "name": "Files"
+          "name": "Activate"
         }
       ]
     },
@@ -90,34 +86,12 @@
         "command": "activate-framework.uninstallFile",
         "title": "Uninstall",
         "icon": "$(trash)"
+      },
+      {
+        "command": "activate-framework.openFile",
+        "title": "Open File"
       }
     ],
-    "menus": {
-      "view/title": [
-        {
-          "command": "activate-framework.refresh",
-          "when": "view == activate-framework.filesView",
-          "group": "navigation"
-        },
-        {
-          "command": "activate-framework.changeTier",
-          "when": "view == activate-framework.filesView",
-          "group": "navigation"
-        }
-      ],
-      "view/item/context": [
-        {
-          "command": "activate-framework.uninstallFile",
-          "when": "view == activate-framework.filesView && viewItem == installed-file",
-          "group": "inline"
-        },
-        {
-          "command": "activate-framework.installFile",
-          "when": "view == activate-framework.filesView && viewItem == available-file",
-          "group": "inline"
-        }
-      ]
-    },
     "configuration": {
       "title": "Peregrine Activate",
       "properties": {

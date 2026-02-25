@@ -65,14 +65,31 @@ async function fetchVersion(owner, repo, branch, pluginPath) {
 
 /**
  * Fetch all manifest files from GitHub and write them to the target directory.
+ * Now supports fetching a specific manifest from the manifests/ directory.
  * Returns { installed, skipped, version } or null if manifest fetch failed.
  */
-async function fetchAndSync(context, { owner, repo, branch, pluginPath, tier, selectFiles, targetRoot }) {
-  const manifest = await fetchManifest(owner, repo, branch, pluginPath);
-  if (!manifest) return null;
+async function fetchAndSync(context, { owner, repo, branch, pluginPath, tier, selectFiles, targetRoot, manifestId }) {
+  let manifest;
+  let version;
 
-  const version = await fetchVersion(owner, repo, branch, pluginPath);
-  if (!version) return null;
+  // Try multi-manifest path first
+  if (manifestId) {
+    const manifestContent = await fetchRaw(owner, repo, branch, `${pluginPath}/manifests/${manifestId}.json`);
+    if (manifestContent) {
+      try {
+        manifest = JSON.parse(manifestContent);
+        version = manifest.version || 'unknown';
+      } catch { /* fall through */ }
+    }
+  }
+
+  // Fall back to legacy manifest.json
+  if (!manifest) {
+    manifest = await fetchManifest(owner, repo, branch, pluginPath);
+    if (!manifest) return null;
+    version = manifest.version || await fetchVersion(owner, repo, branch, pluginPath);
+    if (!version) return null;
+  }
 
   const files = selectFiles(manifest.files, tier);
   const installed = [];
@@ -98,9 +115,10 @@ async function fetchAndSync(context, { owner, repo, branch, pluginPath, tier, se
     await vscode.workspace.fs.writeFile(agentsDest, agentsContent);
   }
 
-  // Write version
+  // Write version with manifest info
   const versionUri = vscode.Uri.joinPath(targetRoot, '.activate-version');
-  await vscode.workspace.fs.writeFile(versionUri, Buffer.from(version + '\n'));
+  const versionData = JSON.stringify({ manifest: manifestId || 'activate-framework', version });
+  await vscode.workspace.fs.writeFile(versionUri, Buffer.from(versionData + '\n'));
 
   return { installed, skipped, version };
 }

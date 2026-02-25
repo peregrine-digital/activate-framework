@@ -1,10 +1,74 @@
 const vscode = require('vscode');
-const { selectFiles } = require('./manifest');
+const { selectFiles, parseManifestData } = require('./manifest');
 
 const WORKSPACE_ROOT_NAME = 'Peregrine Activate';
 
+// ── Manifest discovery ──────────────────────────────────────────
+
+/**
+ * Discover all bundled manifests from the extension's assets directory.
+ * Looks in assets/manifests/ first, falls back to assets/manifest.json.
+ * Returns an array of { id, name, description, version, files } objects.
+ */
+async function discoverBundledManifests(context) {
+  const manifestsDir = vscode.Uri.joinPath(context.extensionUri, 'assets', 'manifests');
+  try {
+    const entries = await vscode.workspace.fs.readDirectory(manifestsDir);
+    const jsonFiles = entries
+      .filter(([name, type]) => name.endsWith('.json') && type === vscode.FileType.File)
+      .map(([name]) => name)
+      .sort();
+
+    if (jsonFiles.length > 0) {
+      const manifests = [];
+      for (const file of jsonFiles) {
+        const uri = vscode.Uri.joinPath(manifestsDir, file);
+        const raw = await vscode.workspace.fs.readFile(uri);
+        const data = JSON.parse(Buffer.from(raw).toString('utf8'));
+        const id = file.replace(/\.json$/, '');
+        manifests.push(parseManifestData(id, data));
+      }
+      return manifests;
+    }
+  } catch {
+    // manifests/ directory doesn't exist — fall back to legacy
+  }
+
+  // Legacy fallback: single manifest.json
+  try {
+    const manifest = await readBundledManifest(context);
+    const version = await readBundledVersion(context);
+    return [parseManifestData('activate-framework', { ...manifest, version })];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Read a single bundled manifest by id.
+ * @param {vscode.ExtensionContext} context
+ * @param {string} manifestId
+ * @returns {Promise<{id: string, name: string, description: string, version: string, files: Array}>}
+ */
+async function readBundledManifestById(context, manifestId) {
+  const uri = vscode.Uri.joinPath(context.extensionUri, 'assets', 'manifests', `${manifestId}.json`);
+  try {
+    const raw = await vscode.workspace.fs.readFile(uri);
+    const data = JSON.parse(Buffer.from(raw).toString('utf8'));
+    return parseManifestData(manifestId, data);
+  } catch {
+    // Fall back to legacy manifest.json
+    const manifest = await readBundledManifest(context);
+    const version = await readBundledVersion(context);
+    return parseManifestData('activate-framework', { ...manifest, version });
+  }
+}
+
+// ── Legacy helpers (backward compatible) ────────────────────────
+
 /**
  * Read the bundled manifest.json from the extension's assets directory.
+ * @deprecated Use discoverBundledManifests or readBundledManifestById instead.
  */
 async function readBundledManifest(context) {
   const manifestUri = vscode.Uri.joinPath(context.extensionUri, 'assets', 'manifest.json');
@@ -14,6 +78,7 @@ async function readBundledManifest(context) {
 
 /**
  * Read the bundled .activate-version from the extension's assets directory.
+ * @deprecated Version is now embedded in each manifest's version field.
  */
 async function readBundledVersion(context) {
   const versionUri = vscode.Uri.joinPath(context.extensionUri, 'assets', '.activate-version');
@@ -31,13 +96,19 @@ function getActivateRoot(context) {
 
 /**
  * Read the installed .activate-version from the managed root.
+ * Returns a string (legacy) or parsed JSON { manifest, version }.
  * Returns null if not installed.
  */
 async function readInstalledVersion(context) {
   const versionUri = vscode.Uri.joinPath(getActivateRoot(context), '.activate-version');
   try {
-    const raw = await vscode.workspace.fs.readFile(versionUri);
-    return Buffer.from(raw).toString('utf8').trim();
+    const raw = Buffer.from(await vscode.workspace.fs.readFile(versionUri)).toString('utf8').trim();
+    try {
+      return JSON.parse(raw);
+    } catch {
+      // Legacy format: plain version string
+      return { manifest: 'activate-framework', version: raw };
+    }
   } catch {
     return null;
   }
@@ -47,11 +118,19 @@ async function readInstalledVersion(context) {
  * Copy selected manifest files from extension assets into globalStorage,
  * laid out under a .github/ directory so Copilot discovers them when the
  * folder is added as a workspace root.
+ *
+ * @param {vscode.ExtensionContext} context
+ * @param {string} tier
+ * @param {string} [manifestId] - If set, sync only this manifest. Otherwise sync the active manifest.
  */
-async function syncFiles(context, tier) {
-  const manifest = await readBundledManifest(context);
-  const version = await readBundledVersion(context);
-  const files = selectFiles(manifest.files, tier);
+async function syncFiles(context, tier, manifestId) {
+  const chosen = manifestId
+    ? await readBundledManifestById(context, manifestId)
+    : (await discoverBundledManifests(context))[0];
+
+  if (!chosen) throw new Error('No manifest available');
+
+  const files = selectFiles(chosen.files, tier);
   const root = getActivateRoot(context);
 
   // Ensure the root exists
@@ -81,11 +160,13 @@ async function syncFiles(context, tier) {
     // AGENTS.md may not be in the bundle
   }
 
-  // Write version file
+  // Write version file with manifest info
   const versionUri = vscode.Uri.joinPath(root, '.activate-version');
-  await vscode.workspace.fs.writeFile(versionUri, Buffer.from(version + '\n'));
+  await vscode.workspace.fs.writeFile(versionUri, Buffer.from(
+    JSON.stringify({ manifest: chosen.id, version: chosen.version }) + '\n',
+  ));
 
-  return { installed, version, rootUri: root };
+  return { installed, version: chosen.version, manifestId: chosen.id, rootUri: root };
 }
 
 /**
@@ -189,13 +270,25 @@ async function isFileInstalled(context, file) {
  * @returns {Promise<{updated: string[], version: string}>}
  */
 async function updateInstalledFiles(context) {
-  const manifest = await readBundledManifest(context);
-  const version = await readBundledVersion(context);
-  const root = getActivateRoot(context);
+  // Determine which manifest is active
+  const installedInfo = await readInstalledVersion(context);
+  const manifestId = installedInfo?.manifest || 'activate-framework';
 
+  let chosen;
+  try {
+    chosen = await readBundledManifestById(context, manifestId);
+  } catch {
+    // Fall back to discovering all and using the first
+    const all = await discoverBundledManifests(context);
+    chosen = all[0];
+  }
+
+  if (!chosen) throw new Error('No manifest available for update');
+
+  const root = getActivateRoot(context);
   const updated = [];
 
-  for (const f of manifest.files) {
+  for (const f of chosen.files) {
     if (!(await isFileInstalled(context, f))) continue;
 
     const src = vscode.Uri.joinPath(context.extensionUri, 'assets', f.src);
@@ -221,13 +314,17 @@ async function updateInstalledFiles(context) {
 
   // Write version file
   const versionUri = vscode.Uri.joinPath(root, '.activate-version');
-  await vscode.workspace.fs.writeFile(versionUri, Buffer.from(version + '\n'));
+  await vscode.workspace.fs.writeFile(versionUri, Buffer.from(
+    JSON.stringify({ manifest: chosen.id, version: chosen.version }) + '\n',
+  ));
 
-  return { updated, version };
+  return { updated, version: chosen.version };
 }
 
 module.exports = {
   WORKSPACE_ROOT_NAME,
+  discoverBundledManifests,
+  readBundledManifestById,
   readBundledManifest,
   readBundledVersion,
   readInstalledVersion,

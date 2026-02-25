@@ -1,6 +1,6 @@
 const vscode = require('vscode');
 const { TIER_MAP } = require('../manifest');
-const { syncFiles, addWorkspaceRoot } = require('../installer');
+const { syncFiles, addWorkspaceRoot, readInstalledVersion } = require('../installer');
 
 async function changeTierCommand(context) {
   const config = vscode.workspace.getConfiguration('activate-framework');
@@ -32,8 +32,12 @@ async function changeTierCommand(context) {
       // Update the setting
       await config.update('defaultTier', newTier, vscode.ConfigurationTarget.Global);
 
+      // Preserve active manifest when switching tiers
+      const installedInfo = await readInstalledVersion(context);
+      const manifestId = installedInfo?.manifest || undefined;
+
       // Re-sync files for the new tier
-      const result = await syncFiles(context, newTier);
+      const result = await syncFiles(context, newTier, manifestId);
       addWorkspaceRoot(context);
 
       vscode.window.showInformationMessage(

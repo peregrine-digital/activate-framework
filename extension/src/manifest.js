@@ -55,4 +55,20 @@ function listByCategory(files, { tier, category } = {}) {
     }));
 }
 
-module.exports = { TIER_MAP, CATEGORY_ORDER, selectFiles, inferCategory, listByCategory };
+/**
+ * Parse a manifest JSON object into a normalized manifest entry.
+ * @param {string} id - The manifest id (derived from filename)
+ * @param {object} data - The parsed JSON object
+ * @returns {{id: string, name: string, description: string, version: string, files: Array}}
+ */
+function parseManifestData(id, data) {
+  return {
+    id,
+    name: data.name || id,
+    description: data.description || '',
+    version: data.version || 'unknown',
+    files: data.files || [],
+  };
+}
+
+module.exports = { TIER_MAP, CATEGORY_ORDER, selectFiles, inferCategory, listByCategory, parseManifestData };

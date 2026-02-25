@@ -1,6 +1,6 @@
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
-const { selectFiles, TIER_MAP, listByCategory, inferCategory } = require('../manifest');
+const { selectFiles, TIER_MAP, listByCategory, inferCategory, parseManifestData } = require('../manifest');
 
 const mockFiles = [
   { src: 'AGENTS.md', dest: 'AGENTS.md', tier: 'core', category: 'other', description: 'Agent guidelines' },
@@ -103,5 +103,35 @@ describe('listByCategory', () => {
   it('returns empty when no files match', () => {
     const groups = listByCategory(mockFiles, { tier: 'minimal', category: 'skills' });
     assert.equal(groups.length, 0);
+  });
+});
+
+describe('parseManifestData', () => {
+  it('parses a full manifest data object', () => {
+    const data = {
+      name: 'Test Manifest',
+      description: 'A test manifest',
+      version: '1.2.3',
+      files: [{ src: 'foo.md', dest: 'foo.md', tier: 'core' }],
+    };
+    const result = parseManifestData('test-id', data);
+    assert.equal(result.id, 'test-id');
+    assert.equal(result.name, 'Test Manifest');
+    assert.equal(result.description, 'A test manifest');
+    assert.equal(result.version, '1.2.3');
+    assert.equal(result.files.length, 1);
+  });
+
+  it('uses id as name when name is missing', () => {
+    const result = parseManifestData('my-manifest', { files: [] });
+    assert.equal(result.name, 'my-manifest');
+    assert.equal(result.description, '');
+    assert.equal(result.version, 'unknown');
+    assert.deepEqual(result.files, []);
+  });
+
+  it('defaults files to empty array when missing', () => {
+    const result = parseManifestData('no-files', {});
+    assert.deepEqual(result.files, []);
   });
 });
