@@ -19,6 +19,7 @@ const { changeTierCommand } = require('./commands/changeTier');
 const { changeManifestCommand } = require('./commands/changeManifest');
 const { showStatusCommand } = require('./commands/showStatus');
 const { ControlPanelProvider } = require('./controlPanel');
+const { initTelemetry } = require('./telemetry');
 const {
   resolveConfig,
   writeProjectConfig,
@@ -39,6 +40,9 @@ function activate(context) {
   function refreshAll() {
     controlPanel.refresh();
   }
+
+  // Initialise Copilot telemetry logging (daily quota tracker)
+  initTelemetry(context);
 
   context.subscriptions.push(
     vscode.commands.registerCommand('activate-framework.changeTier', async () => {

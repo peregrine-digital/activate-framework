@@ -631,6 +631,309 @@ class ControlPanelProvider {
 </body>
 </html>`;
   }
+
+  // ── Usage page HTML ─────────────────────────────────────
+
+  _getUsageHtml(entries) {
+    // Sort entries by date descending (most recent first)
+    const sorted = [...entries].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+
+    // Deduplicate by date (keep last entry per day — most recent timestamp)
+    const byDate = new Map();
+    for (const e of [...entries].sort((a, b) => (a.timestamp || '').localeCompare(b.timestamp || ''))) {
+      byDate.set(e.date, e);
+    }
+    const daily = [...byDate.values()].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+
+    // Latest entry summary
+    const latest = daily[0];
+    const entitlement = latest?.premium_entitlement;
+    const remaining = latest?.premium_remaining;
+    const used = latest?.premium_used;
+    const resetDate = latest?.quota_reset_date_utc;
+
+    const pctUsed = entitlement && used != null ? Math.round((used / entitlement) * 100) : null;
+
+    // Sparkline data for last 30 days (usage values)
+    const sparkData = daily.slice(0, 30).reverse();
+    const maxUsed = Math.max(...sparkData.map((e) => e.premium_used ?? 0), 1);
+
+    // Table rows
+    const rows = daily.map((e) => {
+      const pct = e.premium_entitlement && e.premium_used != null
+        ? Math.round((e.premium_used / e.premium_entitlement) * 100)
+        : '—';
+      return `
+        <tr>
+          <td>${esc(e.date || '—')}</td>
+          <td class="num">${e.premium_used ?? '—'}</td>
+          <td class="num">${e.premium_remaining ?? '—'}</td>
+          <td class="num">${e.premium_entitlement ?? '—'}</td>
+          <td class="num">${typeof pct === 'number' ? pct + '%' : pct}</td>
+        </tr>`;
+    }).join('');
+
+    // Colour for usage percentage
+    const usageColor = pctUsed == null ? 'inherit'
+      : pctUsed >= 90 ? 'var(--vscode-errorForeground, #f48771)'
+      : pctUsed >= 70 ? 'var(--vscode-editorWarning-foreground, #cca700)'
+      : 'var(--vscode-testing-iconPassed, #73c991)';
+
+    return /* html */ `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      font-family: var(--vscode-font-family);
+      font-size: var(--vscode-font-size);
+      color: var(--vscode-foreground);
+    }
+    body { padding: 0 10px 16px; }
+
+    /* ── Header / nav ── */
+    .usage-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 0 4px;
+    }
+    .usage-header h2 {
+      font-size: 14px;
+      font-weight: 600;
+      flex: 1;
+    }
+
+    /* ── Buttons ── */
+    .button-row {
+      display: flex;
+      gap: 6px;
+      padding-bottom: 10px;
+      flex-wrap: wrap;
+    }
+    button {
+      border: 1px solid var(--vscode-button-border, transparent);
+      border-radius: 3px;
+      cursor: pointer;
+      font-family: var(--vscode-font-family);
+      font-size: 12px;
+      line-height: 20px;
+      padding: 4px 10px;
+      white-space: nowrap;
+    }
+    button.primary {
+      background: var(--vscode-button-background);
+      color: var(--vscode-button-foreground);
+    }
+    button.primary:hover { background: var(--vscode-button-hoverBackground); }
+    button.secondary {
+      background: var(--vscode-button-secondaryBackground);
+      color: var(--vscode-button-secondaryForeground);
+    }
+    button.secondary:hover { background: var(--vscode-button-secondaryHoverBackground); }
+
+    hr {
+      border: none;
+      border-top: 1px solid var(--vscode-widget-border, var(--vscode-panel-border, #333));
+      margin: 2px 0 8px;
+    }
+
+    /* ── Summary card ── */
+    .summary-card {
+      background: var(--vscode-editor-background);
+      border: 1px solid var(--vscode-widget-border, var(--vscode-panel-border, #333));
+      border-radius: 6px;
+      padding: 12px;
+      margin-bottom: 12px;
+    }
+    .summary-card .title {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      opacity: 0.6;
+      margin-bottom: 6px;
+      font-weight: 600;
+    }
+    .summary-card .big-number {
+      font-size: 28px;
+      font-weight: 700;
+      line-height: 1.1;
+    }
+    .summary-card .detail {
+      font-size: 12px;
+      opacity: 0.7;
+      margin-top: 4px;
+    }
+    .summary-row {
+      display: flex;
+      gap: 10px;
+    }
+    .summary-row .summary-card {
+      flex: 1;
+      min-width: 0;
+    }
+
+    /* ── Progress bar ── */
+    .progress-bar-container {
+      background: var(--vscode-progressBar-background, #333);
+      border-radius: 4px;
+      height: 8px;
+      margin-top: 8px;
+      overflow: hidden;
+      opacity: 0.6;
+    }
+    .progress-bar-fill {
+      height: 100%;
+      border-radius: 4px;
+      transition: width 0.3s;
+    }
+
+    /* ── Sparkline ── */
+    .sparkline-container {
+      margin: 8px 0 12px;
+      display: flex;
+      align-items: flex-end;
+      gap: 2px;
+      height: 40px;
+    }
+    .spark-bar {
+      flex: 1;
+      min-width: 3px;
+      max-width: 12px;
+      background: var(--vscode-button-background);
+      border-radius: 2px 2px 0 0;
+      opacity: 0.7;
+      position: relative;
+    }
+    .spark-bar:hover {
+      opacity: 1;
+    }
+    .spark-bar:hover::after {
+      content: attr(data-label);
+      position: absolute;
+      bottom: 100%;
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--vscode-editorWidget-background);
+      border: 1px solid var(--vscode-widget-border);
+      padding: 2px 6px;
+      border-radius: 3px;
+      font-size: 10px;
+      white-space: nowrap;
+      z-index: 10;
+    }
+
+    /* ── Table ── */
+    .section-label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      opacity: 0.6;
+      margin: 10px 0 4px;
+      font-weight: 600;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+    }
+    th, td {
+      padding: 4px 6px;
+      text-align: left;
+      border-bottom: 1px solid var(--vscode-widget-border, var(--vscode-panel-border, #222));
+    }
+    th {
+      font-weight: 600;
+      font-size: 11px;
+      opacity: 0.7;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+    }
+    td.num { text-align: right; font-variant-numeric: tabular-nums; }
+    th.num { text-align: right; }
+    tr:hover { background: var(--vscode-list-hoverBackground); }
+
+    .empty {
+      opacity: 0.5;
+      font-style: italic;
+      padding: 16px 0;
+      font-size: 12px;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <div class="usage-header">
+    <h2>📊 Copilot Usage</h2>
+  </div>
+
+  <div class="button-row">
+    <button class="secondary" onclick="send('backToMain')">← Back</button>
+    <button class="primary" onclick="send('refreshUsage')">↻ Refresh</button>
+    <button class="secondary" onclick="send('openLogFile')">📄 Open Log</button>
+  </div>
+
+  <hr>
+
+  ${latest ? `
+  <div class="summary-row">
+    <div class="summary-card">
+      <div class="title">Used Today</div>
+      <div class="big-number" style="color: ${usageColor}">${used ?? '—'}</div>
+      <div class="detail">of ${entitlement ?? '?'} premium requests</div>
+      ${pctUsed != null ? `
+      <div class="progress-bar-container">
+        <div class="progress-bar-fill" style="width: ${Math.min(pctUsed, 100)}%; background: ${usageColor};"></div>
+      </div>` : ''}
+    </div>
+    <div class="summary-card">
+      <div class="title">Remaining</div>
+      <div class="big-number">${remaining ?? '—'}</div>
+      <div class="detail">${resetDate ? 'Resets ' + esc(resetDate.split('T')[0]) : ''}</div>
+    </div>
+  </div>
+  ` : '<div class="empty">No telemetry data yet. Click Refresh to log now.</div>'}
+
+  ${sparkData.length > 1 ? `
+  <div class="section-label">Last ${sparkData.length} days</div>
+  <div class="sparkline-container">
+    ${sparkData.map((e) => {
+      const h = e.premium_used != null ? Math.max(2, Math.round((e.premium_used / maxUsed) * 40)) : 2;
+      const label = `${e.date}: ${e.premium_used ?? 0} used`;
+      return `<div class="spark-bar" style="height: ${h}px" data-label="${esc(label)}"></div>`;
+    }).join('')}
+  </div>
+  ` : ''}
+
+  ${daily.length > 0 ? `
+  <div class="section-label">Daily Log · ${daily.length} entries</div>
+  <table>
+    <thead>
+      <tr>
+        <th>Date</th>
+        <th class="num">Used</th>
+        <th class="num">Left</th>
+        <th class="num">Quota</th>
+        <th class="num">%</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${rows}
+    </tbody>
+  </table>
+  ` : ''}
+
+  <script>
+    const vscode = acquireVsCodeApi();
+    function send(command) {
+      vscode.postMessage({ command });
+    }
+  </script>
+</body>
+</html>`;
+  }
 }
 
 /** Derive a display name from the file dest path */
