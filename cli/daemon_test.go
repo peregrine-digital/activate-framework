@@ -129,7 +129,9 @@ func newHarness(t *testing.T) *harness {
 	t.Helper()
 
 	homeDir := t.TempDir()
-	t.Setenv("HOME", homeDir)
+	old := activateBaseDir
+	activateBaseDir = homeDir
+	t.Cleanup(func() { activateBaseDir = old })
 
 	projectDir := t.TempDir()
 	bundleDir := t.TempDir()

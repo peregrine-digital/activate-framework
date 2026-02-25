@@ -115,7 +115,9 @@ func TestBuildTelemetryEntryNoQuota(t *testing.T) {
 
 func TestAppendAndReadTelemetryLog(t *testing.T) {
 	homeDir := t.TempDir()
-	t.Setenv("HOME", homeDir)
+	old := activateBaseDir
+	activateBaseDir = homeDir
+	t.Cleanup(func() { activateBaseDir = old })
 
 	ent := 300
 	rem := 200
@@ -151,7 +153,9 @@ func TestAppendAndReadTelemetryLog(t *testing.T) {
 }
 
 func TestReadTelemetryLogMissing(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	old := activateBaseDir
+	activateBaseDir = t.TempDir()
+	t.Cleanup(func() { activateBaseDir = old })
 	entries, err := ReadTelemetryLog()
 	if err != nil {
 		t.Fatal(err)
@@ -163,12 +167,13 @@ func TestReadTelemetryLogMissing(t *testing.T) {
 
 func TestArchiveLogIfNeeded(t *testing.T) {
 	homeDir := t.TempDir()
-	t.Setenv("HOME", homeDir)
+	old := activateBaseDir
+	activateBaseDir = homeDir
+	t.Cleanup(func() { activateBaseDir = old })
 
 	// Create active log
-	dir := filepath.Join(homeDir, globalConfigDir)
-	os.MkdirAll(dir, 0755)
-	activePath := filepath.Join(dir, telemetryLogFile)
+	os.MkdirAll(homeDir, 0755)
+	activePath := filepath.Join(homeDir, telemetryLogFile)
 	os.WriteFile(activePath, []byte(`{"date":"2026-02-24"}`+"\n"), 0644)
 
 	archivePath, err := ArchiveLogIfNeeded("2026-03-01T00:00:00Z", "2026-02-01T00:00:00Z")
@@ -215,7 +220,9 @@ func TestArchiveLogIfNeededNoPrevious(t *testing.T) {
 
 func TestTelemetryEnabledInConfig(t *testing.T) {
 	homeDir := t.TempDir()
-	t.Setenv("HOME", homeDir)
+	old := activateBaseDir
+	activateBaseDir = homeDir
+	t.Cleanup(func() { activateBaseDir = old })
 
 	tr := true
 	if err := WriteGlobalConfig(&Config{TelemetryEnabled: &tr}); err != nil {
@@ -233,7 +240,9 @@ func TestTelemetryEnabledInConfig(t *testing.T) {
 
 func TestTelemetryLogJSONLFormat(t *testing.T) {
 	homeDir := t.TempDir()
-	t.Setenv("HOME", homeDir)
+	old := activateBaseDir
+	activateBaseDir = homeDir
+	t.Cleanup(func() { activateBaseDir = old })
 
 	ent := 300
 	entry := TelemetryEntry{
@@ -246,7 +255,7 @@ func TestTelemetryLogJSONLFormat(t *testing.T) {
 	AppendTelemetryEntry(entry)
 
 	// Read raw file and verify it's valid JSONL
-	data, _ := os.ReadFile(filepath.Join(homeDir, globalConfigDir, telemetryLogFile))
+	data, _ := os.ReadFile(filepath.Join(homeDir, telemetryLogFile))
 	lines := strings.Split(strings.TrimSpace(string(data)), "\n")
 	if len(lines) != 1 {
 		t.Fatalf("expected 1 line, got %d", len(lines))

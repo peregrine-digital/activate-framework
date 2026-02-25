@@ -15,7 +15,9 @@ import (
 func setupBundle(t *testing.T) (Manifest, string, string) {
 	t.Helper()
 	homeDir := t.TempDir()
-	t.Setenv("HOME", homeDir)
+	old := activateBaseDir
+	activateBaseDir = homeDir
+	t.Cleanup(func() { activateBaseDir = old })
 
 	projectDir := t.TempDir()
 

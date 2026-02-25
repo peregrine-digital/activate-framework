@@ -9,8 +9,9 @@ import (
 )
 
 func TestSyncRepoGitExcludeIfPresentSkipsWhenMissing(t *testing.T) {
+	setupTestStore(t)
 	projectDir := t.TempDir()
-	if err := syncRepoGitExcludeIfPresent(projectDir, []string{repoSidecarRel}); err != nil {
+	if err := syncRepoGitExcludeIfPresent(projectDir, []string{".github/test.md"}); err != nil {
 		t.Fatal(err)
 	}
 	excludePath := filepath.Join(projectDir, ".git", "info", "exclude")
@@ -20,6 +21,7 @@ func TestSyncRepoGitExcludeIfPresentSkipsWhenMissing(t *testing.T) {
 }
 
 func TestWriteAndDeleteRepoSidecarLifecycle(t *testing.T) {
+	setupTestStore(t)
 	projectDir := t.TempDir()
 	excludePath := filepath.Join(projectDir, ".git", "info", "exclude")
 	if err := os.MkdirAll(filepath.Dir(excludePath), 0755); err != nil {
@@ -43,7 +45,11 @@ func TestWriteAndDeleteRepoSidecarLifecycle(t *testing.T) {
 
 	prev := repoSidecar{Manifest: "m1", Version: "1", Tier: "minimal", Files: []string{".github/old.md", ".github/keep.md"}}
 	prevData, _ := json.Marshal(prev)
-	if err := os.WriteFile(sidecarPath(projectDir), prevData, 0644); err != nil {
+	scPath := sidecarPath(projectDir)
+	if err := os.MkdirAll(filepath.Dir(scPath), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(scPath, prevData, 0644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -93,8 +99,7 @@ func TestWriteAndDeleteRepoSidecarLifecycle(t *testing.T) {
 
 func TestRepoAddLocalCopiesManagedFiles(t *testing.T) {
 	projectDir := t.TempDir()
-	homeDir := t.TempDir()
-	t.Setenv("HOME", homeDir)
+	setupTestStore(t)
 
 	excludePath := filepath.Join(projectDir, ".git", "info", "exclude")
 	if err := os.MkdirAll(filepath.Dir(excludePath), 0755); err != nil {
@@ -138,14 +143,11 @@ func TestRepoAddLocalCopiesManagedFiles(t *testing.T) {
 		t.Fatalf("unexpected copied content: %q", string(data))
 	}
 
-	if _, err := os.Stat(filepath.Join(projectDir, ".github", ".activate-version")); err != nil {
-		t.Fatalf("expected .activate-version marker, err=%v", err)
-	}
 	if _, err := os.Stat(sidecarPath(projectDir)); err != nil {
 		t.Fatalf("expected repo sidecar written, err=%v", err)
 	}
 
-	projectCfgData, err := os.ReadFile(filepath.Join(projectDir, ".activate.json"))
+	projectCfgData, err := os.ReadFile(projectConfigPath(projectDir))
 	if err != nil {
 		t.Fatalf("expected .activate.json written, err=%v", err)
 	}
@@ -156,7 +158,7 @@ func TestRepoAddLocalCopiesManagedFiles(t *testing.T) {
 
 func TestRepoRemoveCleanup(t *testing.T) {
 	projectDir := t.TempDir()
-	t.Setenv("HOME", t.TempDir())
+	setupTestStore(t)
 
 	// Set up .git/info/exclude so the exclude block can be written
 	excludePath := filepath.Join(projectDir, ".git", "info", "exclude")
@@ -226,7 +228,7 @@ func TestRepoRemoveCleanup(t *testing.T) {
 
 func TestRepoRemoveNoSidecar(t *testing.T) {
 	projectDir := t.TempDir()
-	t.Setenv("HOME", t.TempDir())
+	setupTestStore(t)
 
 	// No sidecar file exists — should not error
 	if err := RepoRemove(projectDir); err != nil {
@@ -235,6 +237,7 @@ func TestRepoRemoveNoSidecar(t *testing.T) {
 }
 
 func TestDeleteRepoSidecarCleansMcpServers(t *testing.T) {
+	setupTestStore(t)
 	projectDir := t.TempDir()
 
 	// Set up .git/info/exclude so cleanup doesn't fail
@@ -299,8 +302,7 @@ func TestDeleteRepoSidecarCleansMcpServers(t *testing.T) {
 
 func TestRepoAddFiltersMcpFiles(t *testing.T) {
 	projectDir := t.TempDir()
-	homeDir := t.TempDir()
-	t.Setenv("HOME", homeDir)
+	setupTestStore(t)
 
 	// Set up .git/info/exclude
 	excludePath := filepath.Join(projectDir, ".git", "info", "exclude")
@@ -380,6 +382,7 @@ func TestRepoAddFiltersMcpFiles(t *testing.T) {
 }
 
 func TestWriteRepoSidecarDeletesStaleFiles(t *testing.T) {
+	setupTestStore(t)
 	projectDir := t.TempDir()
 
 	// Set up .git/info/exclude

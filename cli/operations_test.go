@@ -11,6 +11,7 @@ import (
 // ── UpdateFiles tests ───────────────────────────────────────────
 
 func TestUpdateFilesReinstallsTrackedFiles(t *testing.T) {
+	setupTestStore(t)
 	projectDir := t.TempDir()
 	bundleDir := t.TempDir()
 
@@ -25,7 +26,8 @@ func TestUpdateFilesReinstallsTrackedFiles(t *testing.T) {
 	os.WriteFile(installedPath, []byte("---\nversion: '0.4.0'\n---\n# Old"), 0644)
 
 	// Create sidecar
-	scPath := filepath.Join(projectDir, ".github", ".activate-installed.json")
+	scPath := sidecarPath(projectDir)
+	os.MkdirAll(filepath.Dir(scPath), 0755)
 	scData, _ := json.Marshal(repoSidecar{
 		Manifest: "test", Version: "0.4.0", Tier: "minimal",
 		Files: []string{".github/instructions/general.md"},
@@ -69,6 +71,7 @@ func TestUpdateFilesReinstallsTrackedFiles(t *testing.T) {
 }
 
 func TestUpdateFilesRespectsSkippedVersions(t *testing.T) {
+	setupTestStore(t)
 	projectDir := t.TempDir()
 	bundleDir := t.TempDir()
 
@@ -83,7 +86,8 @@ func TestUpdateFilesRespectsSkippedVersions(t *testing.T) {
 	os.MkdirAll(excludeDir, 0755)
 	os.WriteFile(filepath.Join(excludeDir, "exclude"), []byte(""), 0644)
 
-	scPath := filepath.Join(projectDir, ".github", ".activate-installed.json")
+	scPath := sidecarPath(projectDir)
+	os.MkdirAll(filepath.Dir(scPath), 0755)
 	scData, _ := json.Marshal(repoSidecar{
 		Manifest: "test", Version: "0.4.0", Tier: "minimal",
 		Files: []string{".github/a.md"},
@@ -199,6 +203,7 @@ func TestInstallSingleFileIdempotent(t *testing.T) {
 // ── UninstallSingleFile tests ───────────────────────────────────
 
 func TestUninstallSingleFile(t *testing.T) {
+	setupTestStore(t)
 	projectDir := t.TempDir()
 
 	excludeDir := filepath.Join(projectDir, ".git", "info")
@@ -211,7 +216,7 @@ func TestUninstallSingleFile(t *testing.T) {
 	os.WriteFile(filePath, []byte("content"), 0644)
 
 	// Create sidecar tracking the file
-	scPath := filepath.Join(projectDir, ".github", ".activate-installed.json")
+	scPath := sidecarPath(projectDir)
 	os.MkdirAll(filepath.Dir(scPath), 0755)
 	scData, _ := json.Marshal(repoSidecar{
 		Manifest: "m1", Version: "1.0.0", Tier: "minimal",
@@ -433,6 +438,7 @@ func TestSelectFilesWithOverridesNilMap(t *testing.T) {
 // ── UpdateFiles MCP-aware filtering ─────────────────────────────
 
 func TestUpdateFilesMcpAware(t *testing.T) {
+	setupTestStore(t)
 	projectDir := t.TempDir()
 	bundleDir := t.TempDir()
 
@@ -452,7 +458,7 @@ func TestUpdateFilesMcpAware(t *testing.T) {
 	os.WriteFile(filepath.Join(excludeDir, "exclude"), []byte(""), 0644)
 
 	// Create sidecar
-	scPath := filepath.Join(projectDir, ".github", ".activate-installed.json")
+	scPath := sidecarPath(projectDir)
 	os.MkdirAll(filepath.Dir(scPath), 0755)
 	scData, _ := json.Marshal(repoSidecar{
 		Manifest: "test", Version: "0.4.0", Tier: "minimal",
