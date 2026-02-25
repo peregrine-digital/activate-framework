@@ -15,7 +15,7 @@ import (
 const version = "0.1.0"
 
 type cliArgs struct {
-	command      string // "menu" (default), "install", "list", "state", "config", "repo", "update", "diff"
+	command      string // "menu" (default), "install", "list", "state", "config", "repo", "update", "diff", "sync", "serve"
 	configAction string // "get" or "set" for config command
 	repoAction   string // "add" or "remove" for repo command
 	manifest     string
@@ -26,6 +26,7 @@ type cliArgs struct {
 	projectDir   string
 	file         string // --file flag for per-file operations
 	remote       bool
+	stdio        bool // --stdio flag for serve command
 	repo         string
 	branch       string
 	list         bool // legacy --list flag
@@ -44,7 +45,7 @@ func parseArgs(args []string) cliArgs {
 	// Check for subcommand
 	if i < len(args) && !strings.HasPrefix(args[i], "-") {
 		switch args[i] {
-		case "menu", "install", "list", "state", "config", "repo", "update", "diff", "sync", "version", "help":
+		case "menu", "install", "list", "state", "config", "repo", "update", "diff", "sync", "serve", "version", "help":
 			a.command = args[i]
 			i++
 		}
@@ -109,6 +110,8 @@ func parseArgs(args []string) cliArgs {
 			}
 		case "--remote":
 			a.remote = true
+		case "--stdio":
+			a.stdio = true
 		case "--file":
 			if i+1 < len(args) {
 				i++
@@ -147,6 +150,7 @@ Commands:
 	install     Interactive installer (or --file for single file)
 	update      Re-install currently installed files
 	sync        Detect version mismatch and re-inject if needed
+	serve       Start JSON-RPC daemon (--stdio for stdio transport)
 	diff        Show diff between bundled and installed file
   list        List available manifests and files
 	state       Print install/config state (human or JSON)
@@ -259,6 +263,19 @@ func main() {
 	case "sync":
 		if err := runSyncCommand(manifests, cfg, projectDir, args.remote, args.repo, args.branch, args.json); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+			os.Exit(1)
+		}
+
+	case "serve":
+		if !args.stdio {
+			fmt.Fprintln(os.Stderr, "Error: serve requires --stdio")
+			os.Exit(1)
+		}
+		svc := NewService(projectDir, manifests, cfg, args.remote, args.repo, args.branch)
+		transport := NewTransport(os.Stdin, os.Stdout)
+		daemon := NewDaemon(svc, transport)
+		if err := daemon.Serve(); err != nil {
+			fmt.Fprintf(os.Stderr, "daemon error: %s\n", err)
 			os.Exit(1)
 		}
 
