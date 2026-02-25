@@ -1,5 +1,7 @@
 const vscode = require('vscode');
-const { discoverBundledManifests, syncFiles, readInstalledVersion } = require('../installer');
+const { discoverBundledManifests } = require('../installer');
+const { injectFiles, readInjectedVersion } = require('../injector');
+const { resolveConfig, writeProjectConfig } = require('../config');
 
 /**
  * Show a QuickPick to switch between available manifests.
@@ -21,8 +23,9 @@ async function changeManifestCommand(context) {
     return false;
   }
 
-  const installedInfo = await readInstalledVersion(context);
-  const activeId = installedInfo?.manifest || manifests[0].id;
+  const cfg = await resolveConfig();
+  const injectedInfo = await readInjectedVersion();
+  const activeId = cfg.manifest || injectedInfo?.manifest || manifests[0].id;
 
   const items = manifests.map((m) => ({
     label: m.name,
@@ -39,13 +42,13 @@ async function changeManifestCommand(context) {
 
   if (!pick || pick.manifestId === activeId) return false;
 
-  const config = vscode.workspace.getConfiguration('activate-framework');
-  const tier = config.get('defaultTier', 'standard');
+  // Persist the manifest choice
+  await writeProjectConfig({ manifest: pick.manifestId });
 
-  await syncFiles(context, tier, pick.manifestId);
+  await injectFiles(context, cfg.tier, pick.manifestId);
 
   vscode.window.showInformationMessage(
-    `Switched to ${pick.label} (${tier}).`,
+    `Switched to ${pick.label} (${cfg.tier}).`,
   );
   return true;
 }

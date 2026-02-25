@@ -1,10 +1,11 @@
 const vscode = require('vscode');
 const { TIER_MAP } = require('../manifest');
-const { syncFiles, addWorkspaceRoot, readInstalledVersion } = require('../installer');
+const { injectFiles, readInjectedVersion } = require('../injector');
+const { resolveConfig, writeProjectConfig } = require('../config');
 
 async function changeTierCommand(context) {
-  const config = vscode.workspace.getConfiguration('activate-framework');
-  const currentTier = config.get('defaultTier', 'standard');
+  const cfg = await resolveConfig();
+  const currentTier = cfg.tier;
 
   const tierItems = Object.keys(TIER_MAP).map((tier) => ({
     label: tier,
@@ -29,19 +30,14 @@ async function changeTierCommand(context) {
     async (progress) => {
       progress.report({ message: `Switching to ${newTier} tier…` });
 
-      // Update the setting
-      await config.update('defaultTier', newTier, vscode.ConfigurationTarget.Global);
+      // Persist the tier choice
+      await writeProjectConfig({ tier: newTier });
 
-      // Preserve active manifest when switching tiers
-      const installedInfo = await readInstalledVersion(context);
-      const manifestId = installedInfo?.manifest || undefined;
-
-      // Re-sync files for the new tier
-      const result = await syncFiles(context, newTier, manifestId);
-      addWorkspaceRoot(context);
-
+      const injectedInfo = await readInjectedVersion();
+      const manifestId = cfg.manifest || injectedInfo?.manifest || undefined;
+      const result = await injectFiles(context, newTier, manifestId);
       vscode.window.showInformationMessage(
-        `Peregrine Activate switched to ${newTier} tier (${result.installed.length} files).`,
+        `Peregrine Activate switched to ${newTier} tier (${result.injected.length} files).`,
       );
     },
   );

@@ -1,6 +1,7 @@
 const vscode = require('vscode');
 const { listByCategory, TIER_MAP } = require('./manifest');
 const { resolveConfig } = require('./config');
+const { readLogEntries, getLogFilePath } = require('./telemetry');
 
 /**
  * Single WebviewView that replaces both the old control-panel and TreeView.
@@ -23,6 +24,8 @@ class ControlPanelProvider {
   constructor(context) {
     this._context = context;
     this._view = null;
+    /** @type {'main'|'usage'} */
+    this._currentPage = 'main';
   }
 
   /** @param {vscode.WebviewView} webviewView */
@@ -155,8 +158,13 @@ class ControlPanelProvider {
 
   async _render() {
     if (!this._view) return;
-    const state = await this._gatherState();
-    this._view.webview.html = this._getHtml(state);
+    if (this._currentPage === 'usage') {
+      const entries = await readLogEntries();
+      this._view.webview.html = this._getUsageHtml(entries);
+    } else {
+      const state = await this._gatherState();
+      this._view.webview.html = this._getHtml(state);
+    }
   }
 
   // ── messages from webview ─────────────────────────────
@@ -196,6 +204,27 @@ class ControlPanelProvider {
       case 'skipUpdate':
         vscode.commands.executeCommand('activate-framework.skipFileUpdate', msg.file);
         break;
+      case 'showUsage':
+        this._currentPage = 'usage';
+        this._render();
+        break;
+      case 'backToMain':
+        this._currentPage = 'main';
+        this._render();
+        break;
+      case 'refreshUsage':
+        vscode.commands.executeCommand('activate-framework.telemetryRunNow').then(() => {
+          this._render();
+        });
+        break;
+      case 'openLogFile': {
+        const logPath = getLogFilePath();
+        vscode.commands.executeCommand('vscode.open', vscode.Uri.file(logPath)).then(
+          () => {},
+          () => vscode.window.showWarningMessage(`Could not open ${logPath}`),
+        );
+        break;
+      }
     }
   }
 
@@ -563,6 +592,7 @@ class ControlPanelProvider {
     ${manifestCount > 1 ? `<button class="secondary" onclick="send('changeManifest')">⇋ Manifest</button>` : ''}
     <button class="secondary" onclick="send('${wsAction}')">${esc(wsButtonLabel)}</button>
     <button class="primary" onclick="send('updateAll')">↻ Update</button>
+    <button class="secondary" onclick="send('showUsage')">📊 Usage</button>
   </div>
 
   <hr>

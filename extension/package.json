@@ -55,7 +55,7 @@
       },
       {
         "command": "activate-framework.remove",
-        "title": "Peregrine Activate: Remove from Workspace"
+        "title": "Peregrine Activate: Remove Files"
       },
       {
         "command": "activate-framework.refresh",
@@ -64,12 +64,12 @@
       },
       {
         "command": "activate-framework.addToWorkspace",
-        "title": "Add to Workspace",
+        "title": "Install Files",
         "icon": "$(add)"
       },
       {
         "command": "activate-framework.removeFromWorkspace",
-        "title": "Remove from Workspace",
+        "title": "Remove Files",
         "icon": "$(remove)"
       },
       {
@@ -102,6 +102,10 @@
       {
         "command": "activate-framework.changeManifest",
         "title": "Peregrine Activate: Change Manifest"
+      },
+      {
+        "command": "activate-framework.telemetryRunNow",
+        "title": "Peregrine Activate: Run Copilot Telemetry Log Now"
       }
     ],
     "configuration": {
@@ -122,10 +126,28 @@
           ],
           "description": "Default installation tier for Peregrine Activate."
         },
-        "activate-framework.useVirtualFs": {
+        "activate-framework.deliveryMode": {
+          "type": "string",
+          "default": "inject",
+          "enum": [
+            "inject",
+            "workspace"
+          ],
+          "enumDescriptions": [
+            "Silently inject files into .github/ (no multi-root workspace, no restart)",
+            "Classic mode: add a Peregrine Activate workspace root (multi-root workspace)"
+          ],
+          "description": "How Activate delivers configuration files to Copilot."
+        },
+        "activate-framework.telemetry.enabled": {
           "type": "boolean",
-          "default": false,
-          "markdownDescription": "**Experimental.** Serve Activate files via an in-memory virtual filesystem instead of writing to globalStorage. Avoids disk writes but may not be discovered by all Copilot features. Toggle this on, reload, and test."
+          "default": true,
+          "description": "Enable daily logging of GitHub Copilot premium-interaction quota usage to ~/.activate/copilot-telemetry.jsonl."
+        },
+        "activate-framework.telemetry.logDirectory": {
+          "type": "string",
+          "default": "",
+          "description": "Directory for the Copilot telemetry log. Empty uses ~/.activate/. Supports ~ for home directory."
         }
       }
     }

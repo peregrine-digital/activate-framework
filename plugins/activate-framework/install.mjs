@@ -3,6 +3,12 @@ import path from 'node:path';
 import readline from 'node:readline';
 import { fileURLToPath } from 'node:url';
 import { selectFiles, TIER_MAP, discoverManifests, loadManifest, formatManifestList } from './core.mjs';
+import {
+  resolveConfig,
+  writeProjectConfig,
+  ensureGitExclude,
+  PROJECT_CONFIG_FILENAME,
+} from './config.mjs';
 
 const ASSISTANT_TARGET_MAP = {
   'github-copilot': '~/.copilot',
@@ -130,23 +136,33 @@ Options:
     return;
   }
 
+  // Read persisted config; CLI flags take highest precedence
+  const targetDir_cwd = process.cwd();
+  const cfg = await resolveConfig(targetDir_cwd, {
+    manifest: args.manifest ?? undefined,
+    tier: args.tier ?? undefined,
+  });
+
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
 
   // ── Manifest selection ──
   let chosen;
-  if (args.manifest) {
-    chosen = manifests.find((m) => m.id === args.manifest);
-    if (!chosen) {
+  if (args.manifest || cfg.manifest) {
+    const lookupId = args.manifest || cfg.manifest;
+    chosen = manifests.find((m) => m.id === lookupId);
+    if (!chosen && args.manifest) {
       console.error(`Unknown manifest: ${args.manifest}`);
       console.error(`Available: ${manifests.map((m) => m.id).join(', ')}`);
       rl.close();
       process.exit(1);
     }
-    console.log(`\n${chosen.name} v${chosen.version} Installer\n`);
-  } else if (manifests.length === 1) {
+  }
+
+  if (!chosen && manifests.length === 1) {
     chosen = manifests[0];
-    console.log(`\n${chosen.name} v${chosen.version} Installer\n`);
-  } else {
+  }
+
+  if (!chosen) {
     console.log('\nAvailable manifests:\n');
     console.log(formatManifestList(manifests));
     console.log();
@@ -158,8 +174,9 @@ Options:
       rl.close();
       process.exit(1);
     }
-    console.log(`\n${chosen.name} v${chosen.version} Installer\n`);
   }
+
+  console.log(`\n${chosen.name} v${chosen.version} Installer\n`);
 
   // ── Tier selection ──
   let tier, assistant, targetDir;
@@ -177,7 +194,8 @@ Options:
 
     const rawAssistant = args.assistant || await prompt(rl, 'Assistant? [GitHub Copilot/VS Code] (default: GitHub Copilot): ');
     assistant = resolveAssistant(rawAssistant);
-    const rawTier = args.tier || (await prompt(rl, 'Which tier? [minimal/standard/advanced] (default: standard): ')).trim() || 'standard';
+    const defaultTier = cfg.tier || 'standard';
+    const rawTier = args.tier || (await prompt(rl, `Which tier? [minimal/standard/advanced] (default: ${defaultTier}): `)).trim() || defaultTier;
     tier = Object.keys(TIER_MAP).includes(rawTier) ? rawTier : 'standard';
     const rawTarget = args.target || await prompt(rl, 'Target directory? (default: ~/.copilot): ');
     targetDir = resolveTargetDir(rawTarget, { assistant });
@@ -188,6 +206,15 @@ Options:
   const files = selectFiles(chosen.files, tier);
   console.log(`\nInstalling ${files.length} files to ${targetDir}:\n`);
   await installFiles({ files, bundleDir, basePath: chosen.basePath, targetDir, version: chosen.version, manifestId: chosen.id });
+
+  // Persist choices to project config (if running from a project dir)
+  try {
+    await writeProjectConfig(targetDir_cwd, { manifest: chosen.id, tier });
+    await ensureGitExclude(targetDir_cwd);
+  } catch {
+    // Not a git repo or can't write — that's OK
+  }
+
   console.log(`\nDone. ${chosen.name} v${chosen.version} (${tier}) installed.`);
 }
 
