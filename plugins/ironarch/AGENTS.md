@@ -1,104 +1,57 @@
 # AGENTS.md
 
-Guidelines for AI agents and human contributors working with the IronArch plugin.
+Guidelines for AI agents working with the IronArch plugin.
+Legend (from RFC2119): !=MUST, ~=SHOULD, ≉=SHOULD NOT, ⊗=MUST NOT, ?=MAY.
 
-## ⛔ User Approval Required
+## User Approval Required
 
-**CRITICAL: This project uses agents as the primary interaction mode.** Guidance files (instructions and skills) are NOT automatically applied.
+⛔ This project uses agents as the primary interaction mode. Instructions and skills are NOT auto-applied.
 
-Before using ANY instruction file (`.instructions.md`) or skill (`SKILL.md`) when modifying, reviewing, or generating code, agents MUST:
+**Before using any instruction or skill:**
+- !: Announce which guidance you intend to use
+- !: Wait for explicit user approval before proceeding
+- !: Quote the specific rules that will be applied
 
-1. **Announce** which instruction or skill they intend to use
-2. **Wait for explicit user approval** before proceeding
-3. **Quote the specific guidance** that will be applied
+## Working Principles
 
-Example interaction:
-```
-Agent: I'll use the context-discovery skill to identify the target application.
-       Specifically, I'll check for:
-       - src/applications/ (vets-website)
-       - modules/ + app/controllers/ (vets-api)
-       
-       Proceed? (yes/no)
+**Do**
+- !: Verify required tools before starting (GitHub MCP, gh CLI, Screenshot Viewer MCP for frontend)
+- !: Detect repo type first: `src/applications/` = vets-website, `modules/` = vets-api
+- !: Follow handoff chain: Planner → Implementer → Tester → Reviewer → Documenter → PR_Writer
+- !: Update `tmp/copilot-session/session.md` at each handoff
+- !: Get user approval before applying any instruction or skill
+- ~: Atomic commits following conventional commit format
 
-User: yes
-
-Agent: [proceeds with skill]
-```
-
-This ensures users maintain control over which automated guidance influences their code.
-
----
+**Do Not**
+- ⊗: Auto-apply instructions or skills without user approval
+- ⊗: Create session artifacts in plugin directory (use target project's `tmp/copilot-session/`)
+- ⊗: Guess file paths, PR numbers, or issue details — ask if unfetchable
 
 ## Required Tools
 
-These tools MUST be available before agent work begins.
+| Tool | Verify | Scope |
+|------|--------|-------|
+| GitHub MCP | `mcp_github_get_me` | Both repos |
+| Screenshot Viewer MCP | `mcp_screenshot-vi_list_screenshots` | vets-website |
+| gh CLI | `gh auth status` | Both repos |
 
-| Tool | How to Verify | Required For |
-|------|---------------|--------------|
-| GitHub MCP | `mcp_github_get_me` returns login | Both repos |
-| Screenshot Viewer MCP | `mcp_screenshot-vi_list_screenshots` returns data | vets-website only |
-| gh CLI | `gh auth status` shows authenticated | Both repos |
+## Guidance Tiers
 
-**Detect repo type first:** Check for `src/applications/` (vets-website) or `modules/` + `app/controllers/` (vets-api).
-
----
-
-## Behavioral Requirements
-
-### Path Resolution
-
-This plugin injects files into workspaces alongside target projects:
-
-- **Skills** → Injected to `.github/skills/`
-- **Instructions** → Injected to `.github/instructions/`
-- **Agents** → Injected to `.github/agents/`
-- **Session artifacts** → Create in the **target project's** `tmp/copilot-session/` directory
-
-### Agent Workflow
-
-Agents follow a handoff chain. Each updates `tmp/copilot-session/session.md`:
-
-```
-Planner → Implementer → Tester → Reviewer → Documenter → PR_Writer
-```
-
-The `session-management` skill defines the session lifecycle.
-
-### Guidance Approval
-
-| Tier | Location | Approval Required? |
-|------|----------|--------------------|
+| Tier | Location | Approval? |
+|------|----------|-----------|
 | 1 | `AGENTS.md` | No — always active |
 | 2 | `instructions/*.instructions.md` | **Yes** |
 | 3 | `skills/[name]/SKILL.md` | **Yes** |
-| 4 | `agents/[name].agent.md` | No — user explicitly selects |
+| 4 | `agents/*.agent.md` | No — user selects |
 
----
+## Adding Instructions
 
-## Adding Application-Specific Instructions
-
-When patterns emerge that should persist across sessions:
-
-1. Copy the template from `skills/instruction-authoring/assets/`
-2. Rename to `instructions/{app-or-module-name}.instructions.md`
-3. Update `applyTo` frontmatter to match the target path
-4. Fill in **only patterns that agents wouldn't discover on their own**
-
-**Remember:** Every instruction adds cognitive load. Include only what changes agent behavior in ways the project requires.
-
----
+- ?: Copy template from `skills/instruction-authoring/assets/`
+- !: Only add patterns agents wouldn't discover on their own
+- ~: Every instruction adds cognitive load — be minimal
 
 ## Troubleshooting
 
-### Agents not appearing
-- Save and reopen the VS Code workspace
-- Ensure Activate extension is installed and enabled
-
-### MCP servers not starting
-- Open `.vscode/mcp.json` and click "Start" on each server
-- Complete GitHub browser authentication when prompted
-
-### Environment check failing
-- Run `gh auth status` to verify CLI authentication
-- Ensure Screenshot Viewer MCP is running (vets-website only)
+- **Agents not appearing** → Save and reopen VS Code workspace
+- **MCP not starting** → Open `.vscode/mcp.json`, click "Start"
+- **Environment check failing** → Run `gh auth status`
