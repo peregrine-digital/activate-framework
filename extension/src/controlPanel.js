@@ -1,5 +1,5 @@
 const vscode = require('vscode');
-const { listByCategory, TIER_MAP } = require('./manifest');
+const { listByCategory, TIER_MAP, TIER_LABELS } = require('./manifest');
 const { resolveConfig } = require('./config');
 const { readLogEntries, getLogFilePath } = require('./telemetry');
 
@@ -140,6 +140,13 @@ class ControlPanelProvider {
     );
     const availableFiles = tierFiles.filter((f) => !installedSet.has(f.dest));
 
+    // Files outside the current tier (not excluded, not pinned, tier not allowed)
+    const outsideTierFiles = files.filter((f) => {
+      if (fileOverrides[f.dest] === 'excluded') return false;
+      if (fileOverrides[f.dest] === 'pinned') return false;
+      return !allowed.has(f.tier);
+    });
+
     return {
       version: installedVersion || version,
       tier,
@@ -148,6 +155,7 @@ class ControlPanelProvider {
       manifestCount,
       installedFiles,
       availableFiles,
+      outsideTierFiles,
       versionMap,
       fileOverrides,
       skippedVersions,
@@ -230,7 +238,7 @@ class ControlPanelProvider {
 
   // ── HTML ──────────────────────────────────────────────
 
-  _getHtml({ version, tier, isActive, manifestName, manifestCount, installedFiles, availableFiles, versionMap, fileOverrides, skippedVersions }) {
+  _getHtml({ version, tier, isActive, manifestName, manifestCount, installedFiles, availableFiles, outsideTierFiles, versionMap, fileOverrides, skippedVersions }) {
     const wsAction = isActive ? 'removeFromWorkspace' : 'addToWorkspace';
     const wsButtonLabel = isActive ? '− Remove Files' : '+ Install Files';
 
@@ -329,6 +337,7 @@ class ControlPanelProvider {
     // Group files by category
     const installedGroups = listByCategory(installedFiles);
     const availableGroups = listByCategory(availableFiles);
+    const outsideTierGroups = listByCategory(outsideTierFiles || []);
 
     const installedHtml = installedGroups
       .map((g) => categorySection(g.label, CATEGORY_ICONS[g.category] || '📄', g.files, true, 'installed'))
@@ -336,6 +345,10 @@ class ControlPanelProvider {
 
     const availableHtml = availableGroups
       .map((g) => categorySection(g.label, CATEGORY_ICONS[g.category] || '📄', g.files, false, 'available'))
+      .join('');
+
+    const outsideTierHtml = outsideTierGroups
+      .map((g) => categorySection(g.label, CATEGORY_ICONS[g.category] || '📄', g.files, false, 'outside'))
       .join('');
 
     return /* html */ `<!DOCTYPE html>
@@ -574,13 +587,24 @@ class ControlPanelProvider {
       margin-left: 4px;
       vertical-align: middle;
     }
+
+    /* ── Outside tier section ── */
+    .outside-tier-label {
+      opacity: 0.5;
+    }
+    .outside-tier-hint {
+      font-size: 11px;
+      opacity: 0.4;
+      font-style: italic;
+      padding: 0 0 6px 0;
+    }
   </style>
 </head>
 <body>
   <div class="status-bar">
     <span>v${esc(version)}</span>
     <span class="dot">·</span>
-    <span class="badge">${esc(tier)}</span>
+    <span class="badge">${esc(TIER_LABELS[tier] || tier)}</span>
     <span class="dot">·</span>
     <span class="badge">${esc(manifestName)}</span>
     <span class="dot">·</span>
@@ -602,6 +626,12 @@ class ControlPanelProvider {
 
   <div class="section-label">Available · ${availableFiles.length}</div>
   ${availableHtml || '<div class="empty">All tier files installed</div>'}
+
+  ${outsideTierFiles && outsideTierFiles.length > 0 ? `
+  <div class="section-label outside-tier-label">Outside Tier · ${outsideTierFiles.length}</div>
+  <div class="outside-tier-hint">Switch to a higher tier to access these files</div>
+  ${outsideTierHtml}
+  ` : ''}
 
   <script>
     const vscode = acquireVsCodeApi();

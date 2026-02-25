@@ -5,14 +5,53 @@ const TIER_MAP = {
   advanced: new Set(['core', 'ad-hoc', 'ad-hoc-advanced']),
 };
 
+/** Default display labels for tiers */
+const TIER_LABELS = {
+  minimal: 'Minimal',
+  standard: 'Standard',
+  advanced: 'Advanced',
+};
+
+/** Ordered tier names (for consistent display order) */
+const TIER_ORDER = ['minimal', 'standard', 'advanced'];
+
+/**
+ * Discover which tiers are meaningful for a manifest.
+ * Returns only tiers that include at least one file tier present in the manifest.
+ * @param {Array} files - Manifest file entries
+ * @param {Object} [customTiers] - Optional manifest-defined tier labels
+ * @returns {Array<{id: string, label: string, fileTiers: Set<string>}>}
+ */
+function discoverAvailableTiers(files, customTiers = {}) {
+  // Collect unique file tiers from the manifest
+  const presentFileTiers = new Set(files.map((f) => f.tier).filter(Boolean));
+
+  // Determine which UI tiers are meaningful
+  const result = [];
+  for (const tierId of TIER_ORDER) {
+    const allowedFileTiers = TIER_MAP[tierId];
+    // A tier is meaningful if it includes at least one file tier that's in this manifest
+    const hasFiles = [...allowedFileTiers].some((ft) => presentFileTiers.has(ft));
+    if (hasFiles) {
+      result.push({
+        id: tierId,
+        label: customTiers[tierId] || TIER_LABELS[tierId] || tierId,
+        fileTiers: allowedFileTiers,
+      });
+    }
+  }
+  return result;
+}
+
 /** Ordered list of categories for display */
-const CATEGORY_ORDER = ['instructions', 'prompts', 'skills', 'agents', 'other'];
+const CATEGORY_ORDER = ['instructions', 'prompts', 'skills', 'agents', 'mcp-servers', 'other'];
 
 const CATEGORY_LABELS = {
   instructions: 'Instructions',
   prompts: 'Prompts',
   skills: 'Skills',
   agents: 'Agents',
+  'mcp-servers': 'MCP Servers',
   other: 'Other',
 };
 
@@ -28,6 +67,7 @@ function inferCategory(filePath) {
   if (filePath.startsWith('prompts/')) return 'prompts';
   if (filePath.startsWith('skills/')) return 'skills';
   if (filePath.startsWith('agents/')) return 'agents';
+  if (filePath.startsWith('mcp-servers/')) return 'mcp-servers';
   return 'other';
 }
 
@@ -71,4 +111,14 @@ function parseManifestData(id, data) {
   };
 }
 
-module.exports = { TIER_MAP, CATEGORY_ORDER, selectFiles, inferCategory, listByCategory, parseManifestData };
+module.exports = {
+  TIER_MAP,
+  TIER_LABELS,
+  TIER_ORDER,
+  CATEGORY_ORDER,
+  selectFiles,
+  inferCategory,
+  listByCategory,
+  parseManifestData,
+  discoverAvailableTiers,
+};
