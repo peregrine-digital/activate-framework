@@ -233,11 +233,13 @@ func main() {
 	}
 	cfg := ResolveConfig(projectDir, overrides)
 
+	// ── Create service ─────────────────────────────────────────
+	svc := NewService(projectDir, manifests, cfg, args.remote, args.repo, args.branch)
+
 	// ── Dispatch command ────────────────────────────────────────
 	switch args.command {
 	case "menu":
-		state := DetectInstallState(projectDir)
-		if err := RunInteractiveMenu(manifests, cfg, state, projectDir, args.remote, args.repo, args.branch); err != nil {
+		if err := RunInteractiveMenu(svc); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 			os.Exit(1)
 		}
@@ -271,7 +273,6 @@ func main() {
 			fmt.Fprintln(os.Stderr, "Error: serve requires --stdio")
 			os.Exit(1)
 		}
-		svc := NewService(projectDir, manifests, cfg, args.remote, args.repo, args.branch)
 		transport := NewTransport(os.Stdin, os.Stdout)
 		daemon := NewDaemon(svc, transport)
 		if err := daemon.Serve(); err != nil {
@@ -318,7 +319,7 @@ func main() {
 			}
 			return
 		}
-		if err := RunInteractiveInstall(manifests, cfg, args.remote, args.repo, args.branch); err != nil {
+		if err := RunInteractiveInstall(svc); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 			os.Exit(1)
 		}

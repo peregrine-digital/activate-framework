@@ -180,6 +180,41 @@ type model struct {
 	chosen Manifest
 }
 
+// fullscreenFormModel renders a huh.Form inside the branded full-screen shell.
+type fullscreenFormModel struct {
+	form     *huh.Form
+	width    int
+	height   int
+	title    string
+	subtitle string
+}
+
+// fullscreenTextModel renders read-only content in the same branded shell.
+type fullscreenTextModel struct {
+	width    int
+	height   int
+	title    string
+	subtitle string
+	body     string
+}
+
+type mainMenuModel struct {
+	form      *huh.Form
+	width     int
+	height    int
+	manifests []Manifest
+	cfg       Config
+	state     InstallState
+	projectDir string
+
+	choice string
+	action string
+
+	mode     string // "menu" | "text"
+	textTitle string
+	textBody  string
+}
+
 func initialModel(manifests []Manifest, cfg Config) model {
 	m := model{
 		manifests: manifests,
@@ -310,6 +345,18 @@ func (m model) Init() tea.Cmd {
 	return m.form.Init()
 }
 
+func (m fullscreenFormModel) Init() tea.Cmd {
+	return m.form.Init()
+}
+
+func (m fullscreenTextModel) Init() tea.Cmd {
+	return nil
+}
+
+func (m mainMenuModel) Init() tea.Cmd {
+	return m.form.Init()
+}
+
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
@@ -346,6 +393,97 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case phaseConfigure:
 				// Done — exit to stdout for install
 				m.quitting = true
+				return m, tea.Quit
+			}
+		}
+	}
+
+	return m, cmd
+}
+
+func (m fullscreenFormModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		m.width = msg.Width
+		m.height = msg.Height
+	case tea.KeyMsg:
+		switch msg.String() {
+		case "ctrl+c":
+			return m, tea.Quit
+		}
+	}
+
+	updated, cmd := m.form.Update(msg)
+	if f, ok := updated.(*huh.Form); ok {
+		m.form = f
+		if f.State == huh.StateAborted || f.State == huh.StateCompleted {
+			return m, tea.Quit
+		}
+	}
+
+	return m, cmd
+}
+
+func (m fullscreenTextModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		m.width = msg.Width
+		m.height = msg.Height
+	case tea.KeyMsg:
+		switch msg.String() {
+		case "ctrl+c", "q", "esc", "enter":
+			return m, tea.Quit
+		}
+	}
+	return m, nil
+}
+
+func (m mainMenuModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		m.width = msg.Width
+		m.height = msg.Height
+	case tea.KeyMsg:
+		switch msg.String() {
+		case "ctrl+c":
+			m.action = "exit"
+			return m, tea.Quit
+		case "esc", "q", "enter":
+			if m.mode == "text" {
+				m.mode = "menu"
+				m.form = buildMainMenuForm(m.state, &m.choice)
+				return m, m.form.Init()
+			}
+		}
+	}
+
+	if m.mode == "text" {
+		return m, nil
+	}
+
+	updated, cmd := m.form.Update(msg)
+	if f, ok := updated.(*huh.Form); ok {
+		m.form = f
+		if f.State == huh.StateAborted {
+			m.action = "exit"
+			return m, tea.Quit
+		}
+		if f.State == huh.StateCompleted {
+			switch m.choice {
+			case "list":
+				m.mode = "text"
+				m.textTitle = "Frameworks"
+				m.textBody = strings.TrimSpace(FormatManifestList(m.manifests))
+				m.form = buildMainMenuForm(m.state, &m.choice)
+				return m, nil
+			case "state":
+				m.mode = "text"
+				m.textTitle = "Current State"
+				m.textBody = m.stateBody()
+				m.form = buildMainMenuForm(m.state, &m.choice)
+				return m, nil
+			default:
+				m.action = m.choice
 				return m, tea.Quit
 			}
 		}
@@ -397,12 +535,317 @@ func (m model) View() string {
 	return content
 }
 
+func (m fullscreenFormModel) View() string {
+	var sections []string
+
+	sections = append(sections, renderBanner())
+	sections = append(sections, "")
+
+	if strings.TrimSpace(m.title) != "" {
+		sections = append(sections, dimStyle.Render("  "+m.title))
+	}
+	if strings.TrimSpace(m.subtitle) != "" {
+		sections = append(sections, dimStyle.Render("  "+m.subtitle))
+	}
+	sections = append(sections, "")
+
+	sections = append(sections, m.form.View())
+	sections = append(sections, "")
+	sections = append(sections, dimStyle.Render("  ↑/↓ navigate · enter select · ctrl+c quit"))
+
+	content := lipgloss.JoinVertical(lipgloss.Left, sections...)
+
+	if m.height > 0 {
+		contentLines := strings.Count(content, "\n") + 1
+		topPad := (m.height - contentLines) / 4
+		if topPad > 1 {
+			content = strings.Repeat("\n", topPad) + content
+		}
+	}
+
+	return content
+}
+
+func (m fullscreenTextModel) View() string {
+	var sections []string
+
+	sections = append(sections, renderBanner())
+	sections = append(sections, "")
+
+	if strings.TrimSpace(m.title) != "" {
+		sections = append(sections, dimStyle.Render("  "+m.title))
+	}
+	if strings.TrimSpace(m.subtitle) != "" {
+		sections = append(sections, dimStyle.Render("  "+m.subtitle))
+	}
+	sections = append(sections, "")
+
+	body := strings.TrimSpace(m.body)
+	if body == "" {
+		body = "(no details)"
+	}
+	bodyBlock := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color(colorGold)).
+		Padding(1, 2).
+		Render(body)
+	sections = append(sections, bodyBlock)
+
+	sections = append(sections, "")
+	sections = append(sections, dimStyle.Render("  enter/esc to return · ctrl+c quit"))
+
+	content := lipgloss.JoinVertical(lipgloss.Left, sections...)
+
+	if m.height > 0 {
+		contentLines := strings.Count(content, "\n") + 1
+		topPad := (m.height - contentLines) / 6
+		if topPad > 1 {
+			content = strings.Repeat("\n", topPad) + content
+		}
+	}
+
+	return content
+}
+
+func runFullscreenForm(form *huh.Form, title, subtitle string) error {
+	m := fullscreenFormModel{
+		form:     form,
+		title:    title,
+		subtitle: subtitle,
+	}
+	p := tea.NewProgram(m, tea.WithAltScreen())
+	_, err := p.Run()
+	return err
+}
+
+func runFullscreenText(title, subtitle, body string) error {
+	m := fullscreenTextModel{title: title, subtitle: subtitle, body: body}
+	p := tea.NewProgram(m, tea.WithAltScreen())
+	_, err := p.Run()
+	return err
+}
+
+func (m mainMenuModel) stateText() string {
+	text := ""
+	if m.state.HasProjectConfig {
+		text = "saved config detected"
+	} else {
+		text = "no project config detected"
+	}
+	if m.state.HasInstallMarker {
+		text += fmt.Sprintf(" · installed %s v%s", m.state.InstalledManifest, m.state.InstalledVersion)
+	}
+	return text
+}
+
+func (m mainMenuModel) stateBody() string {
+	return fmt.Sprintf(
+		"Project: %s\nGlobal config:  %t\nProject config: %t\nInstall marker: %t\nInstalled: %s v%s\n\nEffective config:\n  manifest: %s\n  tier: %s",
+		m.projectDir,
+		m.state.HasGlobalConfig,
+		m.state.HasProjectConfig,
+		m.state.HasInstallMarker,
+		m.state.InstalledManifest,
+		m.state.InstalledVersion,
+		m.cfg.Manifest,
+		m.cfg.Tier,
+	)
+}
+
+func buildMainMenuForm(state InstallState, choice *string) *huh.Form {
+	type menuItem struct {
+		label string
+		value string
+	}
+
+	items := []menuItem{}
+	if state.HasProjectConfig {
+		if state.HasInstallMarker {
+			items = append(items, menuItem{label: "Reinstall using saved settings", value: "quick-install"})
+		} else {
+			items = append(items, menuItem{label: "Install using saved settings", value: "quick-install"})
+		}
+		items = append(items, menuItem{label: "Change settings and install", value: "guided-install"})
+	} else {
+		items = append(items, menuItem{label: "New setup (choose settings and install)", value: "guided-install"})
+	}
+	items = append(items, menuItem{label: "Add managed files to repository", value: "repo-add"})
+	if state.HasInstallMarker {
+		items = append(items, menuItem{label: "Remove managed files from repository", value: "repo-remove"})
+	}
+	items = append(items,
+		menuItem{label: "Show frameworks", value: "list"},
+		menuItem{label: "Show current state", value: "state"},
+		menuItem{label: "Exit", value: "exit"},
+	)
+
+	options := make([]huh.Option[string], 0, len(items))
+	for _, item := range items {
+		options = append(options, huh.NewOption(item.label, item.value))
+	}
+
+	*choice = ""
+	stateText := ""
+	if state.HasProjectConfig {
+		stateText = "saved config detected"
+	} else {
+		stateText = "no project config detected"
+	}
+	if state.HasInstallMarker {
+		stateText += fmt.Sprintf(" · installed %s v%s", state.InstalledManifest, state.InstalledVersion)
+	}
+
+	return huh.NewForm(
+		huh.NewGroup(
+			huh.NewSelect[string]().
+				Title("Peregrine Activate").
+				Description(stateText).
+				Options(options...).
+				Value(choice),
+		),
+	).WithTheme(huh.ThemeCharm()).WithShowHelp(false)
+}
+
+func (m mainMenuModel) View() string {
+	var sections []string
+
+	sections = append(sections, renderBanner())
+	sections = append(sections, "")
+	sections = append(sections, dimStyle.Render("  Main Menu"))
+	sections = append(sections, dimStyle.Render("  "+m.stateText()))
+	sections = append(sections, "")
+
+	if m.mode == "text" {
+		body := strings.TrimSpace(m.textBody)
+		if body == "" {
+			body = "(no details)"
+		}
+		box := lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(lipgloss.Color(colorGold)).
+			Padding(1, 2).
+			Render(m.textTitle + "\n\n" + body)
+		sections = append(sections, box)
+		sections = append(sections, "")
+		sections = append(sections, dimStyle.Render("  enter/esc to return · ctrl+c quit"))
+	} else {
+		sections = append(sections, m.form.View())
+		sections = append(sections, "")
+		sections = append(sections, dimStyle.Render("  ↑/↓ navigate · enter select · ctrl+c quit"))
+	}
+
+	content := lipgloss.JoinVertical(lipgloss.Left, sections...)
+	if m.height > 0 {
+		contentLines := strings.Count(content, "\n") + 1
+		topPad := (m.height - contentLines) / 4
+		if topPad > 1 {
+			content = strings.Repeat("\n", topPad) + content
+		}
+	}
+
+	return content
+}
+
 // ── RunInteractiveInstall ───────────────────────────────────────
+
+func defaultTargetDir() string {
+	home, _ := os.UserHomeDir()
+	return filepath.Join(home, ".copilot")
+}
+
+func resolveTargetPath(target string) string {
+	if strings.TrimSpace(target) == "" {
+		target = defaultTargetDir()
+	}
+	if strings.HasPrefix(target, "~/") {
+		home, _ := os.UserHomeDir()
+		target = filepath.Join(home, target[2:])
+	}
+	abs, err := filepath.Abs(target)
+	if err == nil {
+		return abs
+	}
+	return target
+}
+
+// RunInteractiveMenu starts in a state-aware mode and offers actions based on
+// whether config/install markers are already present.
+func RunInteractiveMenu(svc *ActivateService) error {
+	for {
+		svc.refreshConfig()
+		cfg := svc.Config
+		state := DetectInstallState(svc.ProjectDir)
+
+		menuModel := mainMenuModel{
+			manifests: svc.Manifests,
+			cfg:       cfg,
+			state:     state,
+			projectDir: svc.ProjectDir,
+			mode:      "menu",
+		}
+		menuModel.form = buildMainMenuForm(menuModel.state, &menuModel.choice)
+
+		p := tea.NewProgram(menuModel, tea.WithAltScreen())
+		finalModel, err := p.Run()
+		if err != nil {
+			return err
+		}
+		result := finalModel.(mainMenuModel)
+
+		switch result.action {
+		case "guided-install":
+			if err := RunInteractiveInstall(svc); err != nil {
+				_ = runFullscreenText("Action Failed", "Guided install", err.Error())
+			}
+
+		case "quick-install":
+			target := defaultTargetDir()
+			confirm := false
+
+			quickForm := huh.NewForm(
+				huh.NewGroup(
+					huh.NewInput().
+						Title("Target directory").
+						Description("Where to install files").
+						Placeholder(defaultTargetDir()).
+						Value(&target),
+					huh.NewConfirm().
+						Title(fmt.Sprintf("Install with manifest=%s, tier=%s?", cfg.Manifest, cfg.Tier)).
+						Affirmative("  Install  ").
+						Negative("  Cancel  ").
+						Value(&confirm),
+				),
+			).WithTheme(huh.ThemeCharm()).WithShowHelp(false)
+
+			if err := runFullscreenForm(quickForm, "Quick Install", fmt.Sprintf("manifest=%s · tier=%s", cfg.Manifest, cfg.Tier)); err != nil {
+				return err
+			}
+			if confirm {
+				if err := installWithResolvedConfig(svc.Manifests, cfg, resolveTargetPath(target), svc.UseRemote, svc.Repo, svc.Branch); err != nil {
+					_ = runFullscreenText("Action Failed", "Quick install", err.Error())
+				}
+			}
+
+		case "repo-add":
+			if _, err := svc.RepoAdd(); err != nil {
+				_ = runFullscreenText("Action Failed", "Repo add", err.Error())
+			}
+
+		case "repo-remove":
+			if err := svc.RepoRemove(); err != nil {
+				_ = runFullscreenText("Action Failed", "Repo remove", err.Error())
+			}
+
+		default:
+			return nil
+		}
+	}
+}
 
 // RunInteractiveInstall runs the full-screen TUI installer wizard, then
 // performs the file installation with normal stdout output.
-func RunInteractiveInstall(manifests []Manifest, cfg Config, useRemote bool, repo, branch string) error {
-	m := initialModel(manifests, cfg)
+func RunInteractiveInstall(svc *ActivateService) error {
+	m := initialModel(svc.Manifests, svc.Config)
 
 	p := tea.NewProgram(m, tea.WithAltScreen())
 	finalModel, err := p.Run()
@@ -418,15 +861,7 @@ func RunInteractiveInstall(manifests []Manifest, cfg Config, useRemote bool, rep
 	}
 
 	// ── Resolve target ──────────────────────────────────────────
-	home, _ := os.UserHomeDir()
-	target := result.targetDir
-	if strings.TrimSpace(target) == "" {
-		target = filepath.Join(home, ".copilot")
-	}
-	if strings.HasPrefix(target, "~/") {
-		target = filepath.Join(home, target[2:])
-	}
-	target, _ = filepath.Abs(target)
+	target := resolveTargetPath(result.targetDir)
 
 	// ── Show summary ────────────────────────────────────────────
 	files := SelectFiles(result.chosen.Files, result.chosen, result.tierID)
@@ -447,8 +882,8 @@ func RunInteractiveInstall(manifests []Manifest, cfg Config, useRemote bool, rep
 	fmt.Println()
 
 	// ── Install ─────────────────────────────────────────────────
-	if useRemote {
-		if err := InstallFilesFromRemote(files, result.chosen.BasePath, target, result.chosen.Version, result.chosen.ID, repo, branch); err != nil {
+	if svc.UseRemote {
+		if err := InstallFilesFromRemote(files, result.chosen.BasePath, target, result.chosen.Version, result.chosen.ID, svc.Repo, svc.Branch); err != nil {
 			return err
 		}
 	} else {
@@ -457,10 +892,8 @@ func RunInteractiveInstall(manifests []Manifest, cfg Config, useRemote bool, rep
 		}
 	}
 
-	// Persist config
-	cwd, _ := os.Getwd()
-	_ = WriteProjectConfig(cwd, &Config{Manifest: result.chosen.ID, Tier: result.tierID})
-	_ = EnsureGitExclude(cwd)
+	// Persist config via service
+	_, _ = svc.SetConfig("project", &Config{Manifest: result.chosen.ID, Tier: result.tierID})
 
 	// ── Success ─────────────────────────────────────────────────
 	resultMsg := fmt.Sprintf(
