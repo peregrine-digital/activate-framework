@@ -4,8 +4,8 @@
   "version": "0.1.0",
   "basePath": "plugins/ironarch",
   "tiers": [
-    { "id": "core", "label": "Skills Only" },
-    { "id": "ad-hoc", "label": "Full Suite" }
+    { "id": "core", "label": "Skills" },
+    { "id": "ad-hoc", "label": "Workflow" }
   ],
   "files": [
     {
