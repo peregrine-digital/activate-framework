@@ -1,0 +1,81 @@
+package main
+
+import (
+	"encoding/json"
+	"fmt"
+	"os"
+	"path/filepath"
+)
+
+// InstallFiles copies files from the local bundle to the target directory.
+func InstallFiles(files []ManifestFile, basePath, targetDir, version, manifestID string) error {
+	for _, f := range files {
+		src := filepath.Join(basePath, f.Src)
+		dest := filepath.Join(targetDir, f.Dest)
+
+		if err := os.MkdirAll(filepath.Dir(dest), 0755); err != nil {
+			return fmt.Errorf("mkdir %s: %w", filepath.Dir(dest), err)
+		}
+
+		data, err := os.ReadFile(src)
+		if err != nil {
+			return fmt.Errorf("read %s: %w", src, err)
+		}
+		if err := os.WriteFile(dest, data, 0644); err != nil {
+			return fmt.Errorf("write %s: %w", dest, err)
+		}
+		fmt.Printf("  ✓  %s\n", f.Dest)
+	}
+
+	// Write version marker
+	versionFile := filepath.Join(targetDir, ".github", ".activate-version")
+	if err := os.MkdirAll(filepath.Dir(versionFile), 0755); err != nil {
+		return err
+	}
+	vData, _ := json.MarshalIndent(map[string]string{
+		"manifest": manifestID,
+		"version":  version,
+	}, "", "  ")
+	return os.WriteFile(versionFile, vData, 0644)
+}
+
+// ResolveBundleDir locates the manifest bundle directory starting from startDir.
+// Walks up looking for manifests/ or legacy manifest.json.
+func ResolveBundleDir(startDir string) (string, error) {
+	if hasManifests(startDir) {
+		return startDir, nil
+	}
+
+	dir := filepath.Dir(startDir)
+	for {
+		parent := filepath.Dir(dir)
+		if hasManifests(dir) {
+			return dir, nil
+		}
+		if dir == parent {
+			break
+		}
+		dir = parent
+	}
+
+	// Legacy: check nested plugins directory
+	pluginDir := filepath.Join(startDir, "plugins", "activate-framework")
+	if hasManifests(pluginDir) {
+		return pluginDir, nil
+	}
+
+	return "", fmt.Errorf("could not locate manifests/ or manifest.json from %s", startDir)
+}
+
+func hasManifests(dir string) bool {
+	entries, err := os.ReadDir(filepath.Join(dir, "manifests"))
+	if err == nil {
+		for _, e := range entries {
+			if !e.IsDir() && filepath.Ext(e.Name()) == ".json" {
+				return true
+			}
+		}
+	}
+	_, err = os.Stat(filepath.Join(dir, "manifest.json"))
+	return err == nil
+}
