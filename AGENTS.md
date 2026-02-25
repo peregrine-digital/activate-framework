@@ -22,7 +22,79 @@ Legend (from RFC2119): !=MUST, ~=SHOULD, ≉=SHOULD NOT, ⊗=MUST NOT, ?=MAY.
 - ⊗: Introduce new tools or services without explicit instruction or approval
 - ⊗: Make large sweeping changes across many apps or modules without explicit approval
 
-<!-- 
 ## Code Map
-**For Agents:** Replace this with concise, high-level code-map and link to more detailed map in docs/REPO-STRUCTURE.md
--->
+
+```
+activate-framework/
+├── AGENTS.md                        # ← you are here
+├── install.mjs                      # root CLI entry point (thin wrapper)
+├── mise.toml                        # Node 20 toolchain
+│
+├── manifests/                       # manifest registry (one JSON per plugin)
+│   ├── activate-framework.json      #   basePath → plugins/activate-framework
+│   └── ironarch.json                #   basePath → plugins/ironarch
+│
+├── plugins/                         # content plugins (CLI is primary)
+│   ├── activate-framework/          #   core plugin
+│   │   ├── install.mjs              #     interactive CLI installer
+│   │   ├── core.mjs                 #     manifest discovery, tier maps, category grouping
+│   │   ├── config.mjs               #     config read/write (ESM) — shared schema
+│   │   ├── list.mjs                 #     list files as JSON
+│   │   ├── manifest.json            #     legacy manifest (superseded by manifests/)
+│   │   ├── instructions/            #     .instructions.md files
+│   │   ├── prompts/                 #     .prompt.md files
+│   │   ├── skills/                  #     SKILL.md per skill
+│   │   ├── agents/                  #     .agent.md files
+│   │   └── __tests__/               #     CLI-side tests (node --test, ESM)
+│   └── ironarch/                    #   VA copilot-config plugin
+│
+├── extension/                       # VS Code extension (GUI wrapper around CLI logic)
+│   ├── package.json                 #   extension manifest, commands, views
+│   ├── scripts/prepare-assets.mjs   #   copies plugin files → assets/ at build time
+│   └── src/
+│       ├── extension.js             #   activation, command registration, autoSetup
+│       ├── controlPanel.js          #   WebviewView sidebar (HTML render + messages)
+│       ├── config.js                #   config read/write (CJS, vscode.workspace.fs)
+│       ├── injector.js              #   inject files into workspace .github/, sidecar tracking
+│       ├── installer.js             #   legacy workspace-mode helpers (read bundled manifests, etc.)
+│       ├── manifest.js              #   selectFiles, TIER_MAP, listByCategory, inferCategory
+│       ├── commands/
+│       │   ├── changeTier.js        #     QuickPick → write config → re-inject
+│       │   ├── changeManifest.js    #     QuickPick → write config → re-inject
+│       │   └── showStatus.js        #     info message with install state
+│       └── __tests__/               #   extension-side tests (node --test, CJS)
+│
+└── docs/                            # documentation & templates
+    ├── README.md
+    ├── EXAMPLE-USAGE.md
+    └── templates/                   #   scaffold templates for new plugins
+```
+
+### Config System
+
+Two-layer JSON config, same schema everywhere:
+
+| Layer | Path | Scope |
+|-------|------|-------|
+| Global | `~/.activate/config.json` | User-wide defaults |
+| Project | `.activate.json` (workspace root) | Per-project overrides |
+
+**Precedence:** built-in defaults < global < project < CLI flags / programmatic overrides
+
+**Schema:**
+```json
+{
+  "manifest": "activate-framework",
+  "tier": "standard",
+  "fileOverrides": { "dest/path.md": "pinned" | "excluded" },
+  "skippedVersions": { "dest/path.md": "0.5.0" }
+}
+```
+
+- `.activate.json` is **auto-excluded from git** via `.git/info/exclude` (managed marker block). It must never be committed.
+- CLI module: `plugins/activate-framework/config.mjs` (ESM, takes `projectDir`)
+- Extension module: `extension/src/config.js` (CJS, auto-discovers workspace root)
+
+### Delivery Mode
+
+**Inject-only** — files are copied into the workspace's `.github/` directory and hidden from git via `.git/info/exclude`. The sidecar `.github/.activate-installed.json` tracks what's installed. There is no workspace-mode / multi-root option.
