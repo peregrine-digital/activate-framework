@@ -1,13 +1,12 @@
 const vscode = require('vscode');
 const { listByCategory, TIER_MAP } = require('./manifest');
+const { resolveConfig } = require('./config');
 
 /**
  * Single WebviewView that replaces both the old control-panel and TreeView.
  *
  * Layout:
- *   ┌─ dirty-banner (hidden unless config changed) ─────┐
- *   │  ⚠ Copilot config changed.  [Reload Window]       │
- *   ├────────────────────────────────────────────────────┤
+ *   ┌────────────────────────────────────────────────────┐
  *   │  v0.5.0  ·  standard  ·  Workspace ✓              │
  *   │  [Change Tier]  [+/− Workspace]  [↻ Update All]   │
  *   ├────────────────────────────────────────────────────┤
@@ -24,7 +23,6 @@ class ControlPanelProvider {
   constructor(context) {
     this._context = context;
     this._view = null;
-    this._dirty = false;
   }
 
   /** @param {vscode.WebviewView} webviewView */
@@ -32,16 +30,6 @@ class ControlPanelProvider {
     this._view = webviewView;
     webviewView.webview.options = { enableScripts: true };
     webviewView.webview.onDidReceiveMessage((msg) => this._onMessage(msg));
-    this._render();
-  }
-
-  markDirty() {
-    this._dirty = true;
-    this._render();
-  }
-
-  clearDirty() {
-    this._dirty = false;
     this._render();
   }
 
@@ -61,14 +49,30 @@ class ControlPanelProvider {
       readInstalledFileVersion,
       readBundledFileVersion,
     } = require('./installer');
+    const {
+      readInjectedVersion,
+      isFileInjected,
+      readInjectedFileVersion,
+    } = require('./injector');
 
-    const config = vscode.workspace.getConfiguration('activate-framework');
-    const tier = config.get('defaultTier', 'standard');
+    const cfg = await resolveConfig();
+    const tier = cfg.tier;
     const version = this._context.extension.packageJSON.version ?? 'unknown';
-    const isActive = !!findActivateWorkspaceFolder();
-    const installedInfo = await readInstalledVersion(this._context);
+
+    // Determine install state (inject mode is primary, workspace is fallback)
+    let isActive;
+    let installedInfo;
+
+    installedInfo = await readInjectedVersion();
+    if (installedInfo) {
+      isActive = true;
+    } else {
+      isActive = !!findActivateWorkspaceFolder();
+      installedInfo = await readInstalledVersion(this._context);
+    }
+
+    const activeManifestId = cfg.manifest || installedInfo?.manifest || 'activate-framework';
     const installedVersion = installedInfo?.version || null;
-    const activeManifestId = installedInfo?.manifest || 'activate-framework';
 
     let files = [];
     let manifestName = 'Activate Framework';
@@ -105,19 +109,32 @@ class ControlPanelProvider {
     const versionMap = new Map();
 
     for (const f of files) {
-      if (await isFileInstalled(this._context, f)) {
+      // Try inject first, then workspace mode
+      const filePresent = (await isFileInjected(f)) || (await isFileInstalled(this._context, f));
+
+      if (filePresent) {
         installedSet.add(f.dest);
-        const iv = await readInstalledFileVersion(this._context, f);
+        const iv = (await readInjectedFileVersion(f)) || (await readInstalledFileVersion(this._context, f));
         const bv = await readBundledFileVersion(this._context, f);
         versionMap.set(f.dest, { installed: iv, bundled: bv });
       }
     }
 
+    // Apply file overrides: pinned files are always "installed" tier,
+    // excluded files are filtered out of available
+    const { fileOverrides, skippedVersions } = cfg;
+
     // Determine which are available for this tier but not installed
     const allowed = TIER_MAP[tier] ?? TIER_MAP.standard;
-    const tierFiles = files.filter((f) => allowed.has(f.tier));
+    const tierFiles = files.filter((f) => {
+      if (fileOverrides[f.dest] === 'excluded') return false;
+      if (fileOverrides[f.dest] === 'pinned') return true;
+      return allowed.has(f.tier);
+    });
 
-    const installedFiles = files.filter((f) => installedSet.has(f.dest));
+    const installedFiles = files.filter((f) =>
+      installedSet.has(f.dest) && fileOverrides[f.dest] !== 'excluded',
+    );
     const availableFiles = tierFiles.filter((f) => !installedSet.has(f.dest));
 
     return {
@@ -129,6 +146,8 @@ class ControlPanelProvider {
       installedFiles,
       availableFiles,
       versionMap,
+      fileOverrides,
+      skippedVersions,
     };
   }
 
@@ -159,9 +178,6 @@ class ControlPanelProvider {
       case 'updateAll':
         vscode.commands.executeCommand('activate-framework.updateAll');
         break;
-      case 'reload':
-        vscode.commands.executeCommand('workbench.action.reloadWindow');
-        break;
       case 'installFile':
         vscode.commands.executeCommand('activate-framework.installFile', msg.file);
         break;
@@ -185,10 +201,9 @@ class ControlPanelProvider {
 
   // ── HTML ──────────────────────────────────────────────
 
-  _getHtml({ version, tier, isActive, manifestName, manifestCount, installedFiles, availableFiles, versionMap }) {
-    const dirty = this._dirty;
+  _getHtml({ version, tier, isActive, manifestName, manifestCount, installedFiles, availableFiles, versionMap, fileOverrides, skippedVersions }) {
     const wsAction = isActive ? 'removeFromWorkspace' : 'addToWorkspace';
-    const wsButtonLabel = isActive ? '− Remove Workspace' : '+ Add Workspace';
+    const wsButtonLabel = isActive ? '− Remove Files' : '+ Install Files';
 
     const CATEGORY_ICONS = {
       instructions: '📝',
@@ -205,6 +220,14 @@ class ControlPanelProvider {
       const tierBadge = esc(f.tier);
       const json = esc(JSON.stringify(f));
 
+      // File override badge (pinned / excluded)
+      const override = fileOverrides?.[f.dest];
+      const overrideBadge = override === 'pinned'
+        ? '<span class="override-badge pinned" title="Pinned — always included">📌</span>'
+        : override === 'excluded'
+          ? '<span class="override-badge excluded" title="Excluded — never installed">🚫</span>'
+          : '';
+
       // Version info for installed files
       let versionHtml = '';
       let outdated = false;
@@ -213,7 +236,11 @@ class ControlPanelProvider {
         if (vi) {
           const iv = vi.installed || '?';
           const bv = vi.bundled || '?';
-          outdated = vi.installed && vi.bundled && vi.installed !== vi.bundled;
+          // A file is outdated only if versions differ AND the user
+          // has not explicitly skipped the bundled version.
+          const skippedVer = skippedVersions?.[f.dest];
+          outdated = vi.installed && vi.bundled && vi.installed !== vi.bundled
+            && skippedVer !== vi.bundled;
           versionHtml = outdated
             ? `<span class="file-version outdated" title="Installed: ${esc(iv)} → Available: ${esc(bv)}">v${esc(iv)} → v${esc(bv)}</span>`
             : `<span class="file-version" title="Version ${esc(iv)}">v${esc(iv)}</span>`;
@@ -247,7 +274,7 @@ class ControlPanelProvider {
           <div class="file-main ${cursorClass}" ${openClick}>
             <span class="file-status">${installed ? (outdated ? '⬆' : '✓') : '○'}</span>
             <div class="file-info">
-              <span class="file-name">${name} ${versionHtml}</span>
+              <span class="file-name">${name} ${versionHtml} ${overrideBadge}</span>
               <span class="file-desc">${desc}</span>
             </div>
           </div>
@@ -295,20 +322,6 @@ class ControlPanelProvider {
       color: var(--vscode-foreground);
     }
     body { padding: 0 10px 16px; }
-
-    /* ── Dirty banner ── */
-    .dirty-banner {
-      display: ${dirty ? 'flex' : 'none'};
-      align-items: center;
-      gap: 8px;
-      background: var(--vscode-inputValidation-warningBackground, #5a5000);
-      border: 1px solid var(--vscode-inputValidation-warningBorder, #b89500);
-      border-radius: 4px;
-      padding: 6px 10px;
-      margin: 8px 0;
-      font-size: 12px;
-    }
-    .dirty-banner span { flex: 1; }
 
     /* ── Status bar ── */
     .status-bar {
@@ -525,14 +538,16 @@ class ControlPanelProvider {
     .outdated-card .file-status {
       color: var(--vscode-editorWarning-foreground, #cca700);
     }
+
+    /* ── Override badges ── */
+    .override-badge {
+      font-size: 10px;
+      margin-left: 4px;
+      vertical-align: middle;
+    }
   </style>
 </head>
 <body>
-  <div class="dirty-banner">
-    <span>⚠ Copilot config changed. Reload to apply.</span>
-    <button class="primary" onclick="send('reload')">↻ Reload</button>
-  </div>
-
   <div class="status-bar">
     <span>v${esc(version)}</span>
     <span class="dot">·</span>

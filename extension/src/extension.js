@@ -1,29 +1,31 @@
 const vscode = require('vscode');
 const {
-  syncFiles,
-  addWorkspaceRoot,
   readInstalledVersion,
-  removeWorkspaceRoot,
-  findActivateWorkspaceFolder,
-  installFile,
-  uninstallFile,
-  updateInstalledFiles,
-  getActivateRoot,
-  skipFileUpdate,
-  readBundledManifestById,
   discoverBundledManifests,
+  findActivateWorkspaceFolder,
+  removeWorkspaceRoot,
 } = require('./installer');
-const { selectFiles } = require('./manifest');
 const {
-  registerActivateFs,
-  addVirtualWorkspaceRoot,
-  removeVirtualWorkspaceRoot,
-  findVirtualWorkspaceFolder,
-} = require('./activateFs');
+  injectFiles,
+  readInjectedVersion,
+  injectSingleFile,
+  removeSingleFile,
+  removeAllInjected,
+  updateInjectedFiles,
+  skipInjectedFileUpdate,
+  getWorkspaceRoot,
+} = require('./injector');
 const { changeTierCommand } = require('./commands/changeTier');
 const { changeManifestCommand } = require('./commands/changeManifest');
 const { showStatusCommand } = require('./commands/showStatus');
 const { ControlPanelProvider } = require('./controlPanel');
+const {
+  resolveConfig,
+  writeProjectConfig,
+  setSkippedVersion,
+  clearSkippedVersion,
+  ensureGitExclude,
+} = require('./config');
 
 function activate(context) {
   const controlPanel = new ControlPanelProvider(context);
@@ -34,10 +36,6 @@ function activate(context) {
     ),
   );
 
-  function markDirty() {
-    controlPanel.markDirty();
-  }
-
   function refreshAll() {
     controlPanel.refresh();
   }
@@ -45,13 +43,11 @@ function activate(context) {
   context.subscriptions.push(
     vscode.commands.registerCommand('activate-framework.changeTier', async () => {
       await changeTierCommand(context);
-      markDirty();
       refreshAll();
     }),
     vscode.commands.registerCommand('activate-framework.changeManifest', async () => {
       const changed = await changeManifestCommand(context);
       if (changed) {
-        markDirty();
         refreshAll();
       }
     }),
@@ -59,54 +55,46 @@ function activate(context) {
       showStatusCommand(context),
     ),
     vscode.commands.registerCommand('activate-framework.remove', async () => {
-      const removed = removeWorkspaceRoot();
+      const removed = await removeAllInjected();
       if (removed) {
-        vscode.window.showInformationMessage(
-          'Peregrine Activate workspace root removed.',
-        );
+        vscode.window.showInformationMessage('Peregrine Activate files removed from workspace.');
       }
       refreshAll();
     }),
     vscode.commands.registerCommand('activate-framework.refresh', () => refreshAll()),
 
-    // Add workspace root — with confirmation
+    // Add/inject — with confirmation
     vscode.commands.registerCommand('activate-framework.addToWorkspace', async () => {
       const answer = await vscode.window.showWarningMessage(
-        'Add Peregrine Activate as a workspace root? Copilot will discover the installed configuration files.',
+        'Inject Peregrine Activate files into this workspace? Files will be hidden from git.',
         { modal: true },
-        'Add',
+        'Inject',
       );
-      if (answer !== 'Add') return;
+      if (answer !== 'Inject') return;
 
-      const added = addWorkspaceRoot(context);
-      if (added) {
-        vscode.window.showInformationMessage(
-          'Peregrine Activate added to workspace.',
-        );
-      } else {
-        vscode.window.showInformationMessage(
-          'Peregrine Activate is already in the workspace.',
-        );
-      }
+      const cfg = await resolveConfig();
+      const result = await injectFiles(context, cfg.tier, cfg.manifest);
+      await ensureGitExclude();
+      vscode.window.showInformationMessage(
+        `Peregrine Activate injected (${result.injected.length} files).`,
+      );
       refreshAll();
     }),
 
-    // Remove workspace root — with confirmation
+    // Remove — with confirmation
     vscode.commands.registerCommand(
       'activate-framework.removeFromWorkspace',
       async () => {
         const answer = await vscode.window.showWarningMessage(
-          'Remove Peregrine Activate from workspace? Copilot will no longer see the configuration files.',
+          'Remove all Peregrine Activate files from this workspace?',
           { modal: true },
           'Remove',
         );
         if (answer !== 'Remove') return;
 
-        const removed = removeWorkspaceRoot();
+        const removed = await removeAllInjected();
         if (removed) {
-          vscode.window.showInformationMessage(
-            'Peregrine Activate removed from workspace.',
-          );
+          vscode.window.showInformationMessage('Peregrine Activate files removed.');
         }
         refreshAll();
       },
@@ -114,11 +102,10 @@ function activate(context) {
 
     // Update only currently-installed files (not all tier files)
     vscode.commands.registerCommand('activate-framework.updateAll', async () => {
-      const result = await updateInstalledFiles(context);
+      const result = await updateInjectedFiles(context);
       vscode.window.showInformationMessage(
         `Updated ${result.updated.length} files to v${result.version}.`,
       );
-      markDirty();
       refreshAll();
     }),
 
@@ -131,13 +118,14 @@ function activate(context) {
           vscode.window.showWarningMessage('No file selected.');
           return;
         }
-        const ok = await installFile(context, file);
+        const ok = await injectSingleFile(context, file);
         if (ok) {
+          // Clear any skipped version since user explicitly installed
+          await clearSkippedVersion(file.dest);
           vscode.window.showInformationMessage(`Installed: ${file.dest}`);
         } else {
           vscode.window.showErrorMessage(`Failed to install: ${file.dest}`);
         }
-        markDirty();
         refreshAll();
       },
     ),
@@ -151,13 +139,12 @@ function activate(context) {
           vscode.window.showWarningMessage('No file selected.');
           return;
         }
-        const ok = await uninstallFile(context, file);
+        const ok = await removeSingleFile(file);
         if (ok) {
           vscode.window.showInformationMessage(`Uninstalled: ${file.dest}`);
         } else {
           vscode.window.showErrorMessage(`Failed to uninstall: ${file.dest}`);
         }
-        markDirty();
         refreshAll();
       },
     ),
@@ -167,8 +154,9 @@ function activate(context) {
       'activate-framework.openFile',
       async (file) => {
         if (!file?.dest) return;
-        const root = getActivateRoot(context);
-        const fileUri = vscode.Uri.joinPath(root, '.github', file.dest);
+        const wsRoot = getWorkspaceRoot();
+        const fileUri = wsRoot ? vscode.Uri.joinPath(wsRoot, '.github', file.dest) : null;
+        if (!fileUri) return;
         try {
           await vscode.commands.executeCommand('vscode.open', fileUri);
         } catch {
@@ -182,8 +170,9 @@ function activate(context) {
       'activate-framework.diffFile',
       async (file) => {
         if (!file?.src || !file?.dest) return;
-        const root = getActivateRoot(context);
-        const installedUri = vscode.Uri.joinPath(root, '.github', file.dest);
+        const wsRoot = getWorkspaceRoot();
+        const installedUri = wsRoot ? vscode.Uri.joinPath(wsRoot, '.github', file.dest) : null;
+        if (!installedUri) return;
         const bundledUri = vscode.Uri.joinPath(context.extensionUri, 'assets', file.src);
         try {
           const name = file.dest.split('/').pop();
@@ -199,13 +188,20 @@ function activate(context) {
       },
     ),
 
-    // Skip update — stamp local frontmatter with bundled version
+    // Skip update — record skipped version in config
     vscode.commands.registerCommand(
       'activate-framework.skipFileUpdate',
       async (file) => {
         if (!file?.src || !file?.dest) return;
-        const ok = await skipFileUpdate(context, file);
+        // Still stamp the local file so injector knows this version was seen
+        const ok = await skipInjectedFileUpdate(context, file);
         if (ok) {
+          // Also record in persistent config so it survives across sessions
+          const { readBundledFileVersion } = require('./installer');
+          const bundledVer = await readBundledFileVersion(context, file);
+          if (bundledVer) {
+            await setSkippedVersion(file.dest, bundledVer);
+          }
           vscode.window.showInformationMessage(`Skipped update for ${file.dest}`);
         } else {
           vscode.window.showWarningMessage(`Could not skip update for ${file.dest}`);
@@ -215,7 +211,7 @@ function activate(context) {
     ),
   );
 
-  // Auto-sync files and add workspace root on activation
+  // Auto-sync files on activation
   autoSetup(context).then(() => refreshAll());
 }
 
@@ -223,67 +219,41 @@ async function autoSetup(context) {
   const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
   if (!workspaceFolder) return;
 
-  const config = vscode.workspace.getConfiguration('activate-framework');
-  const tier = config.get('defaultTier', 'standard');
-  const useVirtualFs = config.get('useVirtualFs', false);
-
-  const installedInfo = await readInstalledVersion(context);
-  const installedVersion = installedInfo?.version || null;
+  const cfg = await resolveConfig();
   const bundledVersion = context.extension.packageJSON.version ?? 'unknown';
 
-  if (useVirtualFs) {
-    // ── Virtual FS mode (experimental) ──────────────────────────
-    // Serve files from an in-memory filesystem instead of globalStorage.
-    // This avoids writing to disk entirely.
-    const manifestId = installedInfo?.manifest || undefined;
-    const manifest = manifestId
-      ? await readBundledManifestById(context, manifestId)
-      : (await discoverBundledManifests(context))[0];
+  // If there's a legacy workspace root from old mode, clean it up
+  if (findActivateWorkspaceFolder()) {
+    removeWorkspaceRoot();
+  }
 
-    if (manifest) {
-      const files = selectFiles(manifest.files, tier);
-      const provider = registerActivateFs(context);
-      await provider.populateFromBundle(context, files);
+  const injectedInfo = await readInjectedVersion();
+  const injectedVersion = injectedInfo?.version || null;
 
-      // Remove old-style globalStorage root if present
-      if (findActivateWorkspaceFolder()) {
-        removeWorkspaceRoot();
-      }
+  // Inject on first run or version mismatch
+  if (injectedVersion !== bundledVersion) {
+    const manifestId = cfg.manifest || injectedInfo?.manifest || undefined;
+    const result = await injectFiles(context, cfg.tier, manifestId);
 
-      const added = addVirtualWorkspaceRoot();
-      if (added) {
-        vscode.window.showInformationMessage(
-          `Peregrine Activate ${bundledVersion} (${tier}) ready — virtual FS mode.`,
-        );
-      }
-    }
-  } else {
-    // ── Classic globalStorage mode ──────────────────────────────
-    // Sync files if first run or version mismatch
-    if (installedVersion !== bundledVersion) {
-      const manifestId = installedInfo?.manifest || undefined;
-      await syncFiles(context, tier, manifestId);
+    // Persist the active manifest/tier if not already saved
+    await writeProjectConfig({
+      manifest: manifestId || 'activate-framework',
+      tier: cfg.tier,
+    });
 
-      if (installedVersion) {
-        vscode.window.showInformationMessage(
-          `Peregrine Activate updated: ${installedVersion} → ${bundledVersion}`,
-        );
-      }
-    }
-
-    // Remove VFS root if switching back from virtual mode
-    if (findVirtualWorkspaceFolder()) {
-      removeVirtualWorkspaceRoot();
-    }
-
-    // Ensure the root is in the workspace
-    const added = addWorkspaceRoot(context);
-    if (added && !installedVersion) {
+    if (injectedVersion) {
       vscode.window.showInformationMessage(
-        `Peregrine Activate ${bundledVersion} (${tier}) is ready.`,
+        `Peregrine Activate updated: ${injectedVersion} → ${bundledVersion}`,
+      );
+    } else {
+      vscode.window.showInformationMessage(
+        `Peregrine Activate ${bundledVersion} (${cfg.tier}) is ready.`,
       );
     }
   }
+
+  // Ensure the project config file is git-excluded
+  await ensureGitExclude();
 }
 
 function deactivate() {}
