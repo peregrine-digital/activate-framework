@@ -686,8 +686,12 @@ func buildMainMenuForm(state InstallState, choice *string) *huh.Form {
 	items = append(items, menuItem{label: "Add managed files to repository", value: "repo-add"})
 	if state.HasInstallMarker {
 		items = append(items, menuItem{label: "Remove managed files from repository", value: "repo-remove"})
+		items = append(items, menuItem{label: "Update all files", value: "update-all"})
 	}
 	items = append(items,
+		menuItem{label: "Manage files", value: "manage-files"},
+		menuItem{label: "Settings", value: "settings"},
+		menuItem{label: "Telemetry", value: "telemetry"},
 		menuItem{label: "Show frameworks", value: "list"},
 		menuItem{label: "Show current state", value: "state"},
 		menuItem{label: "Exit", value: "exit"},
@@ -855,6 +859,29 @@ func RunInteractiveMenu(svc *ActivateService) error {
 				_ = runFullscreenText("Action Failed", "Repo remove", err.Error())
 			}
 
+		case "manage-files":
+			if err := RunFileBrowser(svc); err != nil {
+				_ = runFullscreenText("Action Failed", "File browser", err.Error())
+			}
+
+		case "update-all":
+			result, err := svc.Update()
+			if err != nil {
+				_ = runFullscreenText("Action Failed", "Update all", err.Error())
+			} else {
+				_ = runFullscreenText("Update Complete", "", formatUpdateResult(result))
+			}
+
+		case "settings":
+			if _, err := RunSettings(svc); err != nil {
+				_ = runFullscreenText("Action Failed", "Settings", err.Error())
+			}
+
+		case "telemetry":
+			if err := RunTelemetryScreen(svc); err != nil {
+				_ = runFullscreenText("Action Failed", "Telemetry", err.Error())
+			}
+
 		default:
 			return nil
 		}
@@ -929,6 +956,34 @@ func RunInteractiveInstall(svc *ActivateService) error {
 	)
 	fmt.Println(resultBox.Render(resultMsg))
 	return nil
+}
+
+// formatUpdateResult formats the output of an Update operation for display.
+func formatUpdateResult(result *UpdateResult) string {
+	var lines []string
+
+	if len(result.Updated) > 0 {
+		lines = append(lines, fmt.Sprintf("Updated %d files:", len(result.Updated)))
+		for _, f := range result.Updated {
+			lines = append(lines, "  ⬆ "+f)
+		}
+	}
+
+	if len(result.Skipped) > 0 {
+		if len(lines) > 0 {
+			lines = append(lines, "")
+		}
+		lines = append(lines, fmt.Sprintf("Skipped %d files:", len(result.Skipped)))
+		for _, f := range result.Skipped {
+			lines = append(lines, "  ⏭ "+f)
+		}
+	}
+
+	if len(result.Updated) == 0 && len(result.Skipped) == 0 {
+		lines = append(lines, "All files are up to date.")
+	}
+
+	return strings.Join(lines, "\n")
 }
 
 // ── List command (stdout, no Bubble Tea) ────────────────────────

@@ -1119,31 +1119,31 @@ func TestMainMenu_NavigateToSpecificOption(t *testing.T) {
 	form := buildMainMenuForm(state, &vals.choice)
 	form.Init()
 
-	// Fresh state menu: [guided-install, repo-add, list, state, exit]
+	// Fresh state menu: [guided-install, repo-add, manage-files, settings, telemetry, list, state, exit]
 	if vals.choice != "guided-install" {
 		t.Fatalf("expected default=guided-install, got %q", vals.choice)
 	}
 
-	// Navigate down to "list" (3rd item: guided-install → repo-add → list)
+	// Navigate down to "manage-files" (3rd item)
 	form = sendKey(form, tea.KeyDown)
 	form = sendKey(form, tea.KeyDown)
-	if vals.choice != "list" {
-		t.Fatalf("expected list after 2 ↓, got %q", vals.choice)
+	if vals.choice != "manage-files" {
+		t.Fatalf("expected manage-files after 2 ↓, got %q", vals.choice)
 	}
 
-	// Navigate down once more to "state"
+	// Navigate down to "settings"
 	form = sendKey(form, tea.KeyDown)
-	if vals.choice != "state" {
-		t.Fatalf("expected state after 3 ↓, got %q", vals.choice)
+	if vals.choice != "settings" {
+		t.Fatalf("expected settings after 3 ↓, got %q", vals.choice)
 	}
 
-	// Press enter to select "state"
+	// Press enter to select "settings"
 	form = sendKey(form, tea.KeyEnter)
 	if form.State != huh.StateCompleted {
 		t.Fatalf("expected completed, got state %d", form.State)
 	}
-	if vals.choice != "state" {
-		t.Fatalf("expected choice=state after enter, got %q", vals.choice)
+	if vals.choice != "settings" {
+		t.Fatalf("expected choice=settings after enter, got %q", vals.choice)
 	}
 }
 
@@ -1153,12 +1153,12 @@ func TestMainMenu_NavigateToExit(t *testing.T) {
 	form := buildMainMenuForm(state, &vals.choice)
 	form.Init()
 
-	// Fresh state: [guided-install, repo-add, list, state, exit] = 5 items
-	for i := 0; i < 4; i++ {
+	// Fresh state: [guided-install, repo-add, manage-files, settings, telemetry, list, state, exit] = 8 items
+	for i := 0; i < 7; i++ {
 		form = sendKey(form, tea.KeyDown)
 	}
 	if vals.choice != "exit" {
-		t.Fatalf("expected exit after 4 ↓, got %q", vals.choice)
+		t.Fatalf("expected exit after 7 ↓, got %q", vals.choice)
 	}
 
 	form = sendKey(form, tea.KeyEnter)
@@ -1178,15 +1178,15 @@ func TestMainMenu_InstalledStateHasRemoveOption(t *testing.T) {
 	form := buildMainMenuForm(state, &vals.choice)
 	form.Init()
 
-	// Installed state: [quick-install, guided-install, repo-add, repo-remove, list, state, exit]
+	// Installed state: [quick-install, guided-install, repo-add, repo-remove, update-all, manage-files, settings, telemetry, list, state, exit]
 	var items []string
 	items = append(items, vals.choice)
-	for i := 0; i < 6; i++ {
+	for i := 0; i < 10; i++ {
 		form = sendKey(form, tea.KeyDown)
 		items = append(items, vals.choice)
 	}
 
-	expected := []string{"quick-install", "guided-install", "repo-add", "repo-remove", "list", "state", "exit"}
+	expected := []string{"quick-install", "guided-install", "repo-add", "repo-remove", "update-all", "manage-files", "settings", "telemetry", "list", "state", "exit"}
 	if len(items) != len(expected) {
 		t.Fatalf("expected %d items, got %d: %v", len(expected), len(items), items)
 	}
@@ -1214,9 +1214,11 @@ func TestMainMenuModel_SelectListShowsFrameworks(t *testing.T) {
 		vals: vals,
 	}
 
-	// Navigate to "list" (2 downs from guided-install)
-	m.form = sendKey(m.form, tea.KeyDown)
-	m.form = sendKey(m.form, tea.KeyDown)
+	// Fresh: [guided-install, repo-add, manage-files, settings, telemetry, list, state, exit]
+	// Navigate to "list" (5 downs)
+	for i := 0; i < 5; i++ {
+		m.form = sendKey(m.form, tea.KeyDown)
+	}
 
 	// Press enter through the model to trigger action handling
 	updated, cmd := updateModel(m, tea.KeyMsg{Type: tea.KeyEnter})
@@ -1251,9 +1253,9 @@ func TestMainMenuModel_SelectStateShowsBody(t *testing.T) {
 		vals: vals,
 	}
 
-	// Installed: [quick-install, guided-install, repo-add, repo-remove, list, state, exit]
-	// Navigate to "state" (5 downs)
-	for i := 0; i < 5; i++ {
+	// Installed: [quick-install, guided-install, repo-add, repo-remove, update-all, manage-files, settings, telemetry, list, state, exit]
+	// Navigate to "state" (9 downs)
+	for i := 0; i < 9; i++ {
 		m.form = sendKey(m.form, tea.KeyDown)
 	}
 
@@ -1309,8 +1311,8 @@ func TestMainMenuModel_SelectExitQuits(t *testing.T) {
 		vals: vals,
 	}
 
-	// Navigate to exit (4 downs)
-	for i := 0; i < 4; i++ {
+	// Navigate to exit (7 downs for fresh state)
+	for i := 0; i < 7; i++ {
 		m.form = sendKey(m.form, tea.KeyDown)
 	}
 
@@ -1342,9 +1344,10 @@ func TestMainMenuModel_TextModeFullCycle(t *testing.T) {
 		vals: vals,
 	}
 
-	// Navigate to "list" and select it
-	m.form = sendKey(m.form, tea.KeyDown)
-	m.form = sendKey(m.form, tea.KeyDown)
+	// Navigate to "list" (5 downs) and select it
+	for i := 0; i < 5; i++ {
+		m.form = sendKey(m.form, tea.KeyDown)
+	}
 	updated, _ := updateModel(m, tea.KeyMsg{Type: tea.KeyEnter})
 	m = updated.(mainMenuModel)
 
@@ -1509,8 +1512,8 @@ func simulateRuntime(m tea.Model, keys []tea.Msg) tea.Model {
 }
 
 func TestMainMenuModel_ExitViaModelUpdate(t *testing.T) {
-	// Installed state: 7 menu items
-	// [quick-install, guided-install, repo-add, repo-remove, list, state, exit]
+	// Installed state: 11 menu items
+	// [quick-install, guided-install, repo-add, repo-remove, update-all, manage-files, settings, telemetry, list, state, exit]
 	state := InstallState{
 		HasProjectConfig:  true,
 		HasInstallMarker:  true,
@@ -1527,9 +1530,9 @@ func TestMainMenuModel_ExitViaModelUpdate(t *testing.T) {
 		manifests: testManifests(),
 	}
 
-	// Navigate to Exit: 6 downs + enter, ALL through model.Update
-	keys := make([]tea.Msg, 0, 7)
-	for i := 0; i < 6; i++ {
+	// Navigate to Exit: 10 downs + enter, ALL through model.Update
+	keys := make([]tea.Msg, 0, 11)
+	for i := 0; i < 10; i++ {
 		keys = append(keys, tea.KeyMsg{Type: tea.KeyDown})
 	}
 	keys = append(keys, tea.KeyMsg{Type: tea.KeyEnter})
@@ -1542,7 +1545,7 @@ func TestMainMenuModel_ExitViaModelUpdate(t *testing.T) {
 }
 
 func TestMainMenuModel_ShowFrameworksViaModelUpdate(t *testing.T) {
-	// Installed state: navigate to "Show frameworks" (item 5 = 4 downs)
+	// Installed state: navigate to "Show frameworks" (list = 8 downs)
 	state := InstallState{
 		HasProjectConfig:  true,
 		HasInstallMarker:  true,
@@ -1559,8 +1562,8 @@ func TestMainMenuModel_ShowFrameworksViaModelUpdate(t *testing.T) {
 		manifests: testManifests(),
 	}
 
-	keys := make([]tea.Msg, 0, 5)
-	for i := 0; i < 4; i++ {
+	keys := make([]tea.Msg, 0, 9)
+	for i := 0; i < 8; i++ {
 		keys = append(keys, tea.KeyMsg{Type: tea.KeyDown})
 	}
 	keys = append(keys, tea.KeyMsg{Type: tea.KeyEnter})
@@ -1607,6 +1610,7 @@ func TestMainMenuModel_ChoiceTracksDuringNavigation(t *testing.T) {
 
 	expected := []string{
 		"quick-install", "guided-install", "repo-add", "repo-remove",
+		"update-all", "manage-files", "settings", "telemetry",
 		"list", "state", "exit",
 	}
 
@@ -1644,9 +1648,9 @@ func TestMainMenuModel_FrameworksRoundTrip_ThenExit(t *testing.T) {
 		manifests: testManifests(),
 	}
 
-	// Step 1: navigate to "Show frameworks" (item 5 = 4 downs) + enter
+	// Step 1: navigate to "Show frameworks" (list = 8 downs) + enter
 	keys := []tea.Msg{}
-	for i := 0; i < 4; i++ {
+	for i := 0; i < 8; i++ {
 		keys = append(keys, tea.KeyMsg{Type: tea.KeyDown})
 	}
 	keys = append(keys, tea.KeyMsg{Type: tea.KeyEnter})
@@ -1664,9 +1668,9 @@ func TestMainMenuModel_FrameworksRoundTrip_ThenExit(t *testing.T) {
 		t.Fatalf("step 2: expected menu mode, got %q", mm.mode)
 	}
 
-	// Step 3: navigate to "Exit" (item 7 = 6 downs) + enter
+	// Step 3: navigate to "Exit" (10 downs) + enter
 	keys2 := []tea.Msg{}
-	for i := 0; i < 6; i++ {
+	for i := 0; i < 10; i++ {
 		keys2 = append(keys2, tea.KeyMsg{Type: tea.KeyDown})
 	}
 	keys2 = append(keys2, tea.KeyMsg{Type: tea.KeyEnter})
@@ -1692,9 +1696,9 @@ func TestMainMenuModel_StateRoundTrip_ThenExit(t *testing.T) {
 		manifests: testManifests(),
 	}
 
-	// Navigate to "Show current state" (item 6 = 5 downs) + enter
-	keys := make([]tea.Msg, 0, 6)
-	for i := 0; i < 5; i++ {
+	// Navigate to "Show current state" (state = 9 downs) + enter
+	keys := make([]tea.Msg, 0, 10)
+	for i := 0; i < 9; i++ {
 		keys = append(keys, tea.KeyMsg{Type: tea.KeyDown})
 	}
 	keys = append(keys, tea.KeyMsg{Type: tea.KeyEnter})
@@ -1711,9 +1715,9 @@ func TestMainMenuModel_StateRoundTrip_ThenExit(t *testing.T) {
 		t.Fatalf("expected menu mode after return, got %q", mm.mode)
 	}
 
-	// Exit (6 downs + enter)
-	keys2 := make([]tea.Msg, 0, 7)
-	for i := 0; i < 6; i++ {
+	// Exit (10 downs + enter)
+	keys2 := make([]tea.Msg, 0, 11)
+	for i := 0; i < 10; i++ {
 		keys2 = append(keys2, tea.KeyMsg{Type: tea.KeyDown})
 	}
 	keys2 = append(keys2, tea.KeyMsg{Type: tea.KeyEnter})
