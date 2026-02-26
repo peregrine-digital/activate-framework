@@ -1,26 +1,54 @@
-package main
+package screens
 
 import (
 	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+
+	"github.com/peregrine-digital/activate-framework/cli/commands"
+	"github.com/peregrine-digital/activate-framework/cli/model"
 )
 
+// testManifests returns fixture manifests used by settings tests.
+func testManifests() []model.Manifest {
+	return []model.Manifest{
+		{
+			ID: "alpha", Name: "Alpha Framework", Version: "1.0.0",
+			Description: "First framework",
+			Files: []model.ManifestFile{
+				{Src: "instructions/a.md", Dest: "instructions/a.md", Tier: "core", Category: "instructions"},
+				{Src: "prompts/b.md", Dest: "prompts/b.md", Tier: "ad-hoc", Category: "prompts"},
+			},
+			Tiers: []model.TierDef{
+				{ID: "core", Label: "Core"},
+				{ID: "ad-hoc", Label: "Standard"},
+			},
+		},
+		{
+			ID: "beta", Name: "Beta Framework", Version: "2.0.0",
+			Description: "Second framework",
+			Files: []model.ManifestFile{
+				{Src: "skills/c.md", Dest: "skills/c.md", Tier: "foundation", Category: "skills"},
+			},
+			Tiers: []model.TierDef{
+				{ID: "foundation", Label: "Foundation"},
+			},
+		},
+	}
+}
+
 // isolatedSettingsSvc creates an ActivateService with test isolation.
-func isolatedSettingsSvc(t *testing.T, cfg Config, manifests []Manifest) *ActivateService {
+func isolatedSettingsSvc(t *testing.T, cfg model.Config, manifests []model.Manifest) *commands.ActivateService {
 	t.Helper()
-	dir := t.TempDir()
-	old := activateBaseDir
-	activateBaseDir = dir
-	t.Cleanup(func() { activateBaseDir = old })
-	return &ActivateService{Config: cfg, Manifests: manifests, ProjectDir: dir}
+	dir := setupTestStore(t)
+	return &commands.ActivateService{Config: cfg, Manifests: manifests, ProjectDir: dir}
 }
 
 // ── Settings form builder ───────────────────────────────────────
 
 func TestBuildSettingsForm_HasAllFields(t *testing.T) {
-	svc := isolatedSettingsSvc(t, Config{Manifest: "alpha", Tier: "standard"}, testManifests())
+	svc := isolatedSettingsSvc(t, model.Config{Manifest: "alpha", Tier: "standard"}, testManifests())
 	vals := &settingsValues{
 		manifest: "alpha", tier: "standard",
 		telemetry: false, scope: "project",
@@ -35,7 +63,7 @@ func TestBuildSettingsForm_HasAllFields(t *testing.T) {
 }
 
 func TestBuildTierOptions(t *testing.T) {
-	svc := isolatedSettingsSvc(t, Config{}, testManifests())
+	svc := isolatedSettingsSvc(t, model.Config{}, testManifests())
 
 	opts := buildTierOptions(svc, "alpha")
 	if len(opts) == 0 {
@@ -55,7 +83,7 @@ func TestBuildTierOptions(t *testing.T) {
 }
 
 func TestBuildTierOptions_UnknownManifest(t *testing.T) {
-	svc := isolatedSettingsSvc(t, Config{}, testManifests())
+	svc := isolatedSettingsSvc(t, model.Config{}, testManifests())
 	opts := buildTierOptions(svc, "nonexistent")
 	if len(opts) != 1 {
 		t.Fatalf("expected 1 fallback option, got %d", len(opts))
@@ -65,7 +93,7 @@ func TestBuildTierOptions_UnknownManifest(t *testing.T) {
 // ── Settings model ──────────────────────────────────────────────
 
 func TestSettingsModel_ViewContainsTitle(t *testing.T) {
-	svc := isolatedSettingsSvc(t, Config{Manifest: "alpha", Tier: "standard"}, testManifests())
+	svc := isolatedSettingsSvc(t, model.Config{Manifest: "alpha", Tier: "standard"}, testManifests())
 	m := newSettingsModel(svc)
 	view := m.View()
 
@@ -78,7 +106,7 @@ func TestSettingsModel_ViewContainsTitle(t *testing.T) {
 }
 
 func TestSettingsModel_EscCancels(t *testing.T) {
-	svc := isolatedSettingsSvc(t, Config{Manifest: "alpha", Tier: "standard"}, testManifests())
+	svc := isolatedSettingsSvc(t, model.Config{Manifest: "alpha", Tier: "standard"}, testManifests())
 	m := newSettingsModel(svc)
 
 	result := simulateRuntime(m, []tea.Msg{
@@ -94,7 +122,7 @@ func TestSettingsModel_EscCancels(t *testing.T) {
 }
 
 func TestSettingsModel_CtrlCQuits(t *testing.T) {
-	svc := isolatedSettingsSvc(t, Config{Manifest: "alpha", Tier: "standard"}, testManifests())
+	svc := isolatedSettingsSvc(t, model.Config{Manifest: "alpha", Tier: "standard"}, testManifests())
 	m := newSettingsModel(svc)
 
 	result := simulateRuntime(m, []tea.Msg{
@@ -107,7 +135,7 @@ func TestSettingsModel_CtrlCQuits(t *testing.T) {
 }
 
 func TestSettingsModel_ResultModeView(t *testing.T) {
-	svc := isolatedSettingsSvc(t, Config{Manifest: "alpha", Tier: "standard"}, testManifests())
+	svc := isolatedSettingsSvc(t, model.Config{Manifest: "alpha", Tier: "standard"}, testManifests())
 	m := newSettingsModel(svc)
 	m.mode = "result"
 	m.resultTitle = "Settings Saved"

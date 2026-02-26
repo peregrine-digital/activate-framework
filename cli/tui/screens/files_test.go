@@ -1,4 +1,4 @@
-package main
+package screens
 
 import (
 	"strings"
@@ -6,22 +6,95 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/huh"
+
+	"github.com/peregrine-digital/activate-framework/cli/commands"
+	"github.com/peregrine-digital/activate-framework/cli/model"
+	"github.com/peregrine-digital/activate-framework/cli/storage"
 )
 
-// isolatedFileSvc creates an ActivateService with test isolation.
-func isolatedFileSvc(t *testing.T) *ActivateService {
+// ── Shared test helpers (used by all screens test files) ────────
+
+func setupTestStore(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
-	old := activateBaseDir
-	activateBaseDir = dir
-	t.Cleanup(func() { activateBaseDir = old })
-	return &ActivateService{Config: Config{Manifest: "alpha", Tier: "standard"}, ProjectDir: dir}
+	old := storage.ActivateBaseDir
+	storage.ActivateBaseDir = dir
+	t.Cleanup(func() { storage.ActivateBaseDir = old })
+	return dir
 }
 
-// ── File browser form builder ───────────────────────────────────
+// sendToForm sends a tea.Msg to a huh.Form and drains resulting commands
+// so that state transitions (e.g. StateCompleted) propagate properly.
+func sendToForm(form *huh.Form, msg tea.Msg) *huh.Form {
+	updated, cmd := form.Update(msg)
+	if f, ok := updated.(*huh.Form); ok {
+		form = f
+	}
+	for i := 0; i < 5 && cmd != nil; i++ {
+		m := cmd()
+		if m == nil {
+			break
+		}
+		if _, ok := m.(tea.QuitMsg); ok {
+			break
+		}
+		updated, cmd = form.Update(m)
+		if f, ok := updated.(*huh.Form); ok {
+			form = f
+		}
+	}
+	return form
+}
 
-func testFileStatuses() []FileStatus {
-	return []FileStatus{
+// sendKey is a convenience wrapper for sending a single key to a form.
+func sendKey(form *huh.Form, key tea.KeyType) *huh.Form {
+	return sendToForm(form, tea.KeyMsg{Type: key})
+}
+
+// simulateRuntime mirrors Bubble Tea's event loop: Init → drain, then
+// every key goes through model.Update with full command draining.
+func simulateRuntime(m tea.Model, keys []tea.Msg) tea.Model {
+	// Process Init
+	cmd := m.Init()
+	for i := 0; i < 20 && cmd != nil; i++ {
+		msg := cmd()
+		if msg == nil {
+			break
+		}
+		if _, ok := msg.(tea.QuitMsg); ok {
+			return m
+		}
+		m, cmd = m.Update(msg)
+	}
+
+	// Process each key event
+	for _, key := range keys {
+		m, cmd = m.Update(key)
+		for i := 0; i < 20 && cmd != nil; i++ {
+			msg := cmd()
+			if msg == nil {
+				break
+			}
+			if _, ok := msg.(tea.QuitMsg); ok {
+				return m
+			}
+			m, cmd = m.Update(msg)
+		}
+	}
+	return m
+}
+
+// ── File-specific test helpers ──────────────────────────────────
+
+// isolatedFileSvc creates an ActivateService with test isolation.
+func isolatedFileSvc(t *testing.T) *commands.ActivateService {
+	t.Helper()
+	dir := setupTestStore(t)
+	return &commands.ActivateService{Config: model.Config{Manifest: "alpha", Tier: "standard"}, ProjectDir: dir}
+}
+
+func testFileStatuses() []model.FileStatus {
+	return []model.FileStatus{
 		{Dest: "instructions/setup.md", DisplayName: "setup", Category: "Instructions",
 			Installed: true, BundledVersion: "1.0.0", InstalledVersion: "1.0.0"},
 		{Dest: "instructions/security.md", DisplayName: "security", Category: "Instructions",
@@ -37,6 +110,35 @@ func testFileStatuses() []FileStatus {
 			UpdateAvailable: true, Skipped: true},
 	}
 }
+
+func optionValues(opts []huh.Option[string]) []string {
+	values := make([]string, len(opts))
+	for i, o := range opts {
+		values[i] = o.Value
+	}
+	return values
+}
+
+func assertContains(t *testing.T, values []string, want string) {
+	t.Helper()
+	for _, v := range values {
+		if v == want {
+			return
+		}
+	}
+	t.Fatalf("expected %q in %v", want, values)
+}
+
+func assertNotContains(t *testing.T, values []string, notWant string) {
+	t.Helper()
+	for _, v := range values {
+		if v == notWant {
+			t.Fatalf("did not expect %q in %v", notWant, values)
+		}
+	}
+}
+
+// ── File browser form builder ───────────────────────────────────
 
 func TestGroupFilesByCategory(t *testing.T) {
 	files := testFileStatuses()
@@ -58,15 +160,15 @@ func TestGroupFilesByCategory(t *testing.T) {
 func TestFileStatusIcon(t *testing.T) {
 	tests := []struct {
 		name string
-		fs   FileStatus
+		fs   model.FileStatus
 		want string
 	}{
-		{"installed current", FileStatus{Installed: true}, "✓"},
-		{"update available", FileStatus{Installed: true, UpdateAvailable: true}, "⬆"},
-		{"skipped update", FileStatus{Installed: true, UpdateAvailable: true, Skipped: true}, "⏭"},
-		{"not installed", FileStatus{}, "○"},
-		{"excluded", FileStatus{Override: "excluded"}, "🚫"},
-		{"pinned", FileStatus{Override: "pinned", Installed: true}, "📌"},
+		{"installed current", model.FileStatus{Installed: true}, "✓"},
+		{"update available", model.FileStatus{Installed: true, UpdateAvailable: true}, "⬆"},
+		{"skipped update", model.FileStatus{Installed: true, UpdateAvailable: true, Skipped: true}, "⏭"},
+		{"not installed", model.FileStatus{}, "○"},
+		{"excluded", model.FileStatus{Override: "excluded"}, "🚫"},
+		{"pinned", model.FileStatus{Override: "pinned", Installed: true}, "📌"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -81,14 +183,14 @@ func TestFileStatusIcon(t *testing.T) {
 func TestFileVersionLabel(t *testing.T) {
 	tests := []struct {
 		name string
-		fs   FileStatus
+		fs   model.FileStatus
 		want string
 	}{
-		{"installed current", FileStatus{Installed: true, InstalledVersion: "1.0.0"}, "1.0.0"},
-		{"update available", FileStatus{Installed: true, InstalledVersion: "1.0.0",
+		{"installed current", model.FileStatus{Installed: true, InstalledVersion: "1.0.0"}, "1.0.0"},
+		{"update available", model.FileStatus{Installed: true, InstalledVersion: "1.0.0",
 			BundledVersion: "2.0.0", UpdateAvailable: true}, "1.0.0 → 2.0.0"},
-		{"not installed", FileStatus{BundledVersion: "1.0.0"}, "1.0.0"},
-		{"excluded", FileStatus{Override: "excluded"}, "excluded"},
+		{"not installed", model.FileStatus{BundledVersion: "1.0.0"}, "1.0.0"},
+		{"excluded", model.FileStatus{Override: "excluded"}, "excluded"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -101,7 +203,7 @@ func TestFileVersionLabel(t *testing.T) {
 }
 
 func TestFileStatusLine(t *testing.T) {
-	fs := FileStatus{
+	fs := model.FileStatus{
 		Installed: true, InstalledVersion: "1.0.0", BundledVersion: "2.0.0",
 		UpdateAvailable: true, Skipped: true,
 	}
@@ -115,7 +217,7 @@ func TestFileStatusLine(t *testing.T) {
 }
 
 func TestFormatFileOption(t *testing.T) {
-	fs := FileStatus{
+	fs := model.FileStatus{
 		Dest: "instructions/setup.md", DisplayName: "setup",
 		Category: "Instructions", Installed: true,
 		InstalledVersion: "1.0.0", BundledVersion: "1.0.0",
@@ -132,7 +234,7 @@ func TestFormatFileOption(t *testing.T) {
 // ── File actions ────────────────────────────────────────────────
 
 func TestFileActionsForStatus_InstalledCurrent(t *testing.T) {
-	fs := FileStatus{Installed: true, InstalledVersion: "1.0.0", BundledVersion: "1.0.0"}
+	fs := model.FileStatus{Installed: true, InstalledVersion: "1.0.0", BundledVersion: "1.0.0"}
 	opts := fileActionsForStatus(fs)
 
 	values := optionValues(opts)
@@ -146,7 +248,7 @@ func TestFileActionsForStatus_InstalledCurrent(t *testing.T) {
 }
 
 func TestFileActionsForStatus_InstalledOutdated(t *testing.T) {
-	fs := FileStatus{
+	fs := model.FileStatus{
 		Installed: true, InstalledVersion: "1.0.0",
 		BundledVersion: "2.0.0", UpdateAvailable: true,
 	}
@@ -159,7 +261,7 @@ func TestFileActionsForStatus_InstalledOutdated(t *testing.T) {
 }
 
 func TestFileActionsForStatus_NotInstalled(t *testing.T) {
-	fs := FileStatus{BundledVersion: "1.0.0"}
+	fs := model.FileStatus{BundledVersion: "1.0.0"}
 	opts := fileActionsForStatus(fs)
 	values := optionValues(opts)
 	assertContains(t, values, "install")
@@ -170,7 +272,7 @@ func TestFileActionsForStatus_NotInstalled(t *testing.T) {
 }
 
 func TestFileActionsForStatus_Excluded(t *testing.T) {
-	fs := FileStatus{Override: "excluded"}
+	fs := model.FileStatus{Override: "excluded"}
 	opts := fileActionsForStatus(fs)
 	values := optionValues(opts)
 	assertContains(t, values, "clear-override")
@@ -181,7 +283,7 @@ func TestFileActionsForStatus_Excluded(t *testing.T) {
 }
 
 func TestFileActionsForStatus_Pinned(t *testing.T) {
-	fs := FileStatus{Installed: true, InstalledVersion: "1.0.0", Override: "pinned"}
+	fs := model.FileStatus{Installed: true, InstalledVersion: "1.0.0", Override: "pinned"}
 	opts := fileActionsForStatus(fs)
 	values := optionValues(opts)
 	assertContains(t, values, "clear-override")
@@ -240,7 +342,7 @@ func TestBuildFileBrowseForm_NavigatesToFiles(t *testing.T) {
 }
 
 func TestBuildFileActionsForm_Navigation(t *testing.T) {
-	fs := FileStatus{
+	fs := model.FileStatus{
 		Installed: true, InstalledVersion: "1.0.0",
 		BundledVersion: "2.0.0", UpdateAvailable: true,
 	}
@@ -363,34 +465,5 @@ func TestFileBrowserModel_TextModeRoundTrip(t *testing.T) {
 
 	if result.mode != "browse" {
 		t.Fatalf("expected mode=browse after enter in text, got %q", result.mode)
-	}
-}
-
-// ── Helpers ─────────────────────────────────────────────────────
-
-func optionValues(opts []huh.Option[string]) []string {
-	values := make([]string, len(opts))
-	for i, o := range opts {
-		values[i] = o.Value
-	}
-	return values
-}
-
-func assertContains(t *testing.T, values []string, want string) {
-	t.Helper()
-	for _, v := range values {
-		if v == want {
-			return
-		}
-	}
-	t.Fatalf("expected %q in %v", want, values)
-}
-
-func assertNotContains(t *testing.T, values []string, notWant string) {
-	t.Helper()
-	for _, v := range values {
-		if v == notWant {
-			t.Fatalf("did not expect %q in %v", notWant, values)
-		}
 	}
 }

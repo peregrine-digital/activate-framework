@@ -1,20 +1,21 @@
-package main
+package screens
 
 import (
 	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+
+	"github.com/peregrine-digital/activate-framework/cli/commands"
+	"github.com/peregrine-digital/activate-framework/cli/model"
+	"github.com/peregrine-digital/activate-framework/cli/storage"
 )
 
-// isolatedSvc creates an ActivateService isolated from the real ~/.activate dir.
-func isolatedTelemetrySvc(t *testing.T, cfg Config) *ActivateService {
+// isolatedTelemetrySvc creates an ActivateService isolated from the real ~/.activate dir.
+func isolatedTelemetrySvc(t *testing.T, cfg model.Config) *commands.ActivateService {
 	t.Helper()
-	dir := t.TempDir()
-	old := activateBaseDir
-	activateBaseDir = dir
-	t.Cleanup(func() { activateBaseDir = old })
-	return &ActivateService{Config: cfg, ProjectDir: dir}
+	dir := setupTestStore(t)
+	return &commands.ActivateService{Config: cfg, ProjectDir: dir}
 }
 
 // ── Telemetry form builder ──────────────────────────────────────
@@ -57,7 +58,7 @@ func TestFormatTelemetrySummary(t *testing.T) {
 	used := 847
 	total := 1000
 	remaining := 153
-	entry := TelemetryEntry{
+	entry := model.TelemetryEntry{
 		Date:               "2026-02-25",
 		PremiumUsed:        &used,
 		PremiumEntitlement: &total,
@@ -78,7 +79,7 @@ func TestFormatTelemetrySummary(t *testing.T) {
 }
 
 func TestFormatTelemetrySummary_Empty(t *testing.T) {
-	entry := TelemetryEntry{Date: "2026-02-25"}
+	entry := model.TelemetryEntry{Date: "2026-02-25"}
 	summary := formatTelemetrySummary(entry)
 	if !strings.Contains(summary, "2026-02-25") {
 		t.Fatal("expected date in summary")
@@ -89,7 +90,7 @@ func TestFormatTelemetryEntry(t *testing.T) {
 	used := 500
 	total := 1000
 	remaining := 500
-	entry := TelemetryEntry{
+	entry := model.TelemetryEntry{
 		Date:               "2026-02-25",
 		PremiumUsed:        &used,
 		PremiumEntitlement: &total,
@@ -111,7 +112,7 @@ func TestFormatTelemetryLog(t *testing.T) {
 	total := 1000
 	remaining1, remaining2 := 900, 800
 
-	entries := []TelemetryEntry{
+	entries := []model.TelemetryEntry{
 		{Date: "2026-02-24", PremiumUsed: &used1, PremiumEntitlement: &total, PremiumRemaining: &remaining1},
 		{Date: "2026-02-25", PremiumUsed: &used2, PremiumEntitlement: &total, PremiumRemaining: &remaining2},
 	}
@@ -126,7 +127,7 @@ func TestFormatTelemetryLog(t *testing.T) {
 }
 
 func TestFormatTelemetryLog_Empty(t *testing.T) {
-	log := formatTelemetryLog([]TelemetryEntry{})
+	log := formatTelemetryLog([]model.TelemetryEntry{})
 	if !strings.Contains(log, "Date") {
 		t.Fatal("expected header even for empty log")
 	}
@@ -134,9 +135,9 @@ func TestFormatTelemetryLog_Empty(t *testing.T) {
 
 func TestFormatTelemetryLog_LimitsTo14(t *testing.T) {
 	used, total, remaining := 100, 1000, 900
-	entries := make([]TelemetryEntry, 20)
+	entries := make([]model.TelemetryEntry, 20)
 	for i := range entries {
-		entries[i] = TelemetryEntry{
+		entries[i] = model.TelemetryEntry{
 			Date: "2026-02-" + strings.Repeat("0", 2-len(string(rune('0'+i%10))))[0:0] + string(rune('0'+i%10)),
 			PremiumUsed: &used, PremiumEntitlement: &total, PremiumRemaining: &remaining,
 		}
@@ -153,7 +154,7 @@ func TestFormatTelemetryLog_LimitsTo14(t *testing.T) {
 // ── Telemetry model ─────────────────────────────────────────────
 
 func TestTelemetryModel_ViewMenuMode(t *testing.T) {
-	svc := isolatedTelemetrySvc(t, Config{})
+	svc := isolatedTelemetrySvc(t, model.Config{})
 	m := newTelemetryModel(svc)
 
 	view := m.View()
@@ -167,9 +168,9 @@ func TestTelemetryModel_ViewMenuMode(t *testing.T) {
 
 func TestTelemetryModel_ViewEnabledStatus(t *testing.T) {
 	enabled := true
-	svc := isolatedTelemetrySvc(t, Config{TelemetryEnabled: &enabled})
+	svc := isolatedTelemetrySvc(t, model.Config{TelemetryEnabled: &enabled})
 	// Persist config so refreshConfig picks it up
-	_ = WriteGlobalConfig(&Config{TelemetryEnabled: &enabled})
+	_ = storage.WriteGlobalConfig(&model.Config{TelemetryEnabled: &enabled})
 	m := newTelemetryModel(svc)
 
 	view := m.View()
@@ -179,7 +180,7 @@ func TestTelemetryModel_ViewEnabledStatus(t *testing.T) {
 }
 
 func TestTelemetryModel_EscQuits(t *testing.T) {
-	svc := isolatedTelemetrySvc(t, Config{})
+	svc := isolatedTelemetrySvc(t, model.Config{})
 	m := newTelemetryModel(svc)
 
 	result := simulateRuntime(m, []tea.Msg{
@@ -192,7 +193,7 @@ func TestTelemetryModel_EscQuits(t *testing.T) {
 }
 
 func TestTelemetryModel_NavigateToBack(t *testing.T) {
-	svc := isolatedTelemetrySvc(t, Config{})
+	svc := isolatedTelemetrySvc(t, model.Config{})
 	m := newTelemetryModel(svc)
 
 	// Menu: [run, toggle, log, back] — 3 downs + enter
@@ -210,7 +211,7 @@ func TestTelemetryModel_NavigateToBack(t *testing.T) {
 }
 
 func TestTelemetryModel_TextModeView(t *testing.T) {
-	svc := isolatedTelemetrySvc(t, Config{})
+	svc := isolatedTelemetrySvc(t, model.Config{})
 	m := newTelemetryModel(svc)
 	m.mode = "text"
 	m.textTitle = "Telemetry Log"

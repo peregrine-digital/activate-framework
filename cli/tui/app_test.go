@@ -1,6 +1,7 @@
-package main
+package tui
 
 import (
+	"bytes"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -9,20 +10,34 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/huh"
+
+	"github.com/peregrine-digital/activate-framework/cli/commands"
+	"github.com/peregrine-digital/activate-framework/cli/model"
+	"github.com/peregrine-digital/activate-framework/cli/storage"
+	"github.com/peregrine-digital/activate-framework/cli/tui/style"
 )
 
 // ── Test helpers ────────────────────────────────────────────────
 
-func testManifests() []Manifest {
-	return []Manifest{
+func setupTestStore(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	old := storage.ActivateBaseDir
+	storage.ActivateBaseDir = dir
+	t.Cleanup(func() { storage.ActivateBaseDir = old })
+	return dir
+}
+
+func testManifests() []model.Manifest {
+	return []model.Manifest{
 		{
 			ID: "alpha", Name: "Alpha Framework", Version: "1.0.0",
 			Description: "First framework",
-			Files: []ManifestFile{
+			Files: []model.ManifestFile{
 				{Src: "instructions/a.md", Dest: "instructions/a.md", Tier: "core", Category: "instructions"},
 				{Src: "prompts/b.md", Dest: "prompts/b.md", Tier: "ad-hoc", Category: "prompts"},
 			},
-			Tiers: []TierDef{
+			Tiers: []model.TierDef{
 				{ID: "core", Label: "Core"},
 				{ID: "ad-hoc", Label: "Standard"},
 			},
@@ -30,18 +45,18 @@ func testManifests() []Manifest {
 		{
 			ID: "beta", Name: "Beta Framework", Version: "2.0.0",
 			Description: "Second framework",
-			Files: []ManifestFile{
+			Files: []model.ManifestFile{
 				{Src: "skills/c.md", Dest: "skills/c.md", Tier: "foundation", Category: "skills"},
 			},
-			Tiers: []TierDef{
+			Tiers: []model.TierDef{
 				{ID: "foundation", Label: "Foundation"},
 			},
 		},
 	}
 }
 
-func testConfig() Config {
-	return Config{Manifest: "alpha", Tier: "core"}
+func testConfig() model.Config {
+	return model.Config{Manifest: "alpha", Tier: "core"}
 }
 
 // sendToForm sends a tea.Msg to a huh.Form and drains resulting commands
@@ -89,6 +104,39 @@ func updateModel(m tea.Model, msg tea.Msg) (tea.Model, tea.Cmd) {
 		updated, cmd = updated.Update(innerMsg)
 	}
 	return updated, cmd
+}
+
+// simulateRuntime mirrors Bubble Tea's event loop: Init → drain, then
+// every key goes through model.Update with full command draining.
+func simulateRuntime(m tea.Model, keys []tea.Msg) tea.Model {
+	// Process Init
+	cmd := m.Init()
+	for i := 0; i < 20 && cmd != nil; i++ {
+		msg := cmd()
+		if msg == nil {
+			break
+		}
+		if _, ok := msg.(tea.QuitMsg); ok {
+			return m
+		}
+		m, cmd = m.Update(msg)
+	}
+
+	// Process each key event
+	for _, key := range keys {
+		m, cmd = m.Update(key)
+		for i := 0; i < 20 && cmd != nil; i++ {
+			msg := cmd()
+			if msg == nil {
+				break
+			}
+			if _, ok := msg.(tea.QuitMsg); ok {
+				return m
+			}
+			m, cmd = m.Update(msg)
+		}
+	}
+	return m
 }
 
 // ── resolveTargetPath ───────────────────────────────────────────
@@ -146,10 +194,10 @@ func TestFormatGroups_Empty(t *testing.T) {
 }
 
 func TestFormatGroups_Single(t *testing.T) {
-	groups := []CategoryGroup{
+	groups := []model.CategoryGroup{
 		{
 			Label: "Instructions",
-			Files: []ManifestFile{
+			Files: []model.ManifestFile{
 				{Src: "instructions/test.md", Dest: "instructions/test.md", Tier: "core", Description: "Test file"},
 			},
 		},
@@ -170,9 +218,9 @@ func TestFormatGroups_Single(t *testing.T) {
 }
 
 func TestFormatGroups_Multiple(t *testing.T) {
-	groups := []CategoryGroup{
-		{Label: "Instructions", Files: []ManifestFile{{Dest: "instructions/a.md", Tier: "core"}}},
-		{Label: "Prompts", Files: []ManifestFile{{Dest: "prompts/b.md", Tier: "ad-hoc"}, {Dest: "prompts/c.md", Tier: "ad-hoc"}}},
+	groups := []model.CategoryGroup{
+		{Label: "Instructions", Files: []model.ManifestFile{{Dest: "instructions/a.md", Tier: "core"}}},
+		{Label: "Prompts", Files: []model.ManifestFile{{Dest: "prompts/b.md", Tier: "ad-hoc"}, {Dest: "prompts/c.md", Tier: "ad-hoc"}}},
 	}
 	result := formatGroups(groups)
 	if !strings.Contains(result, "Instructions (1)") {
@@ -183,23 +231,16 @@ func TestFormatGroups_Multiple(t *testing.T) {
 	}
 }
 
-// ── renderBanner / renderFalconLogo ─────────────────────────────
+// ── renderBanner ────────────────────────────────────────────────
 
 func TestRenderBanner_NotEmpty(t *testing.T) {
-	b := renderBanner()
+	b := style.RenderBanner()
 	if len(b) == 0 {
 		t.Fatal("expected non-empty banner")
 	}
 	// Banner uses block-art wordmark (█ characters) and subtitle
 	if !strings.Contains(b, "DIGITAL SERVICES") {
 		t.Fatal("expected 'DIGITAL SERVICES' subtitle in banner")
-	}
-}
-
-func TestRenderFalconLogo_NotEmpty(t *testing.T) {
-	logo := renderFalconLogo()
-	if len(logo) == 0 {
-		t.Fatal("expected non-empty logo")
 	}
 }
 
@@ -239,7 +280,7 @@ func TestInitialModel_MultipleManifests(t *testing.T) {
 
 func TestInitialModel_UnknownManifestFallsToFirst(t *testing.T) {
 	manifests := testManifests()
-	cfg := Config{Manifest: "nonexistent", Tier: "core"}
+	cfg := model.Config{Manifest: "nonexistent", Tier: "core"}
 	m := initialModel(manifests, cfg)
 
 	if m.vals.manifestID != "alpha" {
@@ -254,7 +295,7 @@ func TestModelUpdate_CtrlCQuits(t *testing.T) {
 	m := initialModel(manifests, testConfig())
 
 	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
-	result := updated.(model)
+	result := updated.(installerModel)
 
 	if !result.quitting {
 		t.Fatal("expected quitting=true after ctrl+c")
@@ -272,7 +313,7 @@ func TestModelUpdate_WindowSizeMsg(t *testing.T) {
 	m := initialModel(manifests, testConfig())
 
 	updated, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
-	result := updated.(model)
+	result := updated.(installerModel)
 
 	if result.width != 120 || result.height != 40 {
 		t.Fatalf("expected 120x40, got %dx%d", result.width, result.height)
@@ -437,7 +478,7 @@ func TestFullscreenFormModel_View(t *testing.T) {
 // ── buildMainMenuForm ───────────────────────────────────────────
 
 func TestBuildMainMenuForm_Fresh(t *testing.T) {
-	state := InstallState{}
+	state := model.InstallState{}
 	vals := &menuValues{}
 	form := buildMainMenuForm(state, &vals.choice)
 
@@ -449,7 +490,7 @@ func TestBuildMainMenuForm_Fresh(t *testing.T) {
 }
 
 func TestBuildMainMenuForm_WithProjectConfig(t *testing.T) {
-	state := InstallState{HasProjectConfig: true}
+	state := model.InstallState{HasProjectConfig: true}
 	vals := &menuValues{}
 	form := buildMainMenuForm(state, &vals.choice)
 
@@ -460,7 +501,7 @@ func TestBuildMainMenuForm_WithProjectConfig(t *testing.T) {
 }
 
 func TestBuildMainMenuForm_Installed(t *testing.T) {
-	state := InstallState{
+	state := model.InstallState{
 		HasProjectConfig:  true,
 		HasInstallMarker:  true,
 		InstalledManifest: "alpha",
@@ -478,7 +519,7 @@ func TestBuildMainMenuForm_Installed(t *testing.T) {
 // ── mainMenuModel.stateText ─────────────────────────────────────
 
 func TestStateText_NoConfig(t *testing.T) {
-	m := mainMenuModel{state: InstallState{}}
+	m := mainMenuModel{state: model.InstallState{}}
 	text := m.stateText()
 	if !strings.Contains(text, "no project config detected") {
 		t.Fatalf("expected 'no project config', got %q", text)
@@ -486,7 +527,7 @@ func TestStateText_NoConfig(t *testing.T) {
 }
 
 func TestStateText_WithConfig(t *testing.T) {
-	m := mainMenuModel{state: InstallState{HasProjectConfig: true}}
+	m := mainMenuModel{state: model.InstallState{HasProjectConfig: true}}
 	text := m.stateText()
 	if !strings.Contains(text, "saved config detected") {
 		t.Fatalf("expected 'saved config detected', got %q", text)
@@ -494,7 +535,7 @@ func TestStateText_WithConfig(t *testing.T) {
 }
 
 func TestStateText_Installed(t *testing.T) {
-	m := mainMenuModel{state: InstallState{
+	m := mainMenuModel{state: model.InstallState{
 		HasProjectConfig:  true,
 		HasInstallMarker:  true,
 		InstalledManifest: "alpha",
@@ -511,14 +552,14 @@ func TestStateText_Installed(t *testing.T) {
 func TestStateBody_ShowsConfig(t *testing.T) {
 	m := mainMenuModel{
 		projectDir: "/test/project",
-		state: InstallState{
+		state: model.InstallState{
 			HasGlobalConfig:   true,
 			HasProjectConfig:  true,
 			HasInstallMarker:  true,
 			InstalledManifest: "alpha",
 			InstalledVersion:  "1.0.0",
 		},
-		cfg: Config{Manifest: "alpha", Tier: "standard"},
+		cfg: model.Config{Manifest: "alpha", Tier: "standard"},
 	}
 	body := m.stateBody()
 	if !strings.Contains(body, "/test/project") {
@@ -538,7 +579,7 @@ func TestStateBody_ShowsConfig(t *testing.T) {
 // ── mainMenuModel.Update ────────────────────────────────────────
 
 func TestMainMenuModel_CtrlCExits(t *testing.T) {
-	state := InstallState{}
+	state := model.InstallState{}
 	vals := &menuValues{}
 	form := buildMainMenuForm(state, &vals.choice)
 	m := mainMenuModel{form: form, mode: "menu", vals: vals}
@@ -555,14 +596,14 @@ func TestMainMenuModel_CtrlCExits(t *testing.T) {
 }
 
 func TestMainMenuModel_TextModeEscReturnsToMenu(t *testing.T) {
-	state := InstallState{}
+	state := model.InstallState{}
 	vals := &menuValues{choice: "list"}
 	form := buildMainMenuForm(state, &vals.choice)
 	m := mainMenuModel{
-		form:     form,
-		mode:     "text",
-		state:    state,
-		vals:     vals,
+		form:  form,
+		mode:  "text",
+		state: state,
+		vals:  vals,
 	}
 
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEscape})
@@ -574,14 +615,14 @@ func TestMainMenuModel_TextModeEscReturnsToMenu(t *testing.T) {
 }
 
 func TestMainMenuModel_TextModeEnterReturnsToMenu(t *testing.T) {
-	state := InstallState{}
+	state := model.InstallState{}
 	vals := &menuValues{choice: "state"}
 	form := buildMainMenuForm(state, &vals.choice)
 	m := mainMenuModel{
-		form:   form,
-		mode:   "text",
-		state:  state,
-		vals:   vals,
+		form:  form,
+		mode:  "text",
+		state: state,
+		vals:  vals,
 	}
 
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
@@ -593,7 +634,7 @@ func TestMainMenuModel_TextModeEnterReturnsToMenu(t *testing.T) {
 }
 
 func TestMainMenuModel_WindowSize(t *testing.T) {
-	state := InstallState{}
+	state := model.InstallState{}
 	vals := &menuValues{}
 	form := buildMainMenuForm(state, &vals.choice)
 	m := mainMenuModel{form: form, mode: "menu"}
@@ -609,16 +650,16 @@ func TestMainMenuModel_WindowSize(t *testing.T) {
 // ── mainMenuModel.View ──────────────────────────────────────────
 
 func TestMainMenuModel_View_MenuMode(t *testing.T) {
-	state := InstallState{HasProjectConfig: true, HasInstallMarker: true, InstalledManifest: "alpha", InstalledVersion: "1.0.0"}
+	state := model.InstallState{HasProjectConfig: true, HasInstallMarker: true, InstalledManifest: "alpha", InstalledVersion: "1.0.0"}
 	vals := &menuValues{}
 	form := buildMainMenuForm(state, &vals.choice)
 	m := mainMenuModel{
-		form:       form,
-		mode:       "menu",
-		state:      state,
-		cfg:        testConfig(),
-		width:      80,
-		height:     24,
+		form:   form,
+		mode:   "menu",
+		state:  state,
+		cfg:    testConfig(),
+		width:  80,
+		height: 24,
 	}
 
 	view := m.View()
@@ -628,7 +669,7 @@ func TestMainMenuModel_View_MenuMode(t *testing.T) {
 }
 
 func TestMainMenuModel_View_TextMode(t *testing.T) {
-	state := InstallState{}
+	state := model.InstallState{}
 	vals := &menuValues{}
 	form := buildMainMenuForm(state, &vals.choice)
 	m := mainMenuModel{
@@ -652,32 +693,23 @@ func TestMainMenuModel_View_TextMode(t *testing.T) {
 // ── RunList ─────────────────────────────────────────────────────
 
 func TestRunList_JSONOverview(t *testing.T) {
-	old := activateBaseDir
-	activateBaseDir = t.TempDir()
-	t.Cleanup(func() { activateBaseDir = old })
+	setupTestStore(t)
 
 	manifests := testManifests()
 	cfg := testConfig()
-	svc := NewService(t.TempDir(), manifests, cfg, false, "", "")
+	svc := commands.NewService(t.TempDir(), manifests, cfg, false, "", "")
 
-	// Capture stdout
-	r, w, _ := os.Pipe()
-	origStdout := os.Stdout
-	os.Stdout = w
+	var buf bytes.Buffer
+	printJSON := func(v interface{}) error {
+		return json.NewEncoder(&buf).Encode(v)
+	}
 
-	err := RunList(svc, "", "", "", true)
-
-	w.Close()
-	os.Stdout = origStdout
-
+	err := RunList(svc, "", "", "", true, printJSON)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	var buf [8192]byte
-	n, _ := r.Read(buf[:])
-	output := string(buf[:n])
-
+	output := buf.String()
 	var result map[string]interface{}
 	if err := json.Unmarshal([]byte(output), &result); err != nil {
 		t.Fatalf("expected valid JSON, got parse error: %v\noutput: %s", err, output)
@@ -692,31 +724,23 @@ func TestRunList_JSONOverview(t *testing.T) {
 }
 
 func TestRunList_JSONDetail(t *testing.T) {
-	old := activateBaseDir
-	activateBaseDir = t.TempDir()
-	t.Cleanup(func() { activateBaseDir = old })
+	setupTestStore(t)
 
 	manifests := testManifests()
 	cfg := testConfig()
-	svc := NewService(t.TempDir(), manifests, cfg, false, "", "")
+	svc := commands.NewService(t.TempDir(), manifests, cfg, false, "", "")
 
-	r, w, _ := os.Pipe()
-	origStdout := os.Stdout
-	os.Stdout = w
+	var buf bytes.Buffer
+	printJSON := func(v interface{}) error {
+		return json.NewEncoder(&buf).Encode(v)
+	}
 
-	err := RunList(svc, "alpha", "core", "", true)
-
-	w.Close()
-	os.Stdout = origStdout
-
+	err := RunList(svc, "alpha", "core", "", true, printJSON)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	var buf [8192]byte
-	n, _ := r.Read(buf[:])
-	output := string(buf[:n])
-
+	output := buf.String()
 	var result map[string]interface{}
 	if err := json.Unmarshal([]byte(output), &result); err != nil {
 		t.Fatalf("expected valid JSON: %v\noutput: %s", err, output)
@@ -727,19 +751,17 @@ func TestRunList_JSONDetail(t *testing.T) {
 }
 
 func TestRunList_HumanOverview(t *testing.T) {
-	old := activateBaseDir
-	activateBaseDir = t.TempDir()
-	t.Cleanup(func() { activateBaseDir = old })
+	setupTestStore(t)
 
 	manifests := testManifests()
 	cfg := testConfig()
-	svc := NewService(t.TempDir(), manifests, cfg, false, "", "")
+	svc := commands.NewService(t.TempDir(), manifests, cfg, false, "", "")
 
 	r, w, _ := os.Pipe()
 	origStdout := os.Stdout
 	os.Stdout = w
 
-	err := RunList(svc, "", "", "", false)
+	err := RunList(svc, "", "", "", false, nil)
 
 	w.Close()
 	os.Stdout = origStdout
@@ -761,15 +783,13 @@ func TestRunList_HumanOverview(t *testing.T) {
 }
 
 func TestRunList_UnknownManifest(t *testing.T) {
-	old := activateBaseDir
-	activateBaseDir = t.TempDir()
-	t.Cleanup(func() { activateBaseDir = old })
+	setupTestStore(t)
 
 	manifests := testManifests()
 	cfg := testConfig()
-	svc := NewService(t.TempDir(), manifests, cfg, false, "", "")
+	svc := commands.NewService(t.TempDir(), manifests, cfg, false, "", "")
 
-	err := RunList(svc, "nonexistent", "", "", true)
+	err := RunList(svc, "nonexistent", "", "", true, nil)
 	if err == nil {
 		t.Fatal("expected error for unknown manifest")
 	}
@@ -861,7 +881,7 @@ func TestFullscreenTextModel_VerticalCentering(t *testing.T) {
 }
 
 func TestMainMenuModel_View_ExitAction(t *testing.T) {
-	state := InstallState{}
+	state := model.InstallState{}
 	vals := &menuValues{}
 	form := buildMainMenuForm(state, &vals.choice)
 	m := mainMenuModel{
@@ -959,7 +979,7 @@ func TestManifestForm_CompletionAdvancesToConfigure(t *testing.T) {
 
 	// Send enter through the model (not just the form) so phase transition fires
 	updated, _ := updateModel(m, tea.KeyMsg{Type: tea.KeyEnter})
-	result := updated.(model)
+	result := updated.(installerModel)
 
 	if result.phase != phaseConfigure {
 		t.Fatalf("expected phaseConfigure after manifest select, got %d", result.phase)
@@ -976,7 +996,7 @@ func TestManifestForm_CompletionAdvancesToConfigure(t *testing.T) {
 
 func TestConfigureForm_TierNavigation(t *testing.T) {
 	manifests := testManifests()[:1] // alpha has 2 tiers: core, ad-hoc
-	cfg := Config{Manifest: "alpha", Tier: "core"}
+	cfg := model.Config{Manifest: "alpha", Tier: "core"}
 	m := initialModel(manifests, cfg)
 
 	// Should start in configure phase (single manifest)
@@ -1004,7 +1024,7 @@ func TestConfigureForm_TierNavigation(t *testing.T) {
 
 func TestConfigureForm_TierSelectAndAdvance(t *testing.T) {
 	manifests := testManifests()[:1]
-	cfg := Config{Manifest: "alpha", Tier: "core"}
+	cfg := model.Config{Manifest: "alpha", Tier: "core"}
 	m := initialModel(manifests, cfg)
 	m.form.Init()
 
@@ -1026,7 +1046,7 @@ func TestConfigureForm_TierSelectAndAdvance(t *testing.T) {
 
 func TestConfigureForm_FullFlowWithConfirm(t *testing.T) {
 	manifests := testManifests()[:1]
-	cfg := Config{Manifest: "alpha", Tier: "core"}
+	cfg := model.Config{Manifest: "alpha", Tier: "core"}
 	m := initialModel(manifests, cfg)
 	m.form.Init()
 
@@ -1053,7 +1073,7 @@ func TestConfigureForm_FullFlowWithConfirm(t *testing.T) {
 
 func TestConfigureForm_CancelFlow(t *testing.T) {
 	manifests := testManifests()[:1]
-	cfg := Config{Manifest: "alpha", Tier: "core"}
+	cfg := model.Config{Manifest: "alpha", Tier: "core"}
 	m := initialModel(manifests, cfg)
 	m.form.Init()
 
@@ -1088,7 +1108,7 @@ func TestInstallerWizard_FullKeyboardFlow(t *testing.T) {
 
 	// Press enter through the full model to trigger phase transition
 	updated, _ := updateModel(m, tea.KeyMsg{Type: tea.KeyEnter})
-	m = updated.(model)
+	m = updated.(installerModel)
 
 	if m.phase != phaseConfigure {
 		t.Fatalf("expected phaseConfigure, got %d", m.phase)
@@ -1114,7 +1134,7 @@ func TestInstallerWizard_FullKeyboardFlow(t *testing.T) {
 // ── Main menu: keyboard navigation through menu items ───────────
 
 func TestMainMenu_NavigateToSpecificOption(t *testing.T) {
-	state := InstallState{}
+	state := model.InstallState{}
 	vals := &menuValues{}
 	form := buildMainMenuForm(state, &vals.choice)
 	form.Init()
@@ -1148,7 +1168,7 @@ func TestMainMenu_NavigateToSpecificOption(t *testing.T) {
 }
 
 func TestMainMenu_NavigateToExit(t *testing.T) {
-	state := InstallState{}
+	state := model.InstallState{}
 	vals := &menuValues{}
 	form := buildMainMenuForm(state, &vals.choice)
 	form.Init()
@@ -1168,7 +1188,7 @@ func TestMainMenu_NavigateToExit(t *testing.T) {
 }
 
 func TestMainMenu_InstalledStateHasRemoveOption(t *testing.T) {
-	state := InstallState{
+	state := model.InstallState{
 		HasProjectConfig:  true,
 		HasInstallMarker:  true,
 		InstalledManifest: "alpha",
@@ -1201,7 +1221,7 @@ func TestMainMenu_InstalledStateHasRemoveOption(t *testing.T) {
 
 func TestMainMenuModel_SelectListShowsFrameworks(t *testing.T) {
 	manifests := testManifests()
-	state := InstallState{}
+	state := model.InstallState{}
 	vals := &menuValues{}
 	form := buildMainMenuForm(state, &vals.choice)
 	form.Init()
@@ -1211,7 +1231,7 @@ func TestMainMenuModel_SelectListShowsFrameworks(t *testing.T) {
 		mode:      "menu",
 		manifests: manifests,
 		state:     state,
-		vals: vals,
+		vals:      vals,
 	}
 
 	// Fresh: [guided-install, repo-add, manage-files, settings, telemetry, list, state, exit]
@@ -1239,7 +1259,7 @@ func TestMainMenuModel_SelectListShowsFrameworks(t *testing.T) {
 }
 
 func TestMainMenuModel_SelectStateShowsBody(t *testing.T) {
-	state := InstallState{HasProjectConfig: true, HasInstallMarker: true, InstalledManifest: "alpha", InstalledVersion: "1.0.0"}
+	state := model.InstallState{HasProjectConfig: true, HasInstallMarker: true, InstalledManifest: "alpha", InstalledVersion: "1.0.0"}
 	vals := &menuValues{}
 	form := buildMainMenuForm(state, &vals.choice)
 	form.Init()
@@ -1250,7 +1270,7 @@ func TestMainMenuModel_SelectStateShowsBody(t *testing.T) {
 		state:      state,
 		cfg:        testConfig(),
 		projectDir: "/tmp/test",
-		vals: vals,
+		vals:       vals,
 	}
 
 	// Installed: [quick-install, guided-install, repo-add, repo-remove, update-all, manage-files, settings, telemetry, list, state, exit]
@@ -1274,16 +1294,16 @@ func TestMainMenuModel_SelectStateShowsBody(t *testing.T) {
 }
 
 func TestMainMenuModel_SelectGuidedInstallQuits(t *testing.T) {
-	state := InstallState{}
+	state := model.InstallState{}
 	vals := &menuValues{}
 	form := buildMainMenuForm(state, &vals.choice)
 	form.Init()
 
 	m := mainMenuModel{
-		form:   form,
-		mode:   "menu",
-		state:  state,
-		vals: vals,
+		form:  form,
+		mode:  "menu",
+		state: state,
+		vals:  vals,
 	}
 
 	// First item is already "guided-install" — just enter
@@ -1299,16 +1319,16 @@ func TestMainMenuModel_SelectGuidedInstallQuits(t *testing.T) {
 }
 
 func TestMainMenuModel_SelectExitQuits(t *testing.T) {
-	state := InstallState{}
+	state := model.InstallState{}
 	vals := &menuValues{}
 	form := buildMainMenuForm(state, &vals.choice)
 	form.Init()
 
 	m := mainMenuModel{
-		form:   form,
-		mode:   "menu",
-		state:  state,
-		vals: vals,
+		form:  form,
+		mode:  "menu",
+		state: state,
+		vals:  vals,
 	}
 
 	// Navigate to exit (7 downs for fresh state)
@@ -1331,7 +1351,7 @@ func TestMainMenuModel_SelectExitQuits(t *testing.T) {
 
 func TestMainMenuModel_TextModeFullCycle(t *testing.T) {
 	manifests := testManifests()
-	state := InstallState{}
+	state := model.InstallState{}
 	vals := &menuValues{}
 	form := buildMainMenuForm(state, &vals.choice)
 	form.Init()
@@ -1341,7 +1361,7 @@ func TestMainMenuModel_TextModeFullCycle(t *testing.T) {
 		mode:      "menu",
 		manifests: manifests,
 		state:     state,
-		vals: vals,
+		vals:      vals,
 	}
 
 	// Navigate to "list" (5 downs) and select it
@@ -1362,8 +1382,8 @@ func TestMainMenuModel_TextModeFullCycle(t *testing.T) {
 	}
 
 	// Press escape to return to menu
-	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEscape})
-	m = updated.(mainMenuModel)
+	updated2, _ := m.Update(tea.KeyMsg{Type: tea.KeyEscape})
+	m = updated2.(mainMenuModel)
 
 	if m.mode != "menu" {
 		t.Fatalf("expected menu mode after esc, got %q", m.mode)
@@ -1397,7 +1417,7 @@ func TestInstallerWizard_ModelUpdatePhaseTransitions(t *testing.T) {
 	// Send enter through model.Update to trigger state machine
 	var updated tea.Model
 	updated, _ = updateModel(m, tea.KeyMsg{Type: tea.KeyEnter})
-	m = updated.(model)
+	m = updated.(installerModel)
 
 	// Should now be in configure phase with beta selected
 	if m.phase != phaseConfigure {
@@ -1419,7 +1439,7 @@ func TestInstallerWizard_ModelUpdatePhaseTransitions(t *testing.T) {
 
 	// Send final state through model
 	updated, _ = updateModel(m, tea.KeyMsg{Type: tea.KeyEnter})
-	m = updated.(model)
+	m = updated.(installerModel)
 
 	if !m.quitting {
 		t.Fatal("expected quitting=true after full wizard completion")
@@ -1455,8 +1475,8 @@ func TestManifestForm_WraparoundBehavior(t *testing.T) {
 
 func TestConfigureForm_SingleTierSkipsTierSelect(t *testing.T) {
 	// Beta has only 1 tier — form should skip tier selection
-	betaOnly := []Manifest{testManifests()[1]} // beta
-	cfg := Config{Manifest: "beta", Tier: "foundation"}
+	betaOnly := []model.Manifest{testManifests()[1]} // beta
+	cfg := model.Config{Manifest: "beta", Tier: "foundation"}
 	m := initialModel(betaOnly, cfg)
 	m.form.Init()
 
@@ -1478,43 +1498,10 @@ func TestConfigureForm_SingleTierSkipsTierSelect(t *testing.T) {
 // Full runtime simulation — ALL keys routed through model.Update
 // ════════════════════════════════════════════════════════════════
 
-// simulateRuntime mirrors Bubble Tea's event loop: Init → drain, then
-// every key goes through model.Update with full command draining.
-func simulateRuntime(m tea.Model, keys []tea.Msg) tea.Model {
-	// Process Init
-	cmd := m.Init()
-	for i := 0; i < 20 && cmd != nil; i++ {
-		msg := cmd()
-		if msg == nil {
-			break
-		}
-		if _, ok := msg.(tea.QuitMsg); ok {
-			return m
-		}
-		m, cmd = m.Update(msg)
-	}
-
-	// Process each key event
-	for _, key := range keys {
-		m, cmd = m.Update(key)
-		for i := 0; i < 20 && cmd != nil; i++ {
-			msg := cmd()
-			if msg == nil {
-				break
-			}
-			if _, ok := msg.(tea.QuitMsg); ok {
-				return m
-			}
-			m, cmd = m.Update(msg)
-		}
-	}
-	return m
-}
-
 func TestMainMenuModel_ExitViaModelUpdate(t *testing.T) {
 	// Installed state: 11 menu items
 	// [quick-install, guided-install, repo-add, repo-remove, update-all, manage-files, settings, telemetry, list, state, exit]
-	state := InstallState{
+	state := model.InstallState{
 		HasProjectConfig:  true,
 		HasInstallMarker:  true,
 		InstalledManifest: "alpha",
@@ -1546,7 +1533,7 @@ func TestMainMenuModel_ExitViaModelUpdate(t *testing.T) {
 
 func TestMainMenuModel_ShowFrameworksViaModelUpdate(t *testing.T) {
 	// Installed state: navigate to "Show frameworks" (list = 8 downs)
-	state := InstallState{
+	state := model.InstallState{
 		HasProjectConfig:  true,
 		HasInstallMarker:  true,
 		InstalledManifest: "alpha",
@@ -1580,7 +1567,7 @@ func TestMainMenuModel_ShowFrameworksViaModelUpdate(t *testing.T) {
 
 func TestMainMenuModel_ChoiceTracksDuringNavigation(t *testing.T) {
 	// Verify vals.choice updates on every Down arrow through model.Update
-	state := InstallState{
+	state := model.InstallState{
 		HasProjectConfig:  true,
 		HasInstallMarker:  true,
 		InstalledManifest: "alpha",
@@ -1632,7 +1619,7 @@ func TestMainMenuModel_ChoiceTracksDuringNavigation(t *testing.T) {
 
 func TestMainMenuModel_FrameworksRoundTrip_ThenExit(t *testing.T) {
 	// Reproduce reported bug: show frameworks → return → select exit → exits
-	state := InstallState{
+	state := model.InstallState{
 		HasProjectConfig:  true,
 		HasInstallMarker:  true,
 		InstalledManifest: "alpha",
@@ -1685,7 +1672,7 @@ func TestMainMenuModel_FrameworksRoundTrip_ThenExit(t *testing.T) {
 
 func TestMainMenuModel_StateRoundTrip_ThenExit(t *testing.T) {
 	// show state → return → exit
-	state := InstallState{HasProjectConfig: true, HasInstallMarker: true}
+	state := model.InstallState{HasProjectConfig: true, HasInstallMarker: true}
 	vals := &menuValues{}
 	form := buildMainMenuForm(state, &vals.choice)
 	var m tea.Model = mainMenuModel{
@@ -1731,180 +1718,180 @@ func TestMainMenuModel_StateRoundTrip_ThenExit(t *testing.T) {
 // ── Update result formatting ────────────────────────────────────
 
 func TestFormatUpdateResult_WithUpdatesAndSkips(t *testing.T) {
-result := &UpdateResult{
-Updated: []string{"instructions/security.md", "agents/planner.md"},
-Skipped: []string{"instructions/setup.md"},
-}
-text := formatUpdateResult(result)
-if !strings.Contains(text, "Updated 2 files") {
-t.Fatal("expected updated count")
-}
-if !strings.Contains(text, "Skipped 1 file") {
-t.Fatal("expected skipped count")
-}
-if !strings.Contains(text, "⬆") {
-t.Fatal("expected update icon")
-}
-if !strings.Contains(text, "⏭") {
-t.Fatal("expected skip icon")
-}
+	result := &commands.UpdateResult{
+		Updated: []string{"instructions/security.md", "agents/planner.md"},
+		Skipped: []string{"instructions/setup.md"},
+	}
+	text := FormatUpdateResult(result)
+	if !strings.Contains(text, "Updated 2 files") {
+		t.Fatal("expected updated count")
+	}
+	if !strings.Contains(text, "Skipped 1 file") {
+		t.Fatal("expected skipped count")
+	}
+	if !strings.Contains(text, "⬆") {
+		t.Fatal("expected update icon")
+	}
+	if !strings.Contains(text, "⏭") {
+		t.Fatal("expected skip icon")
+	}
 }
 
 func TestFormatUpdateResult_NothingToUpdate(t *testing.T) {
-result := &UpdateResult{}
-text := formatUpdateResult(result)
-if !strings.Contains(text, "up to date") {
-t.Fatal("expected 'up to date' message")
-}
+	result := &commands.UpdateResult{}
+	text := FormatUpdateResult(result)
+	if !strings.Contains(text, "up to date") {
+		t.Fatal("expected 'up to date' message")
+	}
 }
 
 func TestFormatUpdateResult_OnlyUpdated(t *testing.T) {
-result := &UpdateResult{Updated: []string{"file1.md"}}
-text := formatUpdateResult(result)
-if !strings.Contains(text, "Updated 1 file") {
-t.Fatal("expected updated count")
-}
-if strings.Contains(text, "Skipped") {
-t.Fatal("should not contain skipped section")
-}
+	result := &commands.UpdateResult{Updated: []string{"file1.md"}}
+	text := FormatUpdateResult(result)
+	if !strings.Contains(text, "Updated 1 file") {
+		t.Fatal("expected updated count")
+	}
+	if strings.Contains(text, "Skipped") {
+		t.Fatal("should not contain skipped section")
+	}
 }
 
 // ── Menu integration: new items exist ───────────────────────────
 
 func TestMainMenu_NewItemsPresent_FreshState(t *testing.T) {
-state := InstallState{}
-vals := &menuValues{}
-form := buildMainMenuForm(state, &vals.choice)
-form.Init()
+	state := model.InstallState{}
+	vals := &menuValues{}
+	form := buildMainMenuForm(state, &vals.choice)
+	form.Init()
 
-expected := []string{
-"guided-install", "repo-add", "manage-files", "settings",
-"telemetry", "list", "state", "exit",
-}
+	expected := []string{
+		"guided-install", "repo-add", "manage-files", "settings",
+		"telemetry", "list", "state", "exit",
+	}
 
-var items []string
-items = append(items, vals.choice)
-for i := 0; i < len(expected)-1; i++ {
-form = sendKey(form, tea.KeyDown)
-items = append(items, vals.choice)
-}
+	var items []string
+	items = append(items, vals.choice)
+	for i := 0; i < len(expected)-1; i++ {
+		form = sendKey(form, tea.KeyDown)
+		items = append(items, vals.choice)
+	}
 
-if len(items) != len(expected) {
-t.Fatalf("expected %d items, got %d: %v", len(expected), len(items), items)
-}
-for i, exp := range expected {
-if items[i] != exp {
-t.Fatalf("item %d: expected %q, got %q\nall: %v", i, exp, items[i], items)
-}
-}
+	if len(items) != len(expected) {
+		t.Fatalf("expected %d items, got %d: %v", len(expected), len(items), items)
+	}
+	for i, exp := range expected {
+		if items[i] != exp {
+			t.Fatalf("item %d: expected %q, got %q\nall: %v", i, exp, items[i], items)
+		}
+	}
 }
 
 func TestMainMenu_NewItemsPresent_InstalledState(t *testing.T) {
-state := InstallState{
-HasProjectConfig: true, HasInstallMarker: true,
-InstalledManifest: "alpha", InstalledVersion: "1.0.0",
-}
-vals := &menuValues{}
-form := buildMainMenuForm(state, &vals.choice)
-form.Init()
+	state := model.InstallState{
+		HasProjectConfig: true, HasInstallMarker: true,
+		InstalledManifest: "alpha", InstalledVersion: "1.0.0",
+	}
+	vals := &menuValues{}
+	form := buildMainMenuForm(state, &vals.choice)
+	form.Init()
 
-expected := []string{
-"quick-install", "guided-install", "repo-add", "repo-remove",
-"update-all", "manage-files", "settings", "telemetry",
-"list", "state", "exit",
-}
+	expected := []string{
+		"quick-install", "guided-install", "repo-add", "repo-remove",
+		"update-all", "manage-files", "settings", "telemetry",
+		"list", "state", "exit",
+	}
 
-var items []string
-items = append(items, vals.choice)
-for i := 0; i < len(expected)-1; i++ {
-form = sendKey(form, tea.KeyDown)
-items = append(items, vals.choice)
-}
+	var items []string
+	items = append(items, vals.choice)
+	for i := 0; i < len(expected)-1; i++ {
+		form = sendKey(form, tea.KeyDown)
+		items = append(items, vals.choice)
+	}
 
-if len(items) != len(expected) {
-t.Fatalf("expected %d items, got %d: %v", len(expected), len(items), items)
-}
-for i, exp := range expected {
-if items[i] != exp {
-t.Fatalf("item %d: expected %q, got %q\nall: %v", i, exp, items[i], items)
-}
-}
+	if len(items) != len(expected) {
+		t.Fatalf("expected %d items, got %d: %v", len(expected), len(items), items)
+	}
+	for i, exp := range expected {
+		if items[i] != exp {
+			t.Fatalf("item %d: expected %q, got %q\nall: %v", i, exp, items[i], items)
+		}
+	}
 }
 
 func TestMainMenu_ManageFilesAction(t *testing.T) {
-state := InstallState{}
-vals := &menuValues{}
-form := buildMainMenuForm(state, &vals.choice)
-form.Init()
-m := mainMenuModel{form: form, mode: "menu", state: state, vals: vals}
-m.form = sendKey(m.form, tea.KeyDown)
-m.form = sendKey(m.form, tea.KeyDown)
-updated, cmd := updateModel(m, tea.KeyMsg{Type: tea.KeyEnter})
-result := updated.(mainMenuModel)
-if result.action != "manage-files" {
-t.Fatalf("expected action=manage-files, got %q", result.action)
-}
-if cmd == nil {
-t.Fatal("expected quit command for manage-files action")
-}
+	state := model.InstallState{}
+	vals := &menuValues{}
+	form := buildMainMenuForm(state, &vals.choice)
+	form.Init()
+	m := mainMenuModel{form: form, mode: "menu", state: state, vals: vals}
+	m.form = sendKey(m.form, tea.KeyDown)
+	m.form = sendKey(m.form, tea.KeyDown)
+	updated, cmd := updateModel(m, tea.KeyMsg{Type: tea.KeyEnter})
+	result := updated.(mainMenuModel)
+	if result.action != "manage-files" {
+		t.Fatalf("expected action=manage-files, got %q", result.action)
+	}
+	if cmd == nil {
+		t.Fatal("expected quit command for manage-files action")
+	}
 }
 
 func TestMainMenu_SettingsAction(t *testing.T) {
-state := InstallState{}
-vals := &menuValues{}
-form := buildMainMenuForm(state, &vals.choice)
-form.Init()
-m := mainMenuModel{form: form, mode: "menu", state: state, vals: vals}
-for i := 0; i < 3; i++ {
-m.form = sendKey(m.form, tea.KeyDown)
-}
-updated, cmd := updateModel(m, tea.KeyMsg{Type: tea.KeyEnter})
-result := updated.(mainMenuModel)
-if result.action != "settings" {
-t.Fatalf("expected action=settings, got %q", result.action)
-}
-if cmd == nil {
-t.Fatal("expected quit command")
-}
+	state := model.InstallState{}
+	vals := &menuValues{}
+	form := buildMainMenuForm(state, &vals.choice)
+	form.Init()
+	m := mainMenuModel{form: form, mode: "menu", state: state, vals: vals}
+	for i := 0; i < 3; i++ {
+		m.form = sendKey(m.form, tea.KeyDown)
+	}
+	updated, cmd := updateModel(m, tea.KeyMsg{Type: tea.KeyEnter})
+	result := updated.(mainMenuModel)
+	if result.action != "settings" {
+		t.Fatalf("expected action=settings, got %q", result.action)
+	}
+	if cmd == nil {
+		t.Fatal("expected quit command")
+	}
 }
 
 func TestMainMenu_TelemetryAction(t *testing.T) {
-state := InstallState{}
-vals := &menuValues{}
-form := buildMainMenuForm(state, &vals.choice)
-form.Init()
-m := mainMenuModel{form: form, mode: "menu", state: state, vals: vals}
-for i := 0; i < 4; i++ {
-m.form = sendKey(m.form, tea.KeyDown)
-}
-updated, cmd := updateModel(m, tea.KeyMsg{Type: tea.KeyEnter})
-result := updated.(mainMenuModel)
-if result.action != "telemetry" {
-t.Fatalf("expected action=telemetry, got %q", result.action)
-}
-if cmd == nil {
-t.Fatal("expected quit command")
-}
+	state := model.InstallState{}
+	vals := &menuValues{}
+	form := buildMainMenuForm(state, &vals.choice)
+	form.Init()
+	m := mainMenuModel{form: form, mode: "menu", state: state, vals: vals}
+	for i := 0; i < 4; i++ {
+		m.form = sendKey(m.form, tea.KeyDown)
+	}
+	updated, cmd := updateModel(m, tea.KeyMsg{Type: tea.KeyEnter})
+	result := updated.(mainMenuModel)
+	if result.action != "telemetry" {
+		t.Fatalf("expected action=telemetry, got %q", result.action)
+	}
+	if cmd == nil {
+		t.Fatal("expected quit command")
+	}
 }
 
 func TestMainMenu_UpdateAllAction(t *testing.T) {
-state := InstallState{
-HasProjectConfig: true, HasInstallMarker: true,
-InstalledManifest: "alpha", InstalledVersion: "1.0.0",
-}
-vals := &menuValues{}
-form := buildMainMenuForm(state, &vals.choice)
-form.Init()
-m := mainMenuModel{form: form, mode: "menu", state: state, vals: vals}
-for i := 0; i < 4; i++ {
-m.form = sendKey(m.form, tea.KeyDown)
-}
-updated, cmd := updateModel(m, tea.KeyMsg{Type: tea.KeyEnter})
-result := updated.(mainMenuModel)
-if result.action != "update-all" {
-t.Fatalf("expected action=update-all, got %q", result.action)
-}
-if cmd == nil {
-t.Fatal("expected quit command")
-}
+	state := model.InstallState{
+		HasProjectConfig: true, HasInstallMarker: true,
+		InstalledManifest: "alpha", InstalledVersion: "1.0.0",
+	}
+	vals := &menuValues{}
+	form := buildMainMenuForm(state, &vals.choice)
+	form.Init()
+	m := mainMenuModel{form: form, mode: "menu", state: state, vals: vals}
+	for i := 0; i < 4; i++ {
+		m.form = sendKey(m.form, tea.KeyDown)
+	}
+	updated, cmd := updateModel(m, tea.KeyMsg{Type: tea.KeyEnter})
+	result := updated.(mainMenuModel)
+	if result.action != "update-all" {
+		t.Fatalf("expected action=update-all, got %q", result.action)
+	}
+	if cmd == nil {
+		t.Fatal("expected quit command")
+	}
 }
