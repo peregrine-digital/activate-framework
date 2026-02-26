@@ -1,17 +1,21 @@
 package main
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/peregrine-digital/activate-framework/cli/storage"
+)
 
 func TestParseArgsDefaultsToMenu(t *testing.T) {
 	args := parseArgs([]string{})
 	if args.command != "menu" {
 		t.Fatalf("expected default command menu, got %q", args.command)
 	}
-	if args.repo != DefaultRepo {
-		t.Fatalf("expected default repo %q, got %q", DefaultRepo, args.repo)
+	if args.repo != storage.DefaultRepo {
+		t.Fatalf("expected default repo %q, got %q", storage.DefaultRepo, args.repo)
 	}
-	if args.branch != DefaultBranch {
-		t.Fatalf("expected default branch %q, got %q", DefaultBranch, args.branch)
+	if args.branch != storage.DefaultBranch {
+		t.Fatalf("expected default branch %q, got %q", storage.DefaultBranch, args.branch)
 	}
 }
 

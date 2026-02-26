@@ -7,29 +7,38 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
+
+	"github.com/peregrine-digital/activate-framework/cli/commands"
+	"github.com/peregrine-digital/activate-framework/cli/engine"
+	"github.com/peregrine-digital/activate-framework/cli/model"
+	"github.com/peregrine-digital/activate-framework/cli/storage"
+	"github.com/peregrine-digital/activate-framework/cli/transport"
+	"github.com/peregrine-digital/activate-framework/cli/tui"
 )
 
 const version = "0.1.0"
 
 type cliArgs struct {
-	command      string // "menu" (default), "install", "list", "state", "config", "repo", "update", "diff", "sync", "serve"
-	configAction string // "get" or "set" for config command
-	repoAction   string // "add" or "remove" for repo command
+	command      string
+	configAction string
+	repoAction   string
 	manifest     string
 	tier         string
 	target       string
 	category     string
-	scope        string // "project", "global", "resolved"
+	scope        string
 	projectDir   string
-	file         string // --file flag for per-file operations
+	file         string
 	remote       bool
-	stdio        bool // --stdio flag for serve command
+	stdio        bool
 	repo         string
 	branch       string
-	list         bool // legacy --list flag
+	list         bool
 	json         bool
 	help         bool
 	version      bool
@@ -37,12 +46,11 @@ type cliArgs struct {
 
 func parseArgs(args []string) cliArgs {
 	a := cliArgs{
-		repo:   DefaultRepo,
-		branch: DefaultBranch,
+		repo:   storage.DefaultRepo,
+		branch: storage.DefaultBranch,
 	}
 
 	i := 0
-	// Check for subcommand
 	if i < len(args) && !strings.HasPrefix(args[i], "-") {
 		switch args[i] {
 		case "menu", "install", "list", "state", "config", "repo", "update", "diff", "sync", "serve", "version", "help":
@@ -128,7 +136,6 @@ func parseArgs(args []string) cliArgs {
 		}
 	}
 
-	// Normalize: --list flag maps to list command
 	if a.list && a.command == "" {
 		a.command = "list"
 	}
@@ -173,7 +180,21 @@ Flags:
   --json              Machine-readable JSON output (list command)
   -h, --help          Show this help message
   -v, --version       Print version
-`, version, DefaultRepo, DefaultBranch)
+`, version, storage.DefaultRepo, storage.DefaultBranch)
+}
+
+func printJSON(v interface{}) error {
+	enc := json.NewEncoder(os.Stdout)
+	enc.SetIndent("", "  ")
+	return enc.Encode(v)
+}
+
+func resolveExeDir() string {
+	exe, err := os.Executable()
+	if err != nil {
+		return "."
+	}
+	return filepath.Dir(exe)
 }
 
 func main() {
@@ -190,22 +211,21 @@ func main() {
 	}
 
 	// ── Discover manifests ──────────────────────────────────────
-	var manifests []Manifest
+	var manifests []model.Manifest
 	var err error
 
 	if args.remote {
 		fmt.Printf("Fetching manifests from %s@%s...\n\n", args.repo, args.branch)
-		manifests, err = DiscoverRemoteManifests(args.repo, args.branch)
+		manifests, err = engine.DiscoverRemoteManifests(args.repo, args.branch)
 	} else {
 		var bundleDir string
-		bundleDir, err = ResolveBundleDir(resolveExeDir())
+		bundleDir, err = engine.ResolveBundleDir(resolveExeDir())
 		if err != nil {
-			// Try from cwd as fallback
 			cwd, _ := os.Getwd()
-			bundleDir, err = ResolveBundleDir(cwd)
+			bundleDir, err = engine.ResolveBundleDir(cwd)
 		}
 		if err == nil {
-			manifests, err = DiscoverManifests(bundleDir)
+			manifests, err = engine.DiscoverManifests(bundleDir)
 		}
 	}
 
@@ -228,28 +248,28 @@ func main() {
 	if strings.TrimSpace(args.projectDir) != "" {
 		projectDir = args.projectDir
 	}
-	overrides := &Config{}
+	overrides := &model.Config{}
 	if args.manifest != "" {
 		overrides.Manifest = args.manifest
 	}
 	if args.tier != "" {
 		overrides.Tier = args.tier
 	}
-	cfg := ResolveConfig(projectDir, overrides)
+	cfg := storage.ResolveConfig(projectDir, overrides)
 
 	// ── Create service ─────────────────────────────────────────
-	svc := NewService(projectDir, manifests, cfg, args.remote, args.repo, args.branch)
+	svc := commands.NewService(projectDir, manifests, cfg, args.remote, args.repo, args.branch)
 
 	// ── Dispatch command ────────────────────────────────────────
 	switch args.command {
 	case "menu":
-		if err := RunInteractiveMenu(svc); err != nil {
+		if err := tui.RunInteractiveMenu(svc); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 			os.Exit(1)
 		}
 
 	case "list":
-		if err := RunList(svc, args.manifest, args.tier, args.category, args.json); err != nil {
+		if err := tui.RunList(svc, args.manifest, args.tier, args.category, args.json, printJSON); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 			os.Exit(1)
 		}
@@ -261,13 +281,13 @@ func main() {
 		}
 
 	case "update":
-		if err := runUpdateCommand(svc, args.json); err != nil {
+		if err := commands.RunUpdateCommand(svc, args.json, printJSON); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 			os.Exit(1)
 		}
 
 	case "sync":
-		if err := runSyncCommand(svc, args.json); err != nil {
+		if err := commands.RunSyncCommand(svc, args.json, printJSON); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 			os.Exit(1)
 		}
@@ -277,8 +297,8 @@ func main() {
 			fmt.Fprintln(os.Stderr, "Error: serve requires --stdio")
 			os.Exit(1)
 		}
-		transport := NewTransport(os.Stdin, os.Stdout)
-		daemon := NewDaemon(svc, transport)
+		t := transport.NewTransport(os.Stdin, os.Stdout)
+		daemon := commands.NewDaemon(svc, t, version)
 		if err := daemon.Serve(); err != nil {
 			fmt.Fprintf(os.Stderr, "daemon error: %s\n", err)
 			os.Exit(1)
@@ -289,7 +309,7 @@ func main() {
 			fmt.Fprintln(os.Stderr, "Error: diff requires --file <path>")
 			os.Exit(1)
 		}
-		if err := runDiffCommand(svc, args.file); err != nil {
+		if err := commands.RunDiffCommand(svc, args.file); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 			os.Exit(1)
 		}
@@ -307,15 +327,13 @@ func main() {
 		}
 
 	case "install":
-		// Per-file install
 		if args.file != "" {
-			if err := runInstallFileCommand(svc, args.file, args.json); err != nil {
+			if err := commands.RunInstallFileCommand(svc, args.file, args.json, printJSON); err != nil {
 				fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 				os.Exit(1)
 			}
 			return
 		}
-		// If --target is set with --tier, run non-interactive
 		if args.target != "" && args.tier != "" {
 			if err := runNonInteractive(manifests, cfg, args); err != nil {
 				fmt.Fprintf(os.Stderr, "Error: %s\n", err)
@@ -323,55 +341,45 @@ func main() {
 			}
 			return
 		}
-		if err := RunInteractiveInstall(svc); err != nil {
+		if err := tui.RunInteractiveInstall(svc); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 			os.Exit(1)
 		}
 	}
 }
 
-func runNonInteractive(manifests []Manifest, cfg Config, args cliArgs) error {
-	return installWithResolvedConfig(manifests, cfg, args.target, args.remote, args.repo, args.branch)
-}
-
-func installWithResolvedConfig(manifests []Manifest, cfg Config, target string, useRemote bool, repo, branch string) error {
-	// Find manifest
-	var chosen *Manifest
-	for i, m := range manifests {
-		if m.ID == cfg.Manifest {
-			chosen = &manifests[i]
-			break
-		}
-	}
-	if chosen == nil {
-		return fmt.Errorf("unknown manifest: %s", cfg.Manifest)
-	}
-
+func runNonInteractive(manifests []model.Manifest, cfg model.Config, args cliArgs) error {
+	target := args.target
 	if strings.HasPrefix(target, "~/") {
 		home, _ := os.UserHomeDir()
 		target = home + target[1:]
 	}
 
-	files := SelectFiles(chosen.Files, *chosen, cfg.Tier)
+	chosen := model.FindManifestByID(manifests, cfg.Manifest)
+	if chosen == nil {
+		return fmt.Errorf("unknown manifest: %s", cfg.Manifest)
+	}
+
+	files := model.SelectFiles(chosen.Files, *chosen, cfg.Tier)
 	fmt.Printf("\nInstalling %d files to %s:\n\n", len(files), target)
 
-	if useRemote {
-		return InstallFilesFromRemote(files, chosen.BasePath, target, chosen.Version, chosen.ID, repo, branch)
+	if args.remote {
+		return engine.InstallFilesFromRemote(files, chosen.BasePath, target, chosen.Version, chosen.ID, args.repo, args.branch)
 	}
-	if err := InstallFiles(files, chosen.BasePath, target, chosen.Version, chosen.ID); err != nil {
+	if err := engine.InstallFiles(files, chosen.BasePath, target, chosen.Version, chosen.ID); err != nil {
 		return err
 	}
 
 	cwd, err := os.Getwd()
 	if err == nil {
-		_ = WriteProjectConfig(cwd, &Config{Manifest: chosen.ID, Tier: cfg.Tier})
+		_ = storage.WriteProjectConfig(cwd, &model.Config{Manifest: chosen.ID, Tier: cfg.Tier})
 	}
 
 	fmt.Printf("\nDone. %s v%s (%s) installed.\n", chosen.Name, chosen.Version, cfg.Tier)
 	return nil
 }
 
-func runStateCommand(svc *ActivateService, jsonOutput bool) error {
+func runStateCommand(svc *commands.ActivateService, jsonOutput bool) error {
 	result := svc.GetState()
 
 	if jsonOutput {
@@ -391,18 +399,18 @@ func runStateCommand(svc *ActivateService, jsonOutput bool) error {
 		return nil
 	}
 
-	groups := make(map[string][]FileStatus)
+	groups := make(map[string][]model.FileStatus)
 	for _, s := range result.Files {
 		groups[s.Category] = append(groups[s.Category], s)
 	}
 
 	fmt.Println()
-	for _, cat := range categoryOrder {
+	for _, cat := range model.CategoryOrder {
 		files, ok := groups[cat]
 		if !ok {
 			continue
 		}
-		label := categoryLabels[cat]
+		label := model.CategoryLabels[cat]
 		if label == "" {
 			label = cat
 		}
@@ -428,7 +436,7 @@ func runStateCommand(svc *ActivateService, jsonOutput bool) error {
 	return nil
 }
 
-func runConfigCommand(svc *ActivateService, args cliArgs, jsonOutput bool) error {
+func runConfigCommand(svc *commands.ActivateService, args cliArgs, jsonOutput bool) error {
 	action := args.configAction
 	if action == "" {
 		action = "get"
@@ -456,7 +464,7 @@ func runConfigCommand(svc *ActivateService, args cliArgs, jsonOutput bool) error
 		return nil
 
 	case "set":
-		updates := &Config{}
+		updates := &model.Config{}
 		if args.manifest != "" {
 			updates.Manifest = args.manifest
 		}
@@ -482,7 +490,7 @@ func runConfigCommand(svc *ActivateService, args cliArgs, jsonOutput bool) error
 	return fmt.Errorf("invalid config action: %s (use get|set)", action)
 }
 
-func runRepoCommand(svc *ActivateService, args cliArgs) error {
+func runRepoCommand(svc *commands.ActivateService, args cliArgs) error {
 	action := args.repoAction
 	if action == "" {
 		action = "add"
