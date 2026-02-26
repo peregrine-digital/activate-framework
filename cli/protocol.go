@@ -22,6 +22,9 @@ const (
 	MethodFileOverride  = "activate/fileOverride"
 	MethodTelemetryRun  = "activate/telemetryRun"
 	MethodTelemetryLog  = "activate/telemetryLog"
+
+	// Notification methods (server → client)
+	NotifyStateChanged = "activate/stateChanged"
 )
 
 // ── Param types ────────────────────────────────────────────────

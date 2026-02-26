@@ -148,6 +148,11 @@ func telemetryLogDir() string {
 	return storeBase()
 }
 
+// telemetryLogPath returns the full path to the active telemetry log.
+func telemetryLogPath() string {
+	return filepath.Join(telemetryLogDir(), telemetryLogFile)
+}
+
 // AppendTelemetryEntry appends an entry to the JSONL log file.
 func AppendTelemetryEntry(entry TelemetryEntry) error {
 	dir := telemetryLogDir()

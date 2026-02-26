@@ -35,13 +35,22 @@ func (s *ActivateService) refreshConfig() {
 
 // ── State queries ──────────────────────────────────────────────
 
+// CategoryInfo describes a file category for UI rendering.
+type CategoryInfo struct {
+	ID    string `json:"id"`
+	Label string `json:"label"`
+}
+
 // StateResult is the full state snapshot returned by GetState.
 type StateResult struct {
-	ProjectDir string         `json:"projectDir"`
-	State      InstallState   `json:"state"`
-	Config     Config         `json:"config"`
-	Tiers      []ResolvedTier `json:"tiers,omitempty"`
-	Files      []FileStatus   `json:"files,omitempty"`
+	ProjectDir       string         `json:"projectDir"`
+	InstallDir       string         `json:"installDir"`
+	TelemetryLogPath string         `json:"telemetryLogPath,omitempty"`
+	State            InstallState   `json:"state"`
+	Config           Config         `json:"config"`
+	Tiers            []ResolvedTier `json:"tiers,omitempty"`
+	Categories       []CategoryInfo `json:"categories,omitempty"`
+	Files            []FileStatus   `json:"files,omitempty"`
 }
 
 // GetState returns the full install/config state for the project.
@@ -50,10 +59,23 @@ func (s *ActivateService) GetState() StateResult {
 	sidecar, _ := readRepoSidecar(s.ProjectDir)
 	chosen := findManifestByID(s.Manifests, s.Config.Manifest)
 
+	// Build category list from known categories
+	cats := make([]CategoryInfo, len(categoryOrder))
+	for i, id := range categoryOrder {
+		label := categoryLabels[id]
+		if label == "" {
+			label = id
+		}
+		cats[i] = CategoryInfo{ID: id, Label: label}
+	}
+
 	result := StateResult{
-		ProjectDir: s.ProjectDir,
-		State:      state,
-		Config:     s.Config,
+		ProjectDir:       s.ProjectDir,
+		InstallDir:       ".github",
+		TelemetryLogPath: telemetryLogPath(),
+		State:            state,
+		Config:           s.Config,
+		Categories:       cats,
 	}
 	if chosen != nil {
 		result.Tiers = DiscoverAvailableTiers(*chosen)

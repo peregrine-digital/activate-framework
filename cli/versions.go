@@ -41,6 +41,7 @@ func ReadFileVersion(path string) (string, error) {
 // FileStatus describes the install/version state of a single manifest file.
 type FileStatus struct {
 	Dest             string `json:"dest"`
+	DisplayName      string `json:"displayName"`
 	Category         string `json:"category"`
 	Tier             string `json:"tier"`
 	Description      string `json:"description,omitempty"`
@@ -71,9 +72,10 @@ func ComputeFileStatuses(m Manifest, sidecar *repoSidecar, cfg Config, projectDi
 		}
 
 		fs := FileStatus{
-			Dest:     f.Dest,
-			Category: cat,
-			Tier:     f.Tier,
+			Dest:        f.Dest,
+			DisplayName: fileDisplayName(f.Dest),
+			Category:    cat,
+			Tier:        f.Tier,
 		}
 		if f.Description != "" {
 			fs.Description = f.Description
@@ -113,4 +115,24 @@ func ComputeFileStatuses(m Manifest, sidecar *repoSidecar, cfg Config, projectDi
 		result = append(result, fs)
 	}
 	return result
+}
+
+// fileDisplayName derives a short display name from a dest path.
+// Examples:
+//
+//	"instructions/general.instructions.md" → "general"
+//	"skills/go-testing/SKILL.md" → "go-testing"
+//	"agents/planner.agent.md" → "planner"
+//	"prompts/review.prompt.md" → "review"
+func fileDisplayName(dest string) string {
+	parts := strings.Split(dest, "/")
+	filename := parts[len(parts)-1]
+	if filename == "SKILL.md" && len(parts) >= 2 {
+		return parts[len(parts)-2]
+	}
+	name := strings.TrimSuffix(filename, ".md")
+	for _, suffix := range []string{".instructions", ".prompt", ".agent"} {
+		name = strings.TrimSuffix(name, suffix)
+	}
+	return name
 }

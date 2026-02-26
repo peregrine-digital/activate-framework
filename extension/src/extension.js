@@ -3,11 +3,14 @@ const path = require('path');
 const { execFileSync } = require('child_process');
 const fs = require('fs');
 const os = require('os');
-const { ActivateClient } = require('./client');
+const { ActivateClient, Method } = require('./client');
 const { ControlPanelProvider } = require('./controlPanel');
 
 /** @type {ActivateClient|null} */
 let client = null;
+
+/** Cached install directory from daemon (e.g. ".github"). */
+let installDir = '.github';
 
 // ── Binary resolution ─────────────────────────────────────────
 
@@ -70,7 +73,7 @@ async function activate(context) {
 
   // Refresh UI when daemon notifies of state changes
   client.on('notification', (method) => {
-    if (method === 'activate/stateChanged') {
+    if (method === Method.NotifyStateChanged) {
       controlPanel.refresh();
     }
   });
@@ -90,6 +93,7 @@ async function activate(context) {
     vscode.commands.registerCommand('activate-framework.changeTier', async () => {
       try {
         const state = await client.getState();
+        if (state.installDir) installDir = state.installDir;
         const tiers = state.tiers || [];
         if (tiers.length === 0) {
           vscode.window.showWarningMessage('No tiers available for this manifest.');
@@ -247,7 +251,7 @@ async function activate(context) {
       if (!file?.dest) return;
       const wsRoot = vscode.workspace.workspaceFolders?.[0]?.uri;
       if (!wsRoot) return;
-      const fileUri = vscode.Uri.joinPath(wsRoot, '.github', file.dest);
+      const fileUri = vscode.Uri.joinPath(wsRoot, installDir, file.dest);
       try {
         await vscode.commands.executeCommand('vscode.open', fileUri);
       } catch {
@@ -272,7 +276,7 @@ async function activate(context) {
         // Show the installed vs bundled via workspace file URIs
         const wsRoot = vscode.workspace.workspaceFolders?.[0]?.uri;
         if (!wsRoot) return;
-        const installedUri = vscode.Uri.joinPath(wsRoot, '.github', file.dest);
+        const installedUri = vscode.Uri.joinPath(wsRoot, installDir, file.dest);
         const diffUri = vscode.Uri.file(diffPath);
         await vscode.commands.executeCommand(
           'vscode.diff',
@@ -319,6 +323,7 @@ async function activate(context) {
 async function autoSetup(controlPanel) {
   try {
     const state = await client.getState();
+    if (state.installDir) installDir = state.installDir;
 
     // If not yet installed, add files automatically
     if (state.state === 'none' || state.state === 'not_installed') {

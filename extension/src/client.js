@@ -31,6 +31,9 @@ const Method = {
   FileOverride:  'activate/fileOverride',
   TelemetryRun:  'activate/telemetryRun',
   TelemetryLog:  'activate/telemetryLog',
+
+  // Notifications (server → client)
+  NotifyStateChanged: 'activate/stateChanged',
 };
 
 // ── Transport: Content-Length framed reader ─────────────────────

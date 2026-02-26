@@ -53,6 +53,10 @@ class ControlPanelProvider {
     const manifestName = cfg.manifest || 'activate-framework';
     const manifestCount = Array.isArray(manifests) ? manifests.length : 1;
 
+    // Cache metadata from daemon for use by other methods
+    this._categories = state.categories || [];
+    this._telemetryLogPath = state.telemetryLogPath || '';
+
     // Build file lists from daemon FileStatus[]
     const files = state.files || [];
     const versionMap = new Map();
@@ -176,7 +180,11 @@ class ControlPanelProvider {
         );
         break;
       case 'openLogFile': {
-        const logPath = require('path').join(require('os').homedir(), '.activate', 'telemetry.jsonl');
+        const logPath = this._telemetryLogPath;
+        if (!logPath) {
+          vscode.window.showWarningMessage('Telemetry log path not available.');
+          break;
+        }
         vscode.commands.executeCommand('vscode.open', vscode.Uri.file(logPath)).then(
           () => {},
           () => vscode.window.showWarningMessage(`Could not open ${logPath}`),
@@ -194,14 +202,6 @@ class ControlPanelProvider {
   _getHtml({ version, tier, tierLabel, isActive, manifestName, manifestCount, installedFiles, availableFiles, outsideTierFiles, versionMap, fileOverrides, skippedVersions }) {
     const installAction = isActive ? 'removeFromWorkspace' : 'addToWorkspace';
     const installButtonLabel = isActive ? '− Remove' : '+ Install';
-
-    const CATEGORY_ICONS = {
-      instructions: '📝',
-      prompts: '💬',
-      skills: '🛠',
-      agents: '🤖',
-      other: '📄',
-    };
 
     /** Build HTML for one file card */
     const fileCard = (f, installed) => {
@@ -287,21 +287,22 @@ class ControlPanelProvider {
         </details>`;
     };
 
-    // Group files by category
-    const installedGroups = groupByCategory(installedFiles);
-    const availableGroups = groupByCategory(availableFiles);
-    const outsideTierGroups = groupByCategory(outsideTierFiles || []);
+    // Group files by category (using daemon-provided category metadata)
+    const categories = this._categories || [];
+    const installedGroups = groupByCategory(installedFiles, categories);
+    const availableGroups = groupByCategory(availableFiles, categories);
+    const outsideTierGroups = groupByCategory(outsideTierFiles || [], categories);
 
     const installedHtml = installedGroups
-      .map((g) => categorySection(g.label, CATEGORY_ICONS[g.category] || '📄', g.files, true, 'installed'))
+      .map((g) => categorySection(g.label, CATEGORY_ICONS_DEFAULT[g.category] || '📄', g.files, true, 'installed'))
       .join('');
 
     const availableHtml = availableGroups
-      .map((g) => categorySection(g.label, CATEGORY_ICONS[g.category] || '📄', g.files, false, 'available'))
+      .map((g) => categorySection(g.label, CATEGORY_ICONS_DEFAULT[g.category] || '📄', g.files, false, 'available'))
       .join('');
 
     const outsideTierHtml = outsideTierGroups
-      .map((g) => categorySection(g.label, CATEGORY_ICONS[g.category] || '📄', g.files, false, 'outside'))
+      .map((g) => categorySection(g.label, CATEGORY_ICONS_DEFAULT[g.category] || '📄', g.files, false, 'outside'))
       .join('');
 
     return /* html */ `<!DOCTYPE html>
@@ -936,16 +937,9 @@ class ControlPanelProvider {
   }
 }
 
-/** Derive a display name from the file dest path */
+/** Use daemon-provided displayName, or fall back to dest path */
 function displayName(f) {
-  const parts = f.dest.split('/');
-  const filename = parts[parts.length - 1];
-  if (filename === 'SKILL.md' && parts.length >= 2) {
-    return parts[parts.length - 2];
-  }
-  return filename
-    .replace(/\.(instructions|prompt|agent)\.md$/, '')
-    .replace(/\.md$/, '');
+  return f.displayName || f.dest.split('/').pop().replace(/\.md$/, '');
 }
 
 /** HTML-escape */
@@ -969,41 +963,57 @@ function getTierIncludesFromState(tiers, tierId) {
   return new Set(['core']);
 }
 
-// ── Category grouping (replaces manifest.js dependency) ────────
+// ── Category grouping (uses daemon-provided categories) ────────
 
-const CATEGORY_LABELS = {
-  instructions: 'Instructions',
-  prompts: 'Prompts',
-  skills: 'Skills',
-  agents: 'Agents',
-  'mcp-servers': 'MCP Servers',
-  other: 'Other',
+/** Default category icons (presentation only). */
+const CATEGORY_ICONS_DEFAULT = {
+  instructions: '📝',
+  prompts: '💬',
+  skills: '🛠',
+  agents: '🤖',
+  'mcp-servers': '🔌',
+  other: '📄',
 };
 
-const CATEGORY_ORDER = ['instructions', 'prompts', 'skills', 'agents', 'mcp-servers', 'other'];
-
-function inferCategory(filePath) {
-  for (const cat of ['instructions', 'prompts', 'skills', 'agents', 'mcp-servers']) {
-    if (filePath && filePath.startsWith(cat + '/')) return cat;
-  }
-  return 'other';
-}
-
-function groupByCategory(files) {
+/**
+ * Group files by their `category` field.
+ * @param {object[]} files - FileStatus items with `category`
+ * @param {object[]} categories - [{id, label}] from daemon state
+ */
+function groupByCategory(files, categories) {
   const groups = {};
   for (const f of files) {
-    const cat = f.category || inferCategory(f.dest || f.src || '');
+    const cat = f.category || 'other';
     if (!groups[cat]) groups[cat] = [];
     groups[cat].push(f);
   }
+
+  // Use daemon category order if available, otherwise natural order
+  const order = categories && categories.length > 0
+    ? categories.map((c) => c.id)
+    : Object.keys(groups);
+
+  const labelMap = {};
+  if (categories) {
+    for (const c of categories) {
+      labelMap[c.id] = c.label;
+    }
+  }
+
   const result = [];
-  for (const cat of CATEGORY_ORDER) {
+  for (const cat of order) {
     if (groups[cat]) {
       result.push({
         category: cat,
-        label: CATEGORY_LABELS[cat] || cat,
+        label: labelMap[cat] || cat,
         files: groups[cat],
       });
+    }
+  }
+  // Include any categories not in the daemon list
+  for (const cat of Object.keys(groups)) {
+    if (!result.some((g) => g.category === cat)) {
+      result.push({ category: cat, label: cat, files: groups[cat] });
     }
   }
   return result;

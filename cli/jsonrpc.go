@@ -162,6 +162,6 @@ func ErrorResponse(id json.RawMessage, code int, message string) *Response {
 // StateChangedNotification creates a state-changed notification.
 func StateChangedNotification() *Notification {
 	return &Notification{
-		Method: "activate/stateChanged",
+		Method: NotifyStateChanged,
 	}
 }
