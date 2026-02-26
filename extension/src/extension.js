@@ -80,7 +80,9 @@ async function activate(context) {
   // Auto-restart daemon on unexpected exit
   client.on('exit', () => {
     if (!client._disposed) {
-      client.start().catch(() => {});
+      client.start().catch((err) => {
+        outputChannel.appendLine(`[error] Daemon restart failed: ${err.message}`);
+      });
     }
   });
 

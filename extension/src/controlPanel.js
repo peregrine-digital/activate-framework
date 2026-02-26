@@ -169,14 +169,13 @@ class ControlPanelProvider {
         this._render();
         break;
       case 'refreshUsage':
-        vscode.commands.executeCommand('activate-framework.telemetryRunNow').then(() => {
-          this._render();
-        });
+        vscode.commands.executeCommand('activate-framework.telemetryRunNow').then(
+          () => this._render(),
+          () => this._render(), // render even on failure to show stale data
+        );
         break;
       case 'openLogFile': {
-        const os = require('os');
-        const path = require('path');
-        const logPath = path.join(os.homedir(), '.activate', 'telemetry.jsonl');
+        const logPath = require('path').join(require('os').homedir(), '.activate', 'telemetry.jsonl');
         vscode.commands.executeCommand('vscode.open', vscode.Uri.file(logPath)).then(
           () => {},
           () => vscode.window.showWarningMessage(`Could not open ${logPath}`),
