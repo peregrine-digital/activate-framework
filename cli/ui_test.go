@@ -1727,3 +1727,184 @@ func TestMainMenuModel_StateRoundTrip_ThenExit(t *testing.T) {
 		t.Fatalf("expected action=exit, got action=%q choice=%q", mm.action, mm.vals.choice)
 	}
 }
+
+// ── Update result formatting ────────────────────────────────────
+
+func TestFormatUpdateResult_WithUpdatesAndSkips(t *testing.T) {
+result := &UpdateResult{
+Updated: []string{"instructions/security.md", "agents/planner.md"},
+Skipped: []string{"instructions/setup.md"},
+}
+text := formatUpdateResult(result)
+if !strings.Contains(text, "Updated 2 files") {
+t.Fatal("expected updated count")
+}
+if !strings.Contains(text, "Skipped 1 file") {
+t.Fatal("expected skipped count")
+}
+if !strings.Contains(text, "⬆") {
+t.Fatal("expected update icon")
+}
+if !strings.Contains(text, "⏭") {
+t.Fatal("expected skip icon")
+}
+}
+
+func TestFormatUpdateResult_NothingToUpdate(t *testing.T) {
+result := &UpdateResult{}
+text := formatUpdateResult(result)
+if !strings.Contains(text, "up to date") {
+t.Fatal("expected 'up to date' message")
+}
+}
+
+func TestFormatUpdateResult_OnlyUpdated(t *testing.T) {
+result := &UpdateResult{Updated: []string{"file1.md"}}
+text := formatUpdateResult(result)
+if !strings.Contains(text, "Updated 1 file") {
+t.Fatal("expected updated count")
+}
+if strings.Contains(text, "Skipped") {
+t.Fatal("should not contain skipped section")
+}
+}
+
+// ── Menu integration: new items exist ───────────────────────────
+
+func TestMainMenu_NewItemsPresent_FreshState(t *testing.T) {
+state := InstallState{}
+vals := &menuValues{}
+form := buildMainMenuForm(state, &vals.choice)
+form.Init()
+
+expected := []string{
+"guided-install", "repo-add", "manage-files", "settings",
+"telemetry", "list", "state", "exit",
+}
+
+var items []string
+items = append(items, vals.choice)
+for i := 0; i < len(expected)-1; i++ {
+form = sendKey(form, tea.KeyDown)
+items = append(items, vals.choice)
+}
+
+if len(items) != len(expected) {
+t.Fatalf("expected %d items, got %d: %v", len(expected), len(items), items)
+}
+for i, exp := range expected {
+if items[i] != exp {
+t.Fatalf("item %d: expected %q, got %q\nall: %v", i, exp, items[i], items)
+}
+}
+}
+
+func TestMainMenu_NewItemsPresent_InstalledState(t *testing.T) {
+state := InstallState{
+HasProjectConfig: true, HasInstallMarker: true,
+InstalledManifest: "alpha", InstalledVersion: "1.0.0",
+}
+vals := &menuValues{}
+form := buildMainMenuForm(state, &vals.choice)
+form.Init()
+
+expected := []string{
+"quick-install", "guided-install", "repo-add", "repo-remove",
+"update-all", "manage-files", "settings", "telemetry",
+"list", "state", "exit",
+}
+
+var items []string
+items = append(items, vals.choice)
+for i := 0; i < len(expected)-1; i++ {
+form = sendKey(form, tea.KeyDown)
+items = append(items, vals.choice)
+}
+
+if len(items) != len(expected) {
+t.Fatalf("expected %d items, got %d: %v", len(expected), len(items), items)
+}
+for i, exp := range expected {
+if items[i] != exp {
+t.Fatalf("item %d: expected %q, got %q\nall: %v", i, exp, items[i], items)
+}
+}
+}
+
+func TestMainMenu_ManageFilesAction(t *testing.T) {
+state := InstallState{}
+vals := &menuValues{}
+form := buildMainMenuForm(state, &vals.choice)
+form.Init()
+m := mainMenuModel{form: form, mode: "menu", state: state, vals: vals}
+m.form = sendKey(m.form, tea.KeyDown)
+m.form = sendKey(m.form, tea.KeyDown)
+updated, cmd := updateModel(m, tea.KeyMsg{Type: tea.KeyEnter})
+result := updated.(mainMenuModel)
+if result.action != "manage-files" {
+t.Fatalf("expected action=manage-files, got %q", result.action)
+}
+if cmd == nil {
+t.Fatal("expected quit command for manage-files action")
+}
+}
+
+func TestMainMenu_SettingsAction(t *testing.T) {
+state := InstallState{}
+vals := &menuValues{}
+form := buildMainMenuForm(state, &vals.choice)
+form.Init()
+m := mainMenuModel{form: form, mode: "menu", state: state, vals: vals}
+for i := 0; i < 3; i++ {
+m.form = sendKey(m.form, tea.KeyDown)
+}
+updated, cmd := updateModel(m, tea.KeyMsg{Type: tea.KeyEnter})
+result := updated.(mainMenuModel)
+if result.action != "settings" {
+t.Fatalf("expected action=settings, got %q", result.action)
+}
+if cmd == nil {
+t.Fatal("expected quit command")
+}
+}
+
+func TestMainMenu_TelemetryAction(t *testing.T) {
+state := InstallState{}
+vals := &menuValues{}
+form := buildMainMenuForm(state, &vals.choice)
+form.Init()
+m := mainMenuModel{form: form, mode: "menu", state: state, vals: vals}
+for i := 0; i < 4; i++ {
+m.form = sendKey(m.form, tea.KeyDown)
+}
+updated, cmd := updateModel(m, tea.KeyMsg{Type: tea.KeyEnter})
+result := updated.(mainMenuModel)
+if result.action != "telemetry" {
+t.Fatalf("expected action=telemetry, got %q", result.action)
+}
+if cmd == nil {
+t.Fatal("expected quit command")
+}
+}
+
+func TestMainMenu_UpdateAllAction(t *testing.T) {
+state := InstallState{
+HasProjectConfig: true, HasInstallMarker: true,
+InstalledManifest: "alpha", InstalledVersion: "1.0.0",
+}
+vals := &menuValues{}
+form := buildMainMenuForm(state, &vals.choice)
+form.Init()
+m := mainMenuModel{form: form, mode: "menu", state: state, vals: vals}
+for i := 0; i < 4; i++ {
+m.form = sendKey(m.form, tea.KeyDown)
+}
+updated, cmd := updateModel(m, tea.KeyMsg{Type: tea.KeyEnter})
+result := updated.(mainMenuModel)
+if result.action != "update-all" {
+t.Fatalf("expected action=update-all, got %q", result.action)
+}
+if cmd == nil {
+t.Fatal("expected quit command")
+}
+}
