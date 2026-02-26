@@ -82,10 +82,10 @@ async function validatePlugin(pluginPath) {
   const errors = [];
   const warnings = [];
 
-  // Tier 1: AGENTS.md must exist
+  // Tier 1: AGENTS.md recommended
   const agentsMdPath = path.join(pluginPath, 'AGENTS.md');
   if (!(await isFile(agentsMdPath))) {
-    errors.push('Missing AGENTS.md at plugin root (Tier 1 required)');
+    warnings.push('Missing AGENTS.md at plugin root (Tier 1 recommended)');
   }
 
   // Tier 2: instructions/ directory

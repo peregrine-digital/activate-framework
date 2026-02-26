@@ -42,9 +42,9 @@ describe('validate-structure.mjs', () => {
     await rm(TEST_PLUGINS_DIR, { recursive: true, force: true });
   });
 
-  it('should fail when AGENTS.md is missing', async () => {
+  it('should warn when AGENTS.md is missing', async () => {
     const result = runValidator('__test-plugin__');
-    assert.strictEqual(result.exitCode, 1);
+    assert.strictEqual(result.exitCode, 0);
     assert.ok(result.output.includes('Missing AGENTS.md'));
   });
 

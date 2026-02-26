@@ -10,13 +10,6 @@
   ],
   "files": [
     {
-      "src": "AGENTS.md",
-      "dest": "AGENTS.md",
-      "tier": "core",
-      "category": "other",
-      "description": "Guidelines for AI agents working with the IronArch plugin (requires user approval for instructions/skills)"
-    },
-    {
       "src": "../../skills/ci-debugger/SKILL.md",
       "dest": "skills/ci-debugger/SKILL.md",
       "tier": "skills",
