@@ -127,7 +127,7 @@ func DiscoverRemoteManifests(repo, branch string) ([]model.Manifest, error) {
 	if err := storage.FetchJSON("manifests/index.json", repo, branch, &index); err == nil && len(index.Manifests) > 0 {
 		var results []model.Manifest
 		for _, id := range index.Manifests {
-			m, err := LoadRemoteManifest(id, repo, branch)
+			m, err := loadRemoteManifest(id, repo, branch)
 			if err != nil {
 				continue
 			}
@@ -141,7 +141,7 @@ func DiscoverRemoteManifests(repo, branch string) ([]model.Manifest, error) {
 	known := []string{"activate-framework", "ironarch"}
 	var results []model.Manifest
 	for _, id := range known {
-		m, err := LoadRemoteManifest(id, repo, branch)
+		m, err := loadRemoteManifest(id, repo, branch)
 		if err != nil {
 			continue
 		}
@@ -153,8 +153,8 @@ func DiscoverRemoteManifests(repo, branch string) ([]model.Manifest, error) {
 	return results, nil
 }
 
-// LoadRemoteManifest fetches a single manifest by ID from GitHub.
-func LoadRemoteManifest(id, repo, branch string) (model.Manifest, error) {
+// loadRemoteManifest fetches a single manifest by ID from GitHub.
+func loadRemoteManifest(id, repo, branch string) (model.Manifest, error) {
 	var raw manifestJSON
 	if err := storage.FetchJSON(fmt.Sprintf("manifests/%s.json", id), repo, branch, &raw); err != nil {
 		return model.Manifest{}, err

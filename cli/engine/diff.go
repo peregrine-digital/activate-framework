@@ -5,8 +5,8 @@ import (
 	"strings"
 )
 
-// UnifiedDiff produces a simple line-by-line unified diff using LCS.
-func UnifiedDiff(a, b, labelA, labelB string) string {
+// unifiedDiff produces a simple line-by-line unified diff using LCS.
+func unifiedDiff(a, b, labelA, labelB string) string {
 	linesA := strings.Split(a, "\n")
 	linesB := strings.Split(b, "\n")
 

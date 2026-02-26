@@ -41,7 +41,7 @@ func TestExtractPremiumQuota(t *testing.T) {
 		},
 	}
 
-	ent, rem := ExtractPremiumQuota(data)
+	ent, rem := extractPremiumQuota(data)
 	if ent == nil || *ent != 300 {
 		t.Fatalf("expected entitlement 300, got %v", ent)
 	}
@@ -60,14 +60,14 @@ func TestExtractPremiumQuotaUnlimited(t *testing.T) {
 		},
 	}
 
-	ent, rem := ExtractPremiumQuota(data)
+	ent, rem := extractPremiumQuota(data)
 	if ent != nil || rem != nil {
 		t.Fatal("expected nil for unlimited quota")
 	}
 }
 
 func TestExtractPremiumQuotaMissing(t *testing.T) {
-	ent, rem := ExtractPremiumQuota(map[string]interface{}{})
+	ent, rem := extractPremiumQuota(map[string]interface{}{})
 	if ent != nil || rem != nil {
 		t.Fatal("expected nil for missing data")
 	}
@@ -85,7 +85,7 @@ func TestBuildTelemetryEntry(t *testing.T) {
 		"quota_reset_date_utc": "2026-03-01T00:00:00Z",
 	}
 
-	entry := BuildTelemetryEntry(data)
+	entry := buildTelemetryEntry(data)
 	if entry.PremiumEntitlement == nil || *entry.PremiumEntitlement != 300 {
 		t.Fatalf("expected entitlement 300, got %v", entry.PremiumEntitlement)
 	}
@@ -107,7 +107,7 @@ func TestBuildTelemetryEntry(t *testing.T) {
 }
 
 func TestBuildTelemetryEntryNoQuota(t *testing.T) {
-	entry := BuildTelemetryEntry(map[string]interface{}{})
+	entry := buildTelemetryEntry(map[string]interface{}{})
 	if entry.PremiumEntitlement != nil {
 		t.Fatal("expected nil entitlement")
 	}
@@ -135,11 +135,11 @@ func TestAppendAndReadTelemetryLog(t *testing.T) {
 		Version:            1,
 	}
 
-	if err := AppendTelemetryEntry(entry); err != nil {
+	if err := appendTelemetryEntry(entry); err != nil {
 		t.Fatal(err)
 	}
 	// Append a second entry
-	if err := AppendTelemetryEntry(entry); err != nil {
+	if err := appendTelemetryEntry(entry); err != nil {
 		t.Fatal(err)
 	}
 
@@ -179,7 +179,7 @@ func TestArchiveLogIfNeeded(t *testing.T) {
 	activePath := filepath.Join(homeDir, telemetryLogFile)
 	os.WriteFile(activePath, []byte(`{"date":"2026-02-24"}`+"\n"), 0644)
 
-	archivePath, err := ArchiveLogIfNeeded("2026-03-01T00:00:00Z", "2026-02-01T00:00:00Z")
+	archivePath, err := archiveLogIfNeeded("2026-03-01T00:00:00Z", "2026-02-01T00:00:00Z")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -202,7 +202,7 @@ func TestArchiveLogIfNeeded(t *testing.T) {
 }
 
 func TestArchiveLogIfNeededSameDate(t *testing.T) {
-	archivePath, err := ArchiveLogIfNeeded("2026-02-01", "2026-02-01")
+	archivePath, err := archiveLogIfNeeded("2026-02-01", "2026-02-01")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -212,7 +212,7 @@ func TestArchiveLogIfNeededSameDate(t *testing.T) {
 }
 
 func TestArchiveLogIfNeededNoPrevious(t *testing.T) {
-	archivePath, err := ArchiveLogIfNeeded("2026-03-01", "")
+	archivePath, err := archiveLogIfNeeded("2026-03-01", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -255,7 +255,7 @@ func TestTelemetryLogJSONLFormat(t *testing.T) {
 		Source:             "github_copilot_internal",
 		Version:            1,
 	}
-	AppendTelemetryEntry(entry)
+	appendTelemetryEntry(entry)
 
 	// Read raw file and verify it's valid JSONL
 	data, _ := os.ReadFile(filepath.Join(homeDir, telemetryLogFile))

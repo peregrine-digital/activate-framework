@@ -131,7 +131,7 @@ func DiffFile(f model.ManifestFile, m model.Manifest, projectDir string) (string
 		return "", fmt.Errorf("read installed %s: %w", destRel, err)
 	}
 
-	return UnifiedDiff(string(bundled), string(installed), "bundled/"+f.Src, "installed/"+destRel), nil
+	return unifiedDiff(string(bundled), string(installed), "bundled/"+f.Src, "installed/"+destRel), nil
 }
 
 // SyncNeeded checks if the installed state differs from the desired state.

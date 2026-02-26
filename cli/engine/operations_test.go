@@ -329,24 +329,24 @@ func TestDiffFileMissingInstalled(t *testing.T) {
 	}
 }
 
-// ── UnifiedDiff tests ───────────────────────────────────────────
+// ── unifiedDiff tests ───────────────────────────────────────────
 
 func TestUnifiedDiffIdentical(t *testing.T) {
-	diff := UnifiedDiff("hello\nworld\n", "hello\nworld\n", "a", "b")
+	diff := unifiedDiff("hello\nworld\n", "hello\nworld\n", "a", "b")
 	if diff != "" {
 		t.Fatalf("expected empty diff, got %q", diff)
 	}
 }
 
 func TestUnifiedDiffAddition(t *testing.T) {
-	diff := UnifiedDiff("a\nc\n", "a\nb\nc\n", "old", "new")
+	diff := unifiedDiff("a\nc\n", "a\nb\nc\n", "old", "new")
 	if !strings.Contains(diff, "+b") {
 		t.Fatalf("expected addition marker, got:\n%s", diff)
 	}
 }
 
 func TestUnifiedDiffDeletion(t *testing.T) {
-	diff := UnifiedDiff("a\nb\nc\n", "a\nc\n", "old", "new")
+	diff := unifiedDiff("a\nb\nc\n", "a\nc\n", "old", "new")
 	if !strings.Contains(diff, "-b") {
 		t.Fatalf("expected deletion marker, got:\n%s", diff)
 	}

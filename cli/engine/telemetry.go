@@ -38,8 +38,8 @@ func ResolveGitHubToken() string {
 	return ""
 }
 
-// FetchCopilotUserData fetches Copilot quota data from the GitHub API.
-func FetchCopilotUserData(token string) (map[string]interface{}, error) {
+// fetchCopilotUserData fetches Copilot quota data from the GitHub API.
+func fetchCopilotUserData(token string) (map[string]interface{}, error) {
 	if token == "" {
 		return nil, fmt.Errorf("no GitHub token available (set GITHUB_TOKEN or run 'gh auth login')")
 	}
@@ -74,8 +74,8 @@ func FetchCopilotUserData(token string) (map[string]interface{}, error) {
 	return data, nil
 }
 
-// ExtractPremiumQuota pulls the premium_interactions quota from user data.
-func ExtractPremiumQuota(data map[string]interface{}) (entitlement, remaining *int) {
+// extractPremiumQuota pulls the premium_interactions quota from user data.
+func extractPremiumQuota(data map[string]interface{}) (entitlement, remaining *int) {
 	snapshots, ok := data["quota_snapshots"].(map[string]interface{})
 	if !ok {
 		return nil, nil
@@ -104,8 +104,8 @@ func ExtractPremiumQuota(data map[string]interface{}) (entitlement, remaining *i
 	return nil, nil
 }
 
-// BuildTelemetryEntry creates a log entry from API data.
-func BuildTelemetryEntry(data map[string]interface{}) model.TelemetryEntry {
+// buildTelemetryEntry creates a log entry from API data.
+func buildTelemetryEntry(data map[string]interface{}) model.TelemetryEntry {
 	now := time.Now().UTC()
 	entry := model.TelemetryEntry{
 		Date:      now.Format("2006-01-02"),
@@ -114,7 +114,7 @@ func BuildTelemetryEntry(data map[string]interface{}) model.TelemetryEntry {
 		Version:   1,
 	}
 
-	entitlement, remaining := ExtractPremiumQuota(data)
+	entitlement, remaining := extractPremiumQuota(data)
 	entry.PremiumEntitlement = entitlement
 	entry.PremiumRemaining = remaining
 
@@ -141,8 +141,8 @@ func TelemetryLogPath() string {
 	return filepath.Join(telemetryLogDir(), telemetryLogFile)
 }
 
-// AppendTelemetryEntry appends an entry to the JSONL log file.
-func AppendTelemetryEntry(entry model.TelemetryEntry) error {
+// appendTelemetryEntry appends an entry to the JSONL log file.
+func appendTelemetryEntry(entry model.TelemetryEntry) error {
 	dir := telemetryLogDir()
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return err
@@ -186,8 +186,8 @@ func ReadTelemetryLog() ([]model.TelemetryEntry, error) {
 	return entries, nil
 }
 
-// ArchiveLogIfNeeded archives the active log when the quota reset date changes.
-func ArchiveLogIfNeeded(currentResetDate, previousResetDate string) (string, error) {
+// archiveLogIfNeeded archives the active log when the quota reset date changes.
+func archiveLogIfNeeded(currentResetDate, previousResetDate string) (string, error) {
 	if currentResetDate == previousResetDate || previousResetDate == "" {
 		return "", nil
 	}
@@ -226,13 +226,13 @@ func RunTelemetry(token string) (*model.TelemetryEntry, error) {
 		token = ResolveGitHubToken()
 	}
 
-	data, err := FetchCopilotUserData(token)
+	data, err := fetchCopilotUserData(token)
 	if err != nil {
 		return nil, err
 	}
 
-	entry := BuildTelemetryEntry(data)
-	if err := AppendTelemetryEntry(entry); err != nil {
+	entry := buildTelemetryEntry(data)
+	if err := appendTelemetryEntry(entry); err != nil {
 		return nil, err
 	}
 
