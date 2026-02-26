@@ -29,16 +29,45 @@ activate-framework/
 ├── AGENTS.md                        # ← you are here
 ├── mise.toml                        # Go + Node toolchain
 │
-├── cli/                             # Go CLI (zero-dep, single binary)
-│   ├── main.go                      #   entry point, arg parsing, subcommands
-│   ├── manifest.go                  #   manifest types, discovery, loading
-│   ├── tiers.go                     #   tier system, file selection, categories
-│   ├── config.go                    #   two-layer config (global + project)
-│   ├── installer.go                 #   local file copy, bundle dir resolution
-│   ├── fetcher.go                   #   GitHub remote fetch (raw + API)
-│   ├── gitexclude.go                #   .git/info/exclude management
-│   ├── ui.go                        #   Charm huh TUI (interactive prompts)
-│   ├── helpers.go                   #   JSON output, path utils
+├── cli/                             # Go CLI (sub-packages, single binary)
+│   ├── main.go                      #   entry point, arg parsing, printJSON
+│   ├── model/                       #   pure types + config schema (stdlib only)
+│   │   ├── config.go                #     Config type, MergeConfig, defaults
+│   │   ├── manifest.go              #     Manifest, ManifestFile, TierDef
+│   │   ├── tiers.go                 #     tier resolution, SelectFiles, InferCategory
+│   │   ├── types.go                 #     RepoSidecar, InstallState, FileStatus
+│   │   ├── versions.go              #     ParseFrontmatterVersion, FileDisplayName
+│   │   └── helpers.go               #     FindManifestByID, FindManifestFile
+│   ├── transport/                   #   JSON-RPC wire format (stdlib only)
+│   │   ├── jsonrpc.go               #     Transport type, Request/Response/Notification
+│   │   └── protocol.go             #     method constants, typed params/results
+│   ├── storage/                     #   disk I/O primitives (→ model)
+│   │   ├── config.go                #     ResolveConfig, Read/Write config
+│   │   ├── sidecar.go               #     Read/Write/DeleteRepoSidecar
+│   │   ├── gitexclude.go            #     SyncGitExclude, RemoveGitExcludeBlock
+│   │   ├── filewriter.go            #     WriteManifestFile
+│   │   ├── mcp.go                   #     MCP server config read/write/merge
+│   │   └── fetcher.go               #     FetchFile, FetchJSON (GitHub raw/API)
+│   ├── engine/                      #   business logic (→ storage, model)
+│   │   ├── manifest.go              #     DiscoverManifests, DiscoverRemoteManifests
+│   │   ├── repo.go                  #     RepoAdd, RepoRemove
+│   │   ├── operations.go            #     UpdateFiles, InstallSingleFile, DiffFile
+│   │   ├── installer.go             #     InstallFiles, ResolveBundleDir
+│   │   ├── diff.go                  #     UnifiedDiff (LCS algorithm)
+│   │   └── telemetry.go             #     Copilot quota tracking, DetectInstallState
+│   ├── commands/                    #   command processors (→ engine, storage, model, transport)
+│   │   ├── service.go               #     ActivateAPI interface, ActivateService facade
+│   │   ├── cli.go                   #     RunUpdateCommand, RunDiffCommand, RunSyncCommand
+│   │   └── daemon.go                #     JSON-RPC daemon, all handlers
+│   ├── tui/                         #   interactive Bubbletea client
+│   │   ├── app.go                   #     RunInteractiveInstall, RunList
+│   │   ├── menu.go                  #     RunInteractiveMenu, main menu model
+│   │   ├── style/
+│   │   │   └── style.go             #     brand colors, lipgloss styles, RenderBanner
+│   │   └── screens/
+│   │       ├── files.go             #     RunFileBrowser
+│   │       ├── settings.go          #     RunSettings
+│   │       └── telemetry.go         #     RunTelemetryScreen
 │   ├── Makefile                     #   cross-compile, npm-stage, publish
 │   ├── go.mod / go.sum              #   Go module (Charm dependencies)
 │   └── npm/                         #   npm distribution wrapper
@@ -114,7 +143,7 @@ Two-layer JSON config, same schema everywhere:
 ```
 
 - `.activate.json` is **auto-excluded from git** via `.git/info/exclude` (managed marker block). It must never be committed.
-- CLI module: `cli/config.go` (Go, takes `projectDir`)
+- CLI modules: `cli/model/config.go` (type + merge), `cli/storage/config.go` (read/write)
 - Extension module: `extension/src/config.js` (CJS, auto-discovers workspace root)
 
 ### Delivery Mode

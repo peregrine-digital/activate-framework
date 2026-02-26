@@ -38,37 +38,80 @@ The CLI and TUI call the service directly (same process). The extension spawns t
 
 ### Source Layout
 
+The CLI is organized into sub-packages with a strict dependency DAG (no import cycles):
+
 ```
 cli/
-├── main.go              # Entry point, arg parsing, command dispatch
-├── service.go           # ActivateAPI interface + ActivateService implementation
-├── daemon.go            # JSON-RPC server (serve --stdio)
-├── protocol.go          # RPC method constants, param/result types
-├── jsonrpc.go           # JSON-RPC 2.0 transport (Content-Length framed)
-├── manifest.go          # Manifest types, discovery, loading
-├── tiers.go             # Tier system, file selection, categories
-├── config.go            # Two-layer config (global + project)
-├── installer.go         # Local file copy, bundle dir resolution
-├── fetcher.go           # GitHub remote fetch (raw + API)
-├── repo.go              # Repo sidecar, git exclude management
-├── state.go             # InstallState detection
-├── versions.go          # Frontmatter version parsing, FileStatus
-├── mcp.go               # .vscode/mcp.json management
-├── operations.go        # Command handlers (update, diff, sync, install)
-├── telemetry.go         # Telemetry logging, crash/event tracking
-├── helpers.go           # JSON output, path utils
-├── ui.go                # TUI main: menu, installer (Charm Bubble Tea + Huh)
-├── ui_files.go          # TUI file browser screen
-├── ui_settings.go       # TUI settings form
-├── ui_telemetry.go      # TUI telemetry consent screen
-├── go.mod / go.sum      # Go module (Charm dependencies only)
-├── Makefile             # Cross-compile, npm-stage, publish
-└── npm/                 # npm distribution wrapper
-    ├── package.json     #   @anthropic/activate-cli
-    ├── bin/activate     #   JS shim → spawns Go binary
-    ├── install.js       #   postinstall: validate binary
-    └── platforms/       #   per-platform binary packages
+├── main.go                  # Entry point, arg parsing, printJSON
+├── model/                   # Pure types + config schema (stdlib only)
+│   ├── config.go            # Config type, MergeConfig, defaults
+│   ├── manifest.go          # Manifest, ManifestFile, TierDef, FormatManifestList
+│   ├── tiers.go             # Tier resolution, SelectFiles, InferCategory, ListByCategory
+│   ├── types.go             # RepoSidecar, InstallState, FileStatus, TelemetryEntry
+│   ├── versions.go          # ParseFrontmatterVersion, FileDisplayName
+│   └── helpers.go           # FindManifestByID, FindManifestFile, ContainsString
+├── transport/               # JSON-RPC wire format (stdlib only)
+│   ├── jsonrpc.go           # Transport type, Request/Response/Notification
+│   └── protocol.go          # Method constants, typed params/results
+├── storage/                 # Disk I/O primitives (→ model)
+│   ├── config.go            # ActivateBaseDir, ResolveConfig, Read/Write config
+│   ├── sidecar.go           # SidecarPath, Read/Write/DeleteRepoSidecar
+│   ├── gitexclude.go        # SyncGitExclude, RemoveGitExcludeBlock
+│   ├── filewriter.go        # WriteManifestFile
+│   ├── mcp.go               # MCP server config read/write/merge
+│   └── fetcher.go           # FetchFile, FetchJSON (GitHub raw/API)
+├── engine/                  # Business logic (→ storage, model)
+│   ├── manifest.go          # DiscoverManifests, DiscoverRemoteManifests
+│   ├── repo.go              # RepoAdd, RepoRemove
+│   ├── operations.go        # UpdateFiles, InstallSingleFile, DiffFile, SyncNeeded
+│   ├── installer.go         # InstallFiles, ResolveBundleDir
+│   ├── diff.go              # UnifiedDiff (LCS algorithm)
+│   └── telemetry.go         # Copilot quota tracking, ComputeFileStatuses, DetectInstallState
+├── commands/                # Command processors (→ engine, storage, model, transport)
+│   ├── service.go           # ActivateAPI interface, ActivateService facade
+│   ├── cli.go               # RunUpdateCommand, RunDiffCommand, RunSyncCommand
+│   └── daemon.go            # JSON-RPC daemon, all handlers
+├── tui/                     # Interactive Bubbletea client
+│   ├── app.go               # RunInteractiveInstall, RunList, installer model
+│   ├── menu.go              # RunInteractiveMenu, main menu model
+│   ├── style/
+│   │   └── style.go         # Brand colors, lipgloss styles, RenderBanner
+│   └── screens/
+│       ├── files.go         # RunFileBrowser
+│       ├── settings.go      # RunSettings
+│       └── telemetry.go     # RunTelemetryScreen
+├── go.mod / go.sum          # Go module (Charm dependencies only)
+├── Makefile                 # Cross-compile, npm-stage, publish
+└── npm/                     # npm distribution wrapper
+    ├── package.json         #   @anthropic/activate-cli
+    ├── bin/activate         #   JS shim → spawns Go binary
+    ├── install.js           #   postinstall: validate binary
+    └── platforms/           #   per-platform binary packages
 ```
+
+### Dependency DAG
+
+Packages form a strict, acyclic dependency graph:
+
+```
+main → tui, commands, engine, storage, model, transport
+tui → tui/screens, tui/style, commands, engine, model
+tui/screens → tui/style, commands, model
+commands → engine, storage, model, transport
+engine → storage, model
+storage → model
+transport, tui/style, model → stdlib only
+```
+
+Key design choices behind this split:
+
+- **Config TYPE in `model/`, config PERSISTENCE in `storage/`** — avoids circular dependencies between the pure data layer and I/O layer.
+- **`RepoSidecar` type in `model/`** — allows both `storage/` and `engine/` to reference it without import cycles.
+- **`ComputeFileStatuses` and `DetectInstallState` in `engine/`** — these perform I/O via `storage/`, so they belong in the business-logic layer, not in `model/`.
+- **Fetcher split** — HTTP primitives (`FetchFile`, `FetchJSON`) live in `storage/`; discovery logic (`DiscoverManifests`, `DiscoverRemoteManifests`) lives in `engine/`.
+- **`tui/style/` sub-package** — breaks the potential `tui` ↔ `tui/screens` import cycle by extracting shared styles.
+- **`version` const stays in `main.go`**, passed to the Daemon constructor.
+- **`printJSON` stays in `main.go`**, passed as a callback to CLI formatters and `RunList`.
 
 ### Subcommands
 
@@ -104,7 +147,7 @@ For interactive commands (`menu`, `install`), the handler launches the TUI. For 
 
 ### Service Layer
 
-The `ActivateAPI` interface is the central API surface. Both the TUI and daemon use it.
+The `ActivateAPI` interface (defined in `commands/service.go`) is the central API surface. Both the TUI and daemon use it.
 
 ```go
 type ActivateAPI interface {
@@ -135,7 +178,7 @@ type ActivateAPI interface {
 }
 ```
 
-`ActivateService` implements this interface and holds runtime state:
+`ActivateService` (in `commands/service.go`) implements this interface and holds runtime state:
 
 ```go
 type ActivateService struct {
@@ -869,6 +912,10 @@ make publish        # Publish all packages to npm
 ---
 
 ## Design Decisions
+
+### Why Sub-Packages?
+
+The CLI was originally a flat `package main` directory with 26+ source files. As the codebase grew, the flat layout made it hard to reason about dependencies and risked import cycles. The sub-package structure enforces a strict dependency DAG at the compiler level: `model` (pure types) → `storage` (disk I/O) → `engine` (business logic) → `commands` (service + daemon) → `main` / `tui`. Each layer can only import downward, making the architecture self-documenting.
 
 ### Why Go + Node?
 
