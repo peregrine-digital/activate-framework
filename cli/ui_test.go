@@ -1470,3 +1470,256 @@ func TestConfigureForm_SingleTierSkipsTierSelect(t *testing.T) {
 		t.Fatalf("expected completed for single-tier form, got state %d", m.form.State)
 	}
 }
+
+// ════════════════════════════════════════════════════════════════
+// Full runtime simulation — ALL keys routed through model.Update
+// ════════════════════════════════════════════════════════════════
+
+// simulateRuntime mirrors Bubble Tea's event loop: Init → drain, then
+// every key goes through model.Update with full command draining.
+func simulateRuntime(m tea.Model, keys []tea.Msg) tea.Model {
+	// Process Init
+	cmd := m.Init()
+	for i := 0; i < 20 && cmd != nil; i++ {
+		msg := cmd()
+		if msg == nil {
+			break
+		}
+		if _, ok := msg.(tea.QuitMsg); ok {
+			return m
+		}
+		m, cmd = m.Update(msg)
+	}
+
+	// Process each key event
+	for _, key := range keys {
+		m, cmd = m.Update(key)
+		for i := 0; i < 20 && cmd != nil; i++ {
+			msg := cmd()
+			if msg == nil {
+				break
+			}
+			if _, ok := msg.(tea.QuitMsg); ok {
+				return m
+			}
+			m, cmd = m.Update(msg)
+		}
+	}
+	return m
+}
+
+func TestMainMenuModel_ExitViaModelUpdate(t *testing.T) {
+	// Installed state: 7 menu items
+	// [quick-install, guided-install, repo-add, repo-remove, list, state, exit]
+	state := InstallState{
+		HasProjectConfig:  true,
+		HasInstallMarker:  true,
+		InstalledManifest: "alpha",
+		InstalledVersion:  "1.0.0",
+	}
+	vals := &menuValues{}
+	form := buildMainMenuForm(state, &vals.choice)
+	m := mainMenuModel{
+		form:      form,
+		mode:      "menu",
+		state:     state,
+		vals:      vals,
+		manifests: testManifests(),
+	}
+
+	// Navigate to Exit: 6 downs + enter, ALL through model.Update
+	keys := make([]tea.Msg, 0, 7)
+	for i := 0; i < 6; i++ {
+		keys = append(keys, tea.KeyMsg{Type: tea.KeyDown})
+	}
+	keys = append(keys, tea.KeyMsg{Type: tea.KeyEnter})
+
+	result := simulateRuntime(m, keys).(mainMenuModel)
+	if result.action != "exit" {
+		t.Fatalf("expected action=exit, got action=%q, mode=%q, vals.choice=%q",
+			result.action, result.mode, result.vals.choice)
+	}
+}
+
+func TestMainMenuModel_ShowFrameworksViaModelUpdate(t *testing.T) {
+	// Installed state: navigate to "Show frameworks" (item 5 = 4 downs)
+	state := InstallState{
+		HasProjectConfig:  true,
+		HasInstallMarker:  true,
+		InstalledManifest: "alpha",
+		InstalledVersion:  "1.0.0",
+	}
+	vals := &menuValues{}
+	form := buildMainMenuForm(state, &vals.choice)
+	m := mainMenuModel{
+		form:      form,
+		mode:      "menu",
+		state:     state,
+		vals:      vals,
+		manifests: testManifests(),
+	}
+
+	keys := make([]tea.Msg, 0, 5)
+	for i := 0; i < 4; i++ {
+		keys = append(keys, tea.KeyMsg{Type: tea.KeyDown})
+	}
+	keys = append(keys, tea.KeyMsg{Type: tea.KeyEnter})
+
+	result := simulateRuntime(m, keys).(mainMenuModel)
+	if result.mode != "text" {
+		t.Fatalf("expected mode=text for frameworks, got mode=%q, action=%q, vals.choice=%q",
+			result.mode, result.action, result.vals.choice)
+	}
+	if result.textTitle != "Frameworks" {
+		t.Fatalf("expected title=Frameworks, got %q", result.textTitle)
+	}
+}
+
+func TestMainMenuModel_ChoiceTracksDuringNavigation(t *testing.T) {
+	// Verify vals.choice updates on every Down arrow through model.Update
+	state := InstallState{
+		HasProjectConfig:  true,
+		HasInstallMarker:  true,
+		InstalledManifest: "alpha",
+		InstalledVersion:  "1.0.0",
+	}
+	vals := &menuValues{}
+	form := buildMainMenuForm(state, &vals.choice)
+	var m tea.Model = mainMenuModel{
+		form:  form,
+		mode:  "menu",
+		state: state,
+		vals:  vals,
+	}
+
+	// Init
+	cmd := m.Init()
+	for i := 0; i < 20 && cmd != nil; i++ {
+		msg := cmd()
+		if msg == nil {
+			break
+		}
+		if _, ok := msg.(tea.QuitMsg); ok {
+			break
+		}
+		m, cmd = m.Update(msg)
+	}
+
+	expected := []string{
+		"quick-install", "guided-install", "repo-add", "repo-remove",
+		"list", "state", "exit",
+	}
+
+	// Check initial value after Init
+	mm := m.(mainMenuModel)
+	if mm.vals.choice != expected[0] {
+		t.Fatalf("after init: expected %q, got %q", expected[0], mm.vals.choice)
+	}
+
+	// Navigate through all items
+	for i := 1; i < len(expected); i++ {
+		m, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
+		mm = m.(mainMenuModel)
+		if mm.vals.choice != expected[i] {
+			t.Fatalf("after down %d: expected %q, got %q", i, expected[i], mm.vals.choice)
+		}
+	}
+}
+
+func TestMainMenuModel_FrameworksRoundTrip_ThenExit(t *testing.T) {
+	// Reproduce reported bug: show frameworks → return → select exit → exits
+	state := InstallState{
+		HasProjectConfig:  true,
+		HasInstallMarker:  true,
+		InstalledManifest: "alpha",
+		InstalledVersion:  "1.0.0",
+	}
+	vals := &menuValues{}
+	form := buildMainMenuForm(state, &vals.choice)
+	var m tea.Model = mainMenuModel{
+		form:      form,
+		mode:      "menu",
+		state:     state,
+		vals:      vals,
+		manifests: testManifests(),
+	}
+
+	// Step 1: navigate to "Show frameworks" (item 5 = 4 downs) + enter
+	keys := []tea.Msg{}
+	for i := 0; i < 4; i++ {
+		keys = append(keys, tea.KeyMsg{Type: tea.KeyDown})
+	}
+	keys = append(keys, tea.KeyMsg{Type: tea.KeyEnter})
+
+	m = simulateRuntime(m, keys)
+	mm := m.(mainMenuModel)
+	if mm.mode != "text" {
+		t.Fatalf("step 1: expected text mode, got %q", mm.mode)
+	}
+
+	// Step 2: press Enter to return to menu
+	m = simulateRuntime(m, []tea.Msg{tea.KeyMsg{Type: tea.KeyEnter}})
+	mm = m.(mainMenuModel)
+	if mm.mode != "menu" {
+		t.Fatalf("step 2: expected menu mode, got %q", mm.mode)
+	}
+
+	// Step 3: navigate to "Exit" (item 7 = 6 downs) + enter
+	keys2 := []tea.Msg{}
+	for i := 0; i < 6; i++ {
+		keys2 = append(keys2, tea.KeyMsg{Type: tea.KeyDown})
+	}
+	keys2 = append(keys2, tea.KeyMsg{Type: tea.KeyEnter})
+
+	m = simulateRuntime(m, keys2)
+	mm = m.(mainMenuModel)
+	if mm.action != "exit" {
+		t.Fatalf("step 3: expected action=exit, got action=%q, mode=%q, choice=%q",
+			mm.action, mm.mode, mm.vals.choice)
+	}
+}
+
+func TestMainMenuModel_StateRoundTrip_ThenExit(t *testing.T) {
+	// show state → return → exit
+	state := InstallState{HasProjectConfig: true, HasInstallMarker: true}
+	vals := &menuValues{}
+	form := buildMainMenuForm(state, &vals.choice)
+	var m tea.Model = mainMenuModel{
+		form:      form,
+		mode:      "menu",
+		state:     state,
+		vals:      vals,
+		manifests: testManifests(),
+	}
+
+	// Navigate to "Show current state" (item 6 = 5 downs) + enter
+	keys := make([]tea.Msg, 0, 6)
+	for i := 0; i < 5; i++ {
+		keys = append(keys, tea.KeyMsg{Type: tea.KeyDown})
+	}
+	keys = append(keys, tea.KeyMsg{Type: tea.KeyEnter})
+	m = simulateRuntime(m, keys)
+	mm := m.(mainMenuModel)
+	if mm.mode != "text" || mm.textTitle != "Current State" {
+		t.Fatalf("expected text mode with 'Current State', got mode=%q title=%q", mm.mode, mm.textTitle)
+	}
+
+	// Return to menu
+	m = simulateRuntime(m, []tea.Msg{tea.KeyMsg{Type: tea.KeyEnter}})
+	mm = m.(mainMenuModel)
+	if mm.mode != "menu" {
+		t.Fatalf("expected menu mode after return, got %q", mm.mode)
+	}
+
+	// Exit (6 downs + enter)
+	keys2 := make([]tea.Msg, 0, 7)
+	for i := 0; i < 6; i++ {
+		keys2 = append(keys2, tea.KeyMsg{Type: tea.KeyDown})
+	}
+	keys2 = append(keys2, tea.KeyMsg{Type: tea.KeyEnter})
+	m = simulateRuntime(m, keys2)
+	mm = m.(mainMenuModel)
+	if mm.action != "exit" {
+		t.Fatalf("expected action=exit, got action=%q choice=%q", mm.action, mm.vals.choice)
+	}
+}
