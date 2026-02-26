@@ -20,3 +20,30 @@ func resolveExeDir() string {
 	}
 	return filepath.Dir(exe)
 }
+
+func findManifestByID(manifests []Manifest, manifestID string) *Manifest {
+	for i := range manifests {
+		if manifests[i].ID == manifestID {
+			return &manifests[i]
+		}
+	}
+	return nil
+}
+
+func findManifestFile(files []ManifestFile, name string) *ManifestFile {
+	for i, f := range files {
+		if f.Dest == name || f.Src == name {
+			return &files[i]
+		}
+	}
+	return nil
+}
+
+func containsString(slice []string, s string) bool {
+	for _, v := range slice {
+		if v == s {
+			return true
+		}
+	}
+	return false
+}

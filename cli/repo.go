@@ -1,145 +1,10 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 )
-
-const (
-	repoExcludeStartMark = "# >>> Peregrine Activate (managed — do not edit)"
-	repoExcludeEndMark   = "# <<< Peregrine Activate"
-)
-
-type repoSidecar struct {
-	Manifest   string   `json:"manifest"`
-	Version    string   `json:"version"`
-	Tier       string   `json:"tier"`
-	Files      []string `json:"files"`
-	McpServers []string `json:"mcpServers,omitempty"`
-	Source     string   `json:"source,omitempty"`
-}
-
-func sidecarPath(projectDir string) string {
-	return filepath.Join(repoStorePath(projectDir), "installed.json")
-}
-
-func readRepoSidecar(projectDir string) (*repoSidecar, error) {
-	data, err := os.ReadFile(sidecarPath(projectDir))
-	if err != nil {
-		return nil, nil
-	}
-	var sc repoSidecar
-	if err := json.Unmarshal(data, &sc); err != nil {
-		return nil, nil
-	}
-	return &sc, nil
-}
-
-func writeRepoSidecar(projectDir string, next repoSidecar) error {
-	prev, _ := readRepoSidecar(projectDir)
-	prevSet := make(map[string]struct{})
-	nextSet := make(map[string]struct{})
-
-	var prevFiles []string
-	if prev != nil {
-		prevFiles = prev.Files
-	}
-
-	for _, path := range prevFiles {
-		prevSet[path] = struct{}{}
-	}
-	for _, path := range next.Files {
-		nextSet[path] = struct{}{}
-	}
-
-	for oldPath := range prevSet {
-		if _, exists := nextSet[oldPath]; exists {
-			continue
-		}
-		_ = os.Remove(filepath.Join(projectDir, oldPath))
-	}
-
-	if err := ensureRepoMeta(projectDir); err != nil {
-		return err
-	}
-	path := sidecarPath(projectDir)
-	data, err := json.MarshalIndent(next, "", "  ")
-	if err != nil {
-		return err
-	}
-	if err := os.WriteFile(path, append(data, '\n'), 0644); err != nil {
-		return err
-	}
-
-	return syncRepoGitExcludeIfPresent(projectDir, next.Files)
-}
-
-func deleteRepoSidecar(projectDir string) error {
-	sc, _ := readRepoSidecar(projectDir)
-	if sc != nil {
-		for _, rel := range sc.Files {
-			_ = os.Remove(filepath.Join(projectDir, rel))
-		}
-		// Clean up managed MCP servers from .vscode/mcp.json
-		if len(sc.McpServers) > 0 {
-			_ = RemoveMcpServers(projectDir, sc.McpServers)
-		}
-	}
-	_ = os.Remove(sidecarPath(projectDir))
-	return removeRepoGitExcludeBlockIfPresent(projectDir)
-}
-
-func syncRepoGitExcludeIfPresent(projectDir string, paths []string) error {
-	excludePath := filepath.Join(projectDir, ".git", "info", "exclude")
-	data, err := os.ReadFile(excludePath)
-	if err != nil {
-		return nil // Only manage if exclude file already exists
-	}
-	content := string(data)
-	block := strings.Join(append([]string{repoExcludeStartMark}, append(paths, repoExcludeEndMark)...), "\n")
-
-	startIdx := strings.Index(content, repoExcludeStartMark)
-	endIdx := strings.Index(content, repoExcludeEndMark)
-	if startIdx >= 0 && endIdx >= 0 && endIdx >= startIdx {
-		content = content[:startIdx] + block + content[endIdx+len(repoExcludeEndMark):]
-	} else {
-		if len(content) > 0 && !strings.HasSuffix(content, "\n") {
-			content += "\n"
-		}
-		content += "\n" + block + "\n"
-	}
-
-	return os.WriteFile(excludePath, []byte(content), 0644)
-}
-
-func removeRepoGitExcludeBlockIfPresent(projectDir string) error {
-	excludePath := filepath.Join(projectDir, ".git", "info", "exclude")
-	data, err := os.ReadFile(excludePath)
-	if err != nil {
-		return nil
-	}
-	content := string(data)
-	startIdx := strings.Index(content, repoExcludeStartMark)
-	endIdx := strings.Index(content, repoExcludeEndMark)
-	if startIdx < 0 || endIdx < 0 || endIdx < startIdx {
-		return nil
-	}
-	content = content[:startIdx] + content[endIdx+len(repoExcludeEndMark):]
-	content = strings.ReplaceAll(content, "\n\n\n", "\n\n")
-	return os.WriteFile(excludePath, []byte(content), 0644)
-}
-
-func findManifestByID(manifests []Manifest, manifestID string) *Manifest {
-	for i := range manifests {
-		if manifests[i].ID == manifestID {
-			return &manifests[i]
-		}
-	}
-	return nil
-}
 
 func RepoAdd(manifests []Manifest, cfg Config, projectDir string, useRemote bool, repo, branch string) error {
 	chosen := findManifestByID(manifests, cfg.Manifest)
@@ -175,32 +40,10 @@ func RepoAdd(manifests []Manifest, cfg Config, projectDir string, useRemote bool
 	for _, f := range regularFiles {
 		destRel := filepath.ToSlash(filepath.Join(".github", f.Dest))
 		destPath := filepath.Join(projectDir, destRel)
-		if err := os.MkdirAll(filepath.Dir(destPath), 0755); err != nil {
-			return err
-		}
 
-		if useRemote {
-			srcPath := f.Src
-			if chosen.BasePath != "" {
-				srcPath = chosen.BasePath + "/" + f.Src
-			}
-			data, err := FetchFile(srcPath, repo, branch)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "  ✗  %s: %s\n", f.Dest, err)
-				continue
-			}
-			if err := os.WriteFile(destPath, data, 0644); err != nil {
-				return err
-			}
-		} else {
-			srcPath := filepath.Join(chosen.BasePath, f.Src)
-			data, err := os.ReadFile(srcPath)
-			if err != nil {
-				return err
-			}
-			if err := os.WriteFile(destPath, data, 0644); err != nil {
-				return err
-			}
+		if err := writeManifestFile(f, chosen.BasePath, destPath, useRemote, repo, branch); err != nil {
+			fmt.Fprintf(os.Stderr, "  ✗  %s: %s\n", f.Dest, err)
+			continue
 		}
 
 		fmt.Printf("  ✓  %s\n", destRel)

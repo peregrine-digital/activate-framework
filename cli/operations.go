@@ -52,32 +52,9 @@ func UpdateFiles(m Manifest, sidecar *repoSidecar, cfg Config, projectDir string
 		}
 
 		destPath := filepath.Join(projectDir, destRel)
-		if err := os.MkdirAll(filepath.Dir(destPath), 0755); err != nil {
-			return updated, skipped, err
-		}
-
-		if useRemote {
-			srcPath := f.Src
-			if m.BasePath != "" {
-				srcPath = m.BasePath + "/" + f.Src
-			}
-			data, fetchErr := FetchFile(srcPath, repo, branch)
-			if fetchErr != nil {
-				fmt.Fprintf(os.Stderr, "  ✗  %s: %s\n", f.Dest, fetchErr)
-				continue
-			}
-			if writeErr := os.WriteFile(destPath, data, 0644); writeErr != nil {
-				return updated, skipped, writeErr
-			}
-		} else {
-			srcPath := filepath.Join(m.BasePath, f.Src)
-			data, readErr := os.ReadFile(srcPath)
-			if readErr != nil {
-				return updated, skipped, readErr
-			}
-			if writeErr := os.WriteFile(destPath, data, 0644); writeErr != nil {
-				return updated, skipped, writeErr
-			}
+		if writeErr := writeManifestFile(f, m.BasePath, destPath, useRemote, repo, branch); writeErr != nil {
+			fmt.Fprintf(os.Stderr, "  ✗  %s: %s\n", f.Dest, writeErr)
+			continue
 		}
 
 		updated = append(updated, f.Dest)
@@ -102,26 +79,6 @@ func UpdateFiles(m Manifest, sidecar *repoSidecar, cfg Config, projectDir string
 	return updated, skipped, nil
 }
 
-func runUpdateCommand(svc *ActivateService, jsonOutput bool) error {
-	result, err := svc.Update()
-	if err != nil {
-		return err
-	}
-
-	if jsonOutput {
-		return printJSON(result)
-	}
-
-	for _, f := range result.Updated {
-		fmt.Printf("  ✓  %s\n", f)
-	}
-	for _, f := range result.Skipped {
-		fmt.Printf("  ⊘  %s (skipped)\n", f)
-	}
-	fmt.Printf("\nUpdated %d files, skipped %d.\n", len(result.Updated), len(result.Skipped))
-	return nil
-}
-
 // ── Per-file install ────────────────────────────────────────────
 
 // InstallSingleFile installs one manifest file and updates the sidecar.
@@ -129,31 +86,8 @@ func InstallSingleFile(f ManifestFile, m Manifest, projectDir string, useRemote 
 	destRel := ".github/" + f.Dest
 	destPath := filepath.Join(projectDir, destRel)
 
-	if err := os.MkdirAll(filepath.Dir(destPath), 0755); err != nil {
+	if err := writeManifestFile(f, m.BasePath, destPath, useRemote, repo, branch); err != nil {
 		return err
-	}
-
-	if useRemote {
-		srcPath := f.Src
-		if m.BasePath != "" {
-			srcPath = m.BasePath + "/" + f.Src
-		}
-		data, err := FetchFile(srcPath, repo, branch)
-		if err != nil {
-			return fmt.Errorf("fetch %s: %w", f.Src, err)
-		}
-		if err := os.WriteFile(destPath, data, 0644); err != nil {
-			return err
-		}
-	} else {
-		srcPath := filepath.Join(m.BasePath, f.Src)
-		data, err := os.ReadFile(srcPath)
-		if err != nil {
-			return fmt.Errorf("read %s: %w", srcPath, err)
-		}
-		if err := os.WriteFile(destPath, data, 0644); err != nil {
-			return err
-		}
 	}
 
 	// Update sidecar
@@ -190,19 +124,6 @@ func UninstallSingleFile(dest string, projectDir string) error {
 	return writeRepoSidecar(projectDir, *sidecar)
 }
 
-func runInstallFileCommand(svc *ActivateService, file string, jsonOutput bool) error {
-	result, err := svc.InstallFile(file)
-	if err != nil {
-		return err
-	}
-
-	if jsonOutput {
-		return printJSON(result)
-	}
-	fmt.Printf("  ✓  %s\n", result.File)
-	return nil
-}
-
 // ── File diff ───────────────────────────────────────────────────
 
 // DiffFile produces a unified diff between bundled and installed versions.
@@ -223,126 +144,12 @@ func DiffFile(f ManifestFile, m Manifest, projectDir string) (string, error) {
 	return unifiedDiff(string(bundled), string(installed), "bundled/"+f.Src, "installed/"+destRel), nil
 }
 
-func runDiffCommand(svc *ActivateService, file string) error {
-	result, err := svc.DiffFile(file)
-	if err != nil {
-		return err
-	}
+// ── Sync ────────────────────────────────────────────────────────
 
-	if result.Identical {
-		fmt.Println("Files are identical.")
-	} else {
-		fmt.Print(result.Diff)
-	}
-	return nil
-}
-
-// ── Sync command (auto-setup equivalent) ────────────────────────
-
-// SyncNeeded checks if the installed state differs from the desired state
-// (manifest ID, tier, or version changed).
+// SyncNeeded checks if the installed state differs from the desired state.
 func SyncNeeded(m Manifest, sidecar *repoSidecar, tier string) bool {
 	if sidecar == nil {
 		return false
 	}
 	return sidecar.Version != m.Version || sidecar.Manifest != m.ID || sidecar.Tier != tier
-}
-
-func runSyncCommand(svc *ActivateService, jsonOutput bool) error {
-	result, err := svc.Sync()
-	if err != nil {
-		return err
-	}
-
-	if jsonOutput {
-		return printJSON(result)
-	}
-
-	switch result.Action {
-	case "none":
-		if result.Reason == "not installed" {
-			fmt.Println("Not installed. Run 'repo add' first.")
-		} else {
-			fmt.Printf("Already up to date (v%s).\n", result.AvailableVersion)
-		}
-	case "updated":
-		fmt.Printf("Updated from v%s to v%s.\n", result.PreviousVersion, result.AvailableVersion)
-		for _, f := range result.Updated {
-			fmt.Printf("  ✓  %s\n", f)
-		}
-		for _, f := range result.Skipped {
-			fmt.Printf("  ⊘  %s (skipped)\n", f)
-		}
-	}
-	return nil
-}
-
-// ── Helpers ─────────────────────────────────────────────────────
-
-func containsString(slice []string, s string) bool {
-	for _, v := range slice {
-		if v == s {
-			return true
-		}
-	}
-	return false
-}
-
-func findManifestFile(files []ManifestFile, name string) *ManifestFile {
-	for i, f := range files {
-		if f.Dest == name || f.Src == name {
-			return &files[i]
-		}
-	}
-	return nil
-}
-
-// unifiedDiff produces a simple line-by-line unified diff.
-func unifiedDiff(a, b, labelA, labelB string) string {
-	linesA := strings.Split(a, "\n")
-	linesB := strings.Split(b, "\n")
-
-	if strings.Join(linesA, "\n") == strings.Join(linesB, "\n") {
-		return ""
-	}
-
-	var out strings.Builder
-	out.WriteString(fmt.Sprintf("--- %s\n", labelA))
-	out.WriteString(fmt.Sprintf("+++ %s\n", labelB))
-
-	n, m := len(linesA), len(linesB)
-
-	// LCS-based diff
-	dp := make([][]int, n+1)
-	for i := range dp {
-		dp[i] = make([]int, m+1)
-	}
-	for i := n - 1; i >= 0; i-- {
-		for j := m - 1; j >= 0; j-- {
-			if linesA[i] == linesB[j] {
-				dp[i][j] = dp[i+1][j+1] + 1
-			} else if dp[i+1][j] >= dp[i][j+1] {
-				dp[i][j] = dp[i+1][j]
-			} else {
-				dp[i][j] = dp[i][j+1]
-			}
-		}
-	}
-
-	i, j := 0, 0
-	for i < n || j < m {
-		if i < n && j < m && linesA[i] == linesB[j] {
-			out.WriteString(fmt.Sprintf(" %s\n", linesA[i]))
-			i++
-			j++
-		} else if j < m && (i >= n || dp[i][j+1] >= dp[i+1][j]) {
-			out.WriteString(fmt.Sprintf("+%s\n", linesB[j]))
-			j++
-		} else if i < n {
-			out.WriteString(fmt.Sprintf("-%s\n", linesA[i]))
-			i++
-		}
-	}
-
-	return out.String()
 }
