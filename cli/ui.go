@@ -788,18 +788,18 @@ func resolveTargetPath(target string) string {
 
 // RunInteractiveMenu starts in a state-aware mode and offers actions based on
 // whether config/install markers are already present.
-func RunInteractiveMenu(svc *ActivateService) error {
+func RunInteractiveMenu(svc ActivateAPI) error {
 	for {
-		svc.refreshConfig()
-		cfg := svc.Config
-		state := DetectInstallState(svc.ProjectDir)
+		svc.RefreshConfig()
+		cfg := svc.CurrentConfig()
+		state := DetectInstallState(svc.CurrentProjectDir())
 
 		vals := &menuValues{}
 		menuModel := mainMenuModel{
-			manifests: svc.Manifests,
-			cfg:       cfg,
-			state:     state,
-			projectDir: svc.ProjectDir,
+			manifests:  svc.CurrentManifests(),
+			cfg:        cfg,
+			state:      state,
+			projectDir: svc.CurrentProjectDir(),
 			mode:      "menu",
 			vals:      vals,
 		}
@@ -844,7 +844,7 @@ func RunInteractiveMenu(svc *ActivateService) error {
 				return err
 			}
 			if confirm {
-				if err := installWithResolvedConfig(svc.Manifests, cfg, resolveTargetPath(target), svc.UseRemote, svc.Repo, svc.Branch); err != nil {
+				if err := installWithResolvedConfig(svc.CurrentManifests(), cfg, resolveTargetPath(target), svc.IsRemoteMode(), svc.RemoteRepo(), svc.RemoteBranch()); err != nil {
 					_ = runFullscreenText("Action Failed", "Quick install", err.Error())
 				}
 			}
@@ -890,8 +890,8 @@ func RunInteractiveMenu(svc *ActivateService) error {
 
 // RunInteractiveInstall runs the full-screen TUI installer wizard, then
 // performs the file installation with normal stdout output.
-func RunInteractiveInstall(svc *ActivateService) error {
-	m := initialModel(svc.Manifests, svc.Config)
+func RunInteractiveInstall(svc ActivateAPI) error {
+	m := initialModel(svc.CurrentManifests(), svc.CurrentConfig())
 
 	p := tea.NewProgram(m, tea.WithAltScreen())
 	finalModel, err := p.Run()
@@ -931,8 +931,8 @@ func RunInteractiveInstall(svc *ActivateService) error {
 	fmt.Println()
 
 	// ── Install ─────────────────────────────────────────────────
-	if svc.UseRemote {
-		if err := InstallFilesFromRemote(files, result.chosen.BasePath, target, result.chosen.Version, result.chosen.ID, svc.Repo, svc.Branch); err != nil {
+	if svc.IsRemoteMode() {
+		if err := InstallFilesFromRemote(files, result.chosen.BasePath, target, result.chosen.Version, result.chosen.ID, svc.RemoteRepo(), svc.RemoteBranch()); err != nil {
 			return err
 		}
 	} else {
@@ -989,7 +989,7 @@ func formatUpdateResult(result *UpdateResult) string {
 // ── List command (stdout, no Bubble Tea) ────────────────────────
 
 // RunList displays manifests/files in human or JSON format.
-func RunList(svc *ActivateService, manifestID, tierID, category string, jsonOutput bool) error {
+func RunList(svc ActivateAPI, manifestID, tierID, category string, jsonOutput bool) error {
 	// Overview mode
 	if manifestID == "" && tierID == "" && category == "" {
 		manifests := svc.ListManifests()
@@ -1029,7 +1029,7 @@ func RunList(svc *ActivateService, manifestID, tierID, category string, jsonOutp
 	if tierLabel == "" {
 		tierLabel = "all tiers"
 	}
-	chosen := findManifestByID(svc.Manifests, result.Manifest)
+	chosen := findManifestByID(svc.CurrentManifests(), result.Manifest)
 	name := result.Manifest
 	ver := ""
 	if chosen != nil {

@@ -26,7 +26,7 @@ type fileBrowserValues struct {
 }
 
 type fileBrowserModel struct {
-	svc    *ActivateService
+	svc    ActivateAPI
 	files  []FileStatus
 	vals   *fileBrowserValues
 	form   *huh.Form
@@ -43,14 +43,14 @@ type fileBrowserModel struct {
 }
 
 // RunFileBrowser launches the file browser as a fullscreen Bubble Tea program.
-func RunFileBrowser(svc *ActivateService) error {
+func RunFileBrowser(svc ActivateAPI) error {
 	m := newFileBrowserModel(svc)
 	p := tea.NewProgram(m, tea.WithAltScreen())
 	_, err := p.Run()
 	return err
 }
 
-func newFileBrowserModel(svc *ActivateService) fileBrowserModel {
+func newFileBrowserModel(svc ActivateAPI) fileBrowserModel {
 	state := svc.GetState()
 	vals := &fileBrowserValues{}
 	form := buildFileBrowseForm(state.Files, &vals.selectedFile)
@@ -135,9 +135,10 @@ func (m fileBrowserModel) View() string {
 	sections = append(sections, renderBanner())
 	sections = append(sections, "")
 
-	m.svc.refreshConfig()
+	m.svc.RefreshConfig()
+	cfg := m.svc.CurrentConfig()
 	subtitle := fmt.Sprintf("  manifest=%s · tier=%s · %d files",
-		m.svc.Config.Manifest, m.svc.Config.Tier, len(m.files))
+		cfg.Manifest, cfg.Tier, len(m.files))
 
 	switch m.mode {
 	case "browse":

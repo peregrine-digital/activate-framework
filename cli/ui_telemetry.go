@@ -23,7 +23,7 @@ type telemetryValues struct {
 }
 
 type telemetryModel struct {
-	svc    *ActivateService
+	svc    ActivateAPI
 	vals   *telemetryValues
 	form   *huh.Form
 	mode   string // "menu", "text"
@@ -39,17 +39,18 @@ type telemetryModel struct {
 }
 
 // RunTelemetryScreen launches the telemetry screen as a fullscreen program.
-func RunTelemetryScreen(svc *ActivateService) error {
+func RunTelemetryScreen(svc ActivateAPI) error {
 	m := newTelemetryModel(svc)
 	p := tea.NewProgram(m, tea.WithAltScreen())
 	_, err := p.Run()
 	return err
 }
 
-func newTelemetryModel(svc *ActivateService) telemetryModel {
+func newTelemetryModel(svc ActivateAPI) telemetryModel {
 	vals := &telemetryValues{}
-	svc.refreshConfig()
-	enabled := svc.Config.TelemetryEnabled != nil && *svc.Config.TelemetryEnabled
+	svc.RefreshConfig()
+	cfg := svc.CurrentConfig()
+	enabled := cfg.TelemetryEnabled != nil && *cfg.TelemetryEnabled
 
 	form := buildTelemetryMenuForm(enabled, &vals.action)
 	return telemetryModel{
@@ -116,8 +117,9 @@ func (m telemetryModel) View() string {
 	sections = append(sections, "")
 	sections = append(sections, dimStyle.Render("  Telemetry"))
 
-	m.svc.refreshConfig()
-	enabled := m.svc.Config.TelemetryEnabled != nil && *m.svc.Config.TelemetryEnabled
+	m.svc.RefreshConfig()
+	cfg := m.svc.CurrentConfig()
+	enabled := cfg.TelemetryEnabled != nil && *cfg.TelemetryEnabled
 	if enabled {
 		sections = append(sections, dimStyle.Render("  status: enabled"))
 	} else {
@@ -174,8 +176,9 @@ func (m telemetryModel) View() string {
 // ── Actions ─────────────────────────────────────────────────────
 
 func (m telemetryModel) switchToMenu() (tea.Model, tea.Cmd) {
-	m.svc.refreshConfig()
-	enabled := m.svc.Config.TelemetryEnabled != nil && *m.svc.Config.TelemetryEnabled
+	m.svc.RefreshConfig()
+	cfg := m.svc.CurrentConfig()
+	enabled := cfg.TelemetryEnabled != nil && *cfg.TelemetryEnabled
 	m.vals.action = ""
 	m.mode = "menu"
 	m.form = buildTelemetryMenuForm(enabled, &m.vals.action)
@@ -206,8 +209,9 @@ func (m telemetryModel) handleAction() (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case "toggle":
-		m.svc.refreshConfig()
-		current := m.svc.Config.TelemetryEnabled != nil && *m.svc.Config.TelemetryEnabled
+		m.svc.RefreshConfig()
+		currentCfg := m.svc.CurrentConfig()
+		current := currentCfg.TelemetryEnabled != nil && *currentCfg.TelemetryEnabled
 		newVal := !current
 		updates := &Config{TelemetryEnabled: &newVal}
 		_, err := m.svc.SetConfig("global", updates)

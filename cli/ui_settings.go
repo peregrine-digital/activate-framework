@@ -25,7 +25,7 @@ type settingsValues struct {
 }
 
 type settingsModel struct {
-	svc    *ActivateService
+	svc    ActivateAPI
 	vals   *settingsValues
 	form   *huh.Form
 	mode   string // "form", "result"
@@ -43,7 +43,7 @@ type settingsModel struct {
 
 // RunSettings launches the settings screen as a fullscreen Bubble Tea program.
 // Returns true if settings were changed (caller should sync).
-func RunSettings(svc *ActivateService) (changed bool, err error) {
+func RunSettings(svc ActivateAPI) (changed bool, err error) {
 	m := newSettingsModel(svc)
 	p := tea.NewProgram(m, tea.WithAltScreen())
 	final, err := p.Run()
@@ -56,9 +56,9 @@ func RunSettings(svc *ActivateService) (changed bool, err error) {
 	return false, nil
 }
 
-func newSettingsModel(svc *ActivateService) settingsModel {
-	svc.refreshConfig()
-	cfg := svc.Config
+func newSettingsModel(svc ActivateAPI) settingsModel {
+	svc.RefreshConfig()
+	cfg := svc.CurrentConfig()
 	telemetryOn := cfg.TelemetryEnabled != nil && *cfg.TelemetryEnabled
 
 	vals := &settingsValues{
@@ -181,8 +181,8 @@ func (m settingsModel) saveSettings() (tea.Model, tea.Cmd) {
 	updates := &Config{}
 	changes := []string{}
 
-	m.svc.refreshConfig()
-	currentCfg := m.svc.Config
+	m.svc.RefreshConfig()
+	currentCfg := m.svc.CurrentConfig()
 
 	if m.vals.manifest != currentCfg.Manifest {
 		updates.Manifest = m.vals.manifest
@@ -239,7 +239,7 @@ func (m settingsModel) saveSettings() (tea.Model, tea.Cmd) {
 
 // ── Form builder ────────────────────────────────────────────────
 
-func buildSettingsForm(svc *ActivateService, vals *settingsValues) *huh.Form {
+func buildSettingsForm(svc ActivateAPI, vals *settingsValues) *huh.Form {
 	manifests := svc.ListManifests()
 	manifestOpts := make([]huh.Option[string], 0, len(manifests))
 	for _, m := range manifests {
@@ -282,8 +282,8 @@ func buildSettingsForm(svc *ActivateService, vals *settingsValues) *huh.Form {
 	).WithTheme(huh.ThemeCharm()).WithShowHelp(false)
 }
 
-func buildTierOptions(svc *ActivateService, manifestID string) []huh.Option[string] {
-	chosen := findManifestByID(svc.Manifests, manifestID)
+func buildTierOptions(svc ActivateAPI, manifestID string) []huh.Option[string] {
+	chosen := findManifestByID(svc.CurrentManifests(), manifestID)
 	if chosen == nil {
 		return []huh.Option[string]{huh.NewOption("(no tiers)", "")}
 	}

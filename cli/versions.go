@@ -46,6 +46,7 @@ type FileStatus struct {
 	Tier             string `json:"tier"`
 	Description      string `json:"description,omitempty"`
 	Installed        bool   `json:"installed"`
+	InTier           bool   `json:"inTier"`
 	BundledVersion   string `json:"bundledVersion,omitempty"`
 	InstalledVersion string `json:"installedVersion,omitempty"`
 	UpdateAvailable  bool   `json:"updateAvailable"`
@@ -55,6 +56,8 @@ type FileStatus struct {
 
 // ComputeFileStatuses builds a status list for every file in the manifest.
 func ComputeFileStatuses(m Manifest, sidecar *repoSidecar, cfg Config, projectDir string) []FileStatus {
+	allowedTiers := GetAllowedFileTiers(m, cfg.Tier)
+
 	installedSet := make(map[string]bool)
 	if sidecar != nil {
 		for _, f := range sidecar.Files {
@@ -76,6 +79,7 @@ func ComputeFileStatuses(m Manifest, sidecar *repoSidecar, cfg Config, projectDi
 			DisplayName: fileDisplayName(f.Dest),
 			Category:    cat,
 			Tier:        f.Tier,
+			InTier:      allowedTiers[f.Tier],
 		}
 		if f.Description != "" {
 			fs.Description = f.Description

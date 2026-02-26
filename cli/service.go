@@ -5,6 +5,38 @@ import (
 	"path/filepath"
 )
 
+// ActivateAPI defines the contract for all domain operations.
+// Both the TUI (direct) and extension (JSON-RPC) consume this interface.
+type ActivateAPI interface {
+	GetState() StateResult
+	GetConfig(scope string) (*Config, error)
+	SetConfig(scope string, updates *Config) (*SetConfigResult, error)
+	ListManifests() []Manifest
+	ListFiles(manifestID, tierID, category string) (*ListFilesResult, error)
+	RepoAdd() (*RepoAddResult, error)
+	RepoRemove() error
+	Sync() (*SyncResult, error)
+	Update() (*UpdateResult, error)
+	InstallFile(file string) (*FileResult, error)
+	UninstallFile(file string) (*FileResult, error)
+	DiffFile(file string) (*DiffResult, error)
+	SkipUpdate(file string) (*FileResult, error)
+	SetOverride(file, override string) (*FileResult, error)
+	RunTelemetry(token string) (*TelemetryRunResult, error)
+	ReadTelemetryLog() ([]TelemetryEntry, error)
+	// Getters for service state — avoids direct field access.
+	RefreshConfig()
+	CurrentConfig() Config
+	CurrentManifests() []Manifest
+	CurrentProjectDir() string
+	IsRemoteMode() bool
+	RemoteRepo() string
+	RemoteBranch() string
+}
+
+// Compile-time interface check.
+var _ ActivateAPI = (*ActivateService)(nil)
+
 // ActivateService is the single API surface for all domain operations.
 // Both the TUI and the JSON-RPC daemon call through this struct.
 type ActivateService struct {
@@ -31,6 +63,41 @@ func NewService(projectDir string, manifests []Manifest, cfg Config, useRemote b
 // refreshConfig re-reads the resolved config from disk.
 func (s *ActivateService) refreshConfig() {
 	s.Config = ResolveConfig(s.ProjectDir, nil)
+}
+
+// RefreshConfig re-reads the resolved config from disk (public for TUI).
+func (s *ActivateService) RefreshConfig() {
+	s.refreshConfig()
+}
+
+// CurrentConfig returns the current resolved config.
+func (s *ActivateService) CurrentConfig() Config {
+	return s.Config
+}
+
+// CurrentManifests returns the loaded manifests.
+func (s *ActivateService) CurrentManifests() []Manifest {
+	return s.Manifests
+}
+
+// CurrentProjectDir returns the project directory.
+func (s *ActivateService) CurrentProjectDir() string {
+	return s.ProjectDir
+}
+
+// IsRemoteMode returns whether the service is in remote fetch mode.
+func (s *ActivateService) IsRemoteMode() bool {
+	return s.UseRemote
+}
+
+// RemoteRepo returns the remote repository identifier.
+func (s *ActivateService) RemoteRepo() string {
+	return s.Repo
+}
+
+// RemoteBranch returns the remote branch name.
+func (s *ActivateService) RemoteBranch() string {
+	return s.Branch
 }
 
 // ── State queries ──────────────────────────────────────────────
