@@ -116,6 +116,8 @@ type SetConfigResult struct {
 }
 
 // SetConfig writes config values at the requested scope.
+// When changing manifest, automatically resets tier to the first available
+// tier in the new manifest if the current tier is not valid.
 func (s *ActivateService) SetConfig(scope string, updates *Config) (*SetConfigResult, error) {
 	if scope == "" {
 		scope = "project"
@@ -133,6 +135,32 @@ func (s *ActivateService) SetConfig(scope string, updates *Config) (*SetConfigRe
 		return nil, fmt.Errorf("invalid scope for set: %s (use project|global)", scope)
 	}
 	s.refreshConfig()
+
+	// When manifest changes, validate the tier is valid for the new manifest
+	if updates.Manifest != "" {
+		chosen := findManifestByID(s.Manifests, s.Config.Manifest)
+		if chosen != nil {
+			tiers := DiscoverAvailableTiers(*chosen)
+			tierValid := false
+			for _, t := range tiers {
+				if t.ID == s.Config.Tier {
+					tierValid = true
+					break
+				}
+			}
+			if !tierValid && len(tiers) > 0 {
+				tierUpdate := &Config{Tier: tiers[0].ID}
+				switch scope {
+				case "global":
+					_ = WriteGlobalConfig(tierUpdate)
+				case "project":
+					_ = WriteProjectConfig(s.ProjectDir, tierUpdate)
+				}
+				s.refreshConfig()
+			}
+		}
+	}
+
 	return &SetConfigResult{OK: true, Scope: scope}, nil
 }
 
@@ -214,7 +242,8 @@ type SyncResult struct {
 	Reason           string   `json:"reason,omitempty"`
 }
 
-// Sync detects version mismatch and re-injects if needed.
+// Sync detects manifest/tier/version changes and re-injects if needed.
+// If the manifest or tier changed, a full reinstall is performed (not just update).
 func (s *ActivateService) Sync() (*SyncResult, error) {
 	chosen := findManifestByID(s.Manifests, s.Config.Manifest)
 	if chosen == nil {
@@ -226,11 +255,24 @@ func (s *ActivateService) Sync() (*SyncResult, error) {
 		return &SyncResult{Action: "none", Reason: "not installed"}, nil
 	}
 
-	if !SyncNeeded(*chosen, sidecar) {
+	if !SyncNeeded(*chosen, sidecar, s.Config.Tier) {
 		return &SyncResult{
 			Action:           "none",
 			Reason:           "up to date",
 			AvailableVersion: chosen.Version,
+		}, nil
+	}
+
+	// If manifest or tier changed, do a full reinstall to pick up the correct file set
+	if sidecar.Manifest != chosen.ID || sidecar.Tier != s.Config.Tier {
+		if err := RepoAdd(s.Manifests, s.Config, s.ProjectDir, s.UseRemote, s.Repo, s.Branch); err != nil {
+			return nil, err
+		}
+		return &SyncResult{
+			Action:           "reinstalled",
+			PreviousVersion:  sidecar.Version,
+			AvailableVersion: chosen.Version,
+			Reason:           fmt.Sprintf("manifest/tier changed: %s/%s → %s/%s", sidecar.Manifest, sidecar.Tier, chosen.ID, s.Config.Tier),
 		}, nil
 	}
 

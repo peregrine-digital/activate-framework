@@ -239,12 +239,13 @@ func runDiffCommand(svc *ActivateService, file string) error {
 
 // ── Sync command (auto-setup equivalent) ────────────────────────
 
-// SyncNeeded checks if the installed manifest version differs from the available version.
-func SyncNeeded(m Manifest, sidecar *repoSidecar) bool {
+// SyncNeeded checks if the installed state differs from the desired state
+// (manifest ID, tier, or version changed).
+func SyncNeeded(m Manifest, sidecar *repoSidecar, tier string) bool {
 	if sidecar == nil {
 		return false
 	}
-	return sidecar.Version != m.Version
+	return sidecar.Version != m.Version || sidecar.Manifest != m.ID || sidecar.Tier != tier
 }
 
 func runSyncCommand(svc *ActivateService, jsonOutput bool) error {

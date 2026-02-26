@@ -246,9 +246,57 @@ func TestServiceSetConfig(t *testing.T) {
 			t.Fatal("expected error for invalid scope")
 		}
 	})
-}
 
-// ── TestServiceListManifests ───────────────────────────────────
+	t.Run("changing manifest resets invalid tier", func(t *testing.T) {
+		homeDir := t.TempDir()
+		old := activateBaseDir
+		activateBaseDir = homeDir
+		t.Cleanup(func() { activateBaseDir = old })
+
+		projectDir := t.TempDir()
+		excludeDir := filepath.Join(projectDir, ".git", "info")
+		os.MkdirAll(excludeDir, 0755)
+		os.WriteFile(filepath.Join(excludeDir, "exclude"), []byte(""), 0644)
+
+		bundleDir := t.TempDir()
+		srcRel := "instructions/test.instructions.md"
+		srcPath := filepath.Join(bundleDir, srcRel)
+		os.MkdirAll(filepath.Dir(srcPath), 0755)
+		os.WriteFile(srcPath, []byte("---\nversion: '1.0.0'\n---\n# Test\n"), 0644)
+
+		// Manifest A has tier "alpha"
+		mA := Manifest{
+			ID: "manifest-a", Version: "1.0.0", BasePath: bundleDir,
+			Files: []ManifestFile{{Src: srcRel, Dest: srcRel, Tier: "alpha", Category: "instructions"}},
+			Tiers: []TierDef{{ID: "alpha", Label: "Alpha"}},
+		}
+		// Manifest B has tier "beta" — "alpha" is NOT valid here
+		mB := Manifest{
+			ID: "manifest-b", Version: "1.0.0", BasePath: bundleDir,
+			Files: []ManifestFile{{Src: srcRel, Dest: srcRel, Tier: "beta", Category: "instructions"}},
+			Tiers: []TierDef{{ID: "beta", Label: "Beta"}},
+		}
+
+		cfg := ResolveConfig(projectDir, nil)
+		cfg.Manifest = "manifest-a"
+		cfg.Tier = "alpha"
+		svc := NewService(projectDir, []Manifest{mA, mB}, cfg, false, "", "")
+
+		// Switch to manifest-b — tier "alpha" is invalid for it
+		result, err := svc.SetConfig("project", &Config{Manifest: "manifest-b"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !result.OK {
+			t.Fatal("expected OK")
+		}
+
+		// Tier should have been auto-reset to "beta" (first tier of manifest-b)
+		if svc.Config.Tier != "beta" {
+			t.Fatalf("expected tier auto-reset to 'beta', got %q", svc.Config.Tier)
+		}
+	})
+}
 
 func TestServiceListManifests(t *testing.T) {
 	m, projectDir, _ := setupBundle(t)
@@ -433,6 +481,55 @@ func TestServiceSync(t *testing.T) {
 		}
 		if result.AvailableVersion != "1.0.0" {
 			t.Fatalf("AvailableVersion = %q, want 1.0.0", result.AvailableVersion)
+		}
+	})
+	t.Run("tier change triggers reinstall", func(t *testing.T) {
+		m, projectDir, _ := setupBundle(t)
+		svc := newTestService(m, projectDir)
+
+		if _, err := svc.RepoAdd(); err != nil {
+			t.Fatal(err)
+		}
+
+		// Change the tier in config
+		svc.Config.Tier = "standard"
+
+		result, err := svc.Sync()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if result.Action != "reinstalled" {
+			t.Fatalf("expected reinstalled, got %q", result.Action)
+		}
+		if !strings.Contains(result.Reason, "manifest/tier changed") {
+			t.Fatalf("expected reason about tier change, got %q", result.Reason)
+		}
+	})
+
+	t.Run("manifest change triggers reinstall", func(t *testing.T) {
+		m, projectDir, bundleDir := setupBundle(t)
+		svc := newTestService(m, projectDir)
+
+		if _, err := svc.RepoAdd(); err != nil {
+			t.Fatal(err)
+		}
+
+		// Add a second manifest and switch to it
+		m2 := Manifest{
+			ID: "other-manifest", Version: "1.0.0", BasePath: bundleDir,
+			Files: []ManifestFile{
+				{Src: "instructions/test.instructions.md", Dest: "instructions/test.instructions.md", Tier: "core", Category: "instructions"},
+			},
+		}
+		svc.Manifests = append(svc.Manifests, m2)
+		svc.Config.Manifest = "other-manifest"
+
+		result, err := svc.Sync()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if result.Action != "reinstalled" {
+			t.Fatalf("expected reinstalled, got %q", result.Action)
 		}
 	})
 }

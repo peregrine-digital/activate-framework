@@ -105,6 +105,7 @@ async function activate(context) {
         const items = tiers.map((t) => ({
           label: t.label || t.id,
           description: t.id === state.config.tier ? '(current)' : '',
+          picked: t.id === state.config.tier,
           value: t.id,
         }));
         const picked = await vscode.window.showQuickPick(items, {
@@ -121,6 +122,8 @@ async function activate(context) {
 
     vscode.commands.registerCommand('activate-framework.changeManifest', async () => {
       try {
+        const state = await client.getState();
+        const currentManifest = state?.config?.manifest || '';
         const manifests = await client.listManifests();
         if (!manifests || manifests.length === 0) {
           vscode.window.showWarningMessage('No manifests found.');
@@ -128,7 +131,8 @@ async function activate(context) {
         }
         const items = manifests.map((m) => ({
           label: m.name || m.id,
-          description: m.id,
+          description: m.id === currentManifest ? `${m.id} (current)` : m.id,
+          picked: m.id === currentManifest,
           value: m.id,
         }));
         const picked = await vscode.window.showQuickPick(items, {

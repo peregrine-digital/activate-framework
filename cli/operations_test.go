@@ -452,24 +452,40 @@ func TestDiffFileMissingBundled(t *testing.T) {
 // ── SyncNeeded tests ────────────────────────────────────────────
 
 func TestSyncNeeded(t *testing.T) {
-	m := Manifest{Version: "1.1.0"}
+	m := Manifest{ID: "test-manifest", Version: "1.1.0"}
 
 	// Versions differ → sync needed
-	sc := &repoSidecar{Version: "1.0.0"}
-	if !SyncNeeded(m, sc) {
+	sc := &repoSidecar{Manifest: "test-manifest", Tier: "standard", Version: "1.0.0"}
+	if !SyncNeeded(m, sc, "standard") {
 		t.Fatal("expected SyncNeeded=true when versions differ")
 	}
 
 	// Versions same → no sync needed
 	sc.Version = "1.1.0"
-	if SyncNeeded(m, sc) {
+	if SyncNeeded(m, sc, "standard") {
 		t.Fatal("expected SyncNeeded=false when versions match")
+	}
+}
+
+func TestSyncNeededManifestChanged(t *testing.T) {
+	m := Manifest{ID: "new-manifest", Version: "1.0.0"}
+	sc := &repoSidecar{Manifest: "old-manifest", Tier: "standard", Version: "1.0.0"}
+	if !SyncNeeded(m, sc, "standard") {
+		t.Fatal("expected SyncNeeded=true when manifest ID changed")
+	}
+}
+
+func TestSyncNeededTierChanged(t *testing.T) {
+	m := Manifest{ID: "test-manifest", Version: "1.0.0"}
+	sc := &repoSidecar{Manifest: "test-manifest", Tier: "minimal", Version: "1.0.0"}
+	if !SyncNeeded(m, sc, "standard") {
+		t.Fatal("expected SyncNeeded=true when tier changed")
 	}
 }
 
 func TestSyncNeededNilSidecar(t *testing.T) {
 	m := Manifest{Version: "1.0.0"}
-	if SyncNeeded(m, nil) {
+	if SyncNeeded(m, nil, "standard") {
 		t.Fatal("expected SyncNeeded=false for nil sidecar")
 	}
 }
