@@ -4,9 +4,9 @@ package main
 
 // ResolvedTier is a tier definition with cumulative includes.
 type ResolvedTier struct {
-	ID       string
-	Label    string
-	Includes []string
+	ID       string   `json:"id"`
+	Label    string   `json:"label"`
+	Includes []string `json:"includes"`
 }
 
 // DefaultTiers for manifests that don't define their own.

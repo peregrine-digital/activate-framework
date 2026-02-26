@@ -75,10 +75,17 @@ describe('ControlPanelProvider', () => {
   });
 
   describe('_gatherState', () => {
+    const DEFAULT_TIERS = [
+      { id: 'minimal', label: 'Minimal', includes: ['core'] },
+      { id: 'standard', label: 'Standard', includes: ['core', 'ad-hoc'] },
+      { id: 'advanced', label: 'Advanced', includes: ['core', 'ad-hoc', 'ad-hoc-advanced'] },
+    ];
+
     it('transforms daemon state into panel shape', async () => {
       mockClient._mockResults.getState = {
         config: { tier: 'standard', manifest: 'test-manifest', fileOverrides: {}, skippedVersions: {} },
         state: { hasInstallMarker: true, installedVersion: '1.0.0' },
+        tiers: DEFAULT_TIERS,
         files: [
           { dest: 'instructions/a.md', category: 'instructions', tier: 'core', installed: true, installedVersion: '1.0.0', bundledVersion: '1.0.0', override: '' },
           { dest: 'prompts/b.md', category: 'prompts', tier: 'ad-hoc', installed: false, bundledVersion: '1.0.0', override: '' },
@@ -107,6 +114,7 @@ describe('ControlPanelProvider', () => {
       mockClient._mockResults.getState = {
         config: { tier: 'standard', manifest: 'test', fileOverrides: {}, skippedVersions: {} },
         state: { hasInstallMarker: true, installedVersion: '1.0.0' },
+        tiers: DEFAULT_TIERS,
         files: [
           { dest: 'instructions/a.md', category: 'instructions', tier: 'core', installed: true, installedVersion: '0.9.0', bundledVersion: '1.0.0' },
         ],
@@ -124,6 +132,7 @@ describe('ControlPanelProvider', () => {
       mockClient._mockResults.getState = {
         config: { tier: 'standard', manifest: 'test', fileOverrides: { 'a.md': 'excluded' }, skippedVersions: {} },
         state: { hasInstallMarker: true },
+        tiers: DEFAULT_TIERS,
         files: [
           { dest: 'a.md', category: 'instructions', tier: 'core', installed: false, override: 'excluded' },
         ],
@@ -140,6 +149,7 @@ describe('ControlPanelProvider', () => {
       mockClient._mockResults.getState = {
         config: { tier: 'minimal', manifest: 'test', fileOverrides: {}, skippedVersions: {} },
         state: { hasInstallMarker: true },
+        tiers: DEFAULT_TIERS,
         files: [
           { dest: 'prompts/b.md', category: 'prompts', tier: 'ad-hoc', installed: false, override: 'pinned' },
         ],
@@ -160,6 +170,28 @@ describe('ControlPanelProvider', () => {
       assert.equal(state.tier, 'standard');
       assert.equal(state.isActive, false);
       assert.equal(state.installedFiles.length, 0);
+    });
+
+    it('uses custom tiers from daemon', async () => {
+      const customTiers = [
+        { id: 'basic', label: 'Basic', includes: ['foundation'] },
+        { id: 'full', label: 'Full', includes: ['foundation', 'extras'] },
+      ];
+      mockClient._mockResults.getState = {
+        config: { tier: 'basic', manifest: 'custom', fileOverrides: {}, skippedVersions: {} },
+        state: { hasInstallMarker: true },
+        tiers: customTiers,
+        files: [
+          { dest: 'a.md', category: 'instructions', tier: 'foundation', installed: false, override: '' },
+          { dest: 'b.md', category: 'prompts', tier: 'extras', installed: false, override: '' },
+        ],
+      };
+      mockClient._mockResults.listManifests = [];
+
+      const state = await panel._gatherState();
+      assert.equal(state.tierLabel, 'Basic');
+      assert.equal(state.availableFiles.length, 1); // only foundation files
+      assert.equal(state.outsideTierFiles.length, 1); // extras is outside basic
     });
   });
 
@@ -203,6 +235,11 @@ describe('groupByCategory (via controlPanel module)', () => {
     mockClient._mockResults.getState = {
       config: { tier: 'advanced', manifest: 'test', fileOverrides: {}, skippedVersions: {} },
       state: { hasInstallMarker: true },
+      tiers: [
+        { id: 'minimal', label: 'Minimal', includes: ['core'] },
+        { id: 'standard', label: 'Standard', includes: ['core', 'ad-hoc'] },
+        { id: 'advanced', label: 'Advanced', includes: ['core', 'ad-hoc', 'ad-hoc-advanced'] },
+      ],
       files: [
         { dest: 'instructions/a.md', category: 'instructions', tier: 'core', installed: true },
         { dest: 'instructions/b.md', category: 'instructions', tier: 'core', installed: true },
@@ -223,6 +260,10 @@ describe('groupByCategory (via controlPanel module)', () => {
     mockClient._mockResults.getState = {
       config: { tier: 'standard', manifest: 'test', fileOverrides: {}, skippedVersions: {} },
       state: { hasInstallMarker: true },
+      tiers: [
+        { id: 'minimal', label: 'Minimal', includes: ['core'] },
+        { id: 'standard', label: 'Standard', includes: ['core', 'ad-hoc'] },
+      ],
       files: [
         { dest: 'instructions/a.md', category: 'instructions', tier: 'core', installed: false, bundledVersion: '2.0.0', description: 'Test file' },
       ],

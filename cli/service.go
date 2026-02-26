@@ -37,10 +37,11 @@ func (s *ActivateService) refreshConfig() {
 
 // StateResult is the full state snapshot returned by GetState.
 type StateResult struct {
-	ProjectDir string       `json:"projectDir"`
-	State      InstallState `json:"state"`
-	Config     Config       `json:"config"`
-	Files      []FileStatus `json:"files,omitempty"`
+	ProjectDir string         `json:"projectDir"`
+	State      InstallState   `json:"state"`
+	Config     Config         `json:"config"`
+	Tiers      []ResolvedTier `json:"tiers,omitempty"`
+	Files      []FileStatus   `json:"files,omitempty"`
 }
 
 // GetState returns the full install/config state for the project.
@@ -55,6 +56,7 @@ func (s *ActivateService) GetState() StateResult {
 		Config:     s.Config,
 	}
 	if chosen != nil {
+		result.Tiers = DiscoverAvailableTiers(*chosen)
 		result.Files = ComputeFileStatuses(*chosen, sidecar, s.Config, s.ProjectDir)
 	}
 	return result

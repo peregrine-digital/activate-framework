@@ -60,8 +60,9 @@ class ControlPanelProvider {
     const availableFiles = [];
     const outsideTierFiles = [];
 
-    // Get allowed tiers for current tier level
-    const tierIncludes = getTierIncludes(tier);
+    // Get allowed tiers from daemon (dynamic per manifest)
+    const tiers = state.tiers || [];
+    const tierIncludes = getTierIncludesFromState(tiers, tier);
 
     for (const f of files) {
       if (f.installed) {
@@ -86,9 +87,9 @@ class ControlPanelProvider {
       }
     }
 
-    // Tier label
-    const TIER_LABELS = { minimal: 'Minimal', standard: 'Standard', advanced: 'Advanced' };
-    const tierLabel = TIER_LABELS[tier] || tier;
+    // Tier label from daemon tier definitions
+    const activeTier = tiers.find((t) => t.id === tier);
+    const tierLabel = activeTier ? activeTier.label : tier;
 
     return {
       version,
@@ -957,17 +958,15 @@ function esc(str) {
     .replace(/'/g, '&#39;');
 }
 
-// ── Tier helpers (replaces manifest.js dependency) ─────────────
+// ── Tier helpers (dynamic — reads from daemon state) ───────────
 
-const TIER_DEFS = [
-  { id: 'minimal', includes: ['core'] },
-  { id: 'standard', includes: ['core', 'ad-hoc'] },
-  { id: 'advanced', includes: ['core', 'ad-hoc', 'ad-hoc-advanced'] },
-];
-
-function getTierIncludes(tierId) {
-  const tier = TIER_DEFS.find((t) => t.id === tierId) || TIER_DEFS[1];
-  return new Set(tier.includes);
+function getTierIncludesFromState(tiers, tierId) {
+  const match = tiers.find((t) => t.id === tierId);
+  if (match) return new Set(match.includes || []);
+  // Fallback: use second tier (standard-equivalent) or first
+  const fallback = tiers[1] || tiers[0];
+  if (fallback) return new Set(fallback.includes || []);
+  return new Set(['core']);
 }
 
 // ── Category grouping (replaces manifest.js dependency) ────────

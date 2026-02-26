@@ -37,14 +37,6 @@ function resolveBinPath(context) {
   return null;
 }
 
-// ── Tier labels ───────────────────────────────────────────────
-
-const TIER_OPTIONS = [
-  { label: 'Minimal', value: 'minimal' },
-  { label: 'Standard', value: 'standard' },
-  { label: 'Advanced', value: 'advanced' },
-];
-
 // ── Activation ────────────────────────────────────────────────
 
 async function activate(context) {
@@ -98,10 +90,15 @@ async function activate(context) {
     vscode.commands.registerCommand('activate-framework.changeTier', async () => {
       try {
         const state = await client.getState();
-        const items = TIER_OPTIONS.map((t) => ({
-          label: t.label,
-          description: t.value === state.config.tier ? '(current)' : '',
-          value: t.value,
+        const tiers = state.tiers || [];
+        if (tiers.length === 0) {
+          vscode.window.showWarningMessage('No tiers available for this manifest.');
+          return;
+        }
+        const items = tiers.map((t) => ({
+          label: t.label || t.id,
+          description: t.id === state.config.tier ? '(current)' : '',
+          value: t.id,
         }));
         const picked = await vscode.window.showQuickPick(items, {
           placeHolder: 'Select tier',
