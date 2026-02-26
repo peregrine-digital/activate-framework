@@ -8,6 +8,7 @@ import (
 // ActivateAPI defines the contract for all domain operations.
 // Both the TUI (direct) and extension (JSON-RPC) consume this interface.
 type ActivateAPI interface {
+	Initialize(projectDir string)
 	GetState() StateResult
 	GetConfig(scope string) (*Config, error)
 	SetConfig(scope string, updates *Config) (*SetConfigResult, error)
@@ -63,6 +64,14 @@ func NewService(projectDir string, manifests []Manifest, cfg Config, useRemote b
 // refreshConfig re-reads the resolved config from disk.
 func (s *ActivateService) refreshConfig() {
 	s.Config = ResolveConfig(s.ProjectDir, nil)
+}
+
+// Initialize sets the project directory and refreshes config.
+func (s *ActivateService) Initialize(projectDir string) {
+	if projectDir != "" {
+		s.ProjectDir = projectDir
+		s.refreshConfig()
+	}
 }
 
 // RefreshConfig re-reads the resolved config from disk (public for TUI).

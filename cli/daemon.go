@@ -9,12 +9,12 @@ import (
 
 // Daemon is the JSON-RPC server that dispatches requests to an ActivateService.
 type Daemon struct {
-	service   *ActivateService
+	service   ActivateAPI
 	transport *Transport
 }
 
 // NewDaemon creates a daemon wired to the given service and transport.
-func NewDaemon(service *ActivateService, transport *Transport) *Daemon {
+func NewDaemon(service ActivateAPI, transport *Transport) *Daemon {
 	return &Daemon{service: service, transport: transport}
 }
 
@@ -111,8 +111,7 @@ func (d *Daemon) handleInitialize(req *Request) *Response {
 		}
 	}
 	if params.ProjectDir != "" {
-		d.service.ProjectDir = params.ProjectDir
-		d.service.refreshConfig()
+		d.service.Initialize(params.ProjectDir)
 	}
 
 	return SuccessResponse(req.ID, InitializeResult{
