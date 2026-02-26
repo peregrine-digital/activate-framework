@@ -105,11 +105,18 @@ async function activate(context) {
         const items = tiers.map((t) => ({
           label: t.label || t.id,
           description: t.id === state.config.tier ? '(current)' : '',
-          picked: t.id === state.config.tier,
           value: t.id,
         }));
-        const picked = await vscode.window.showQuickPick(items, {
-          placeHolder: 'Select tier',
+        const currentItem = items.find((i) => i.value === state.config.tier);
+
+        const picked = await new Promise((resolve) => {
+          const qp = vscode.window.createQuickPick();
+          qp.items = items;
+          qp.placeholder = 'Select tier';
+          if (currentItem) qp.activeItems = [currentItem];
+          qp.onDidAccept(() => { resolve(qp.activeItems[0]); qp.dispose(); });
+          qp.onDidHide(() => { resolve(undefined); qp.dispose(); });
+          qp.show();
         });
         if (!picked) return;
         await client.setConfig({ tier: picked.value, scope: 'project' });
@@ -132,11 +139,18 @@ async function activate(context) {
         const items = manifests.map((m) => ({
           label: m.name || m.id,
           description: m.id === currentManifest ? `${m.id} (current)` : m.id,
-          picked: m.id === currentManifest,
           value: m.id,
         }));
-        const picked = await vscode.window.showQuickPick(items, {
-          placeHolder: 'Select manifest',
+        const currentItem = items.find((i) => i.value === currentManifest);
+
+        const picked = await new Promise((resolve) => {
+          const qp = vscode.window.createQuickPick();
+          qp.items = items;
+          qp.placeholder = 'Select manifest';
+          if (currentItem) qp.activeItems = [currentItem];
+          qp.onDidAccept(() => { resolve(qp.activeItems[0]); qp.dispose(); });
+          qp.onDidHide(() => { resolve(undefined); qp.dispose(); });
+          qp.show();
         });
         if (!picked) return;
         await client.setConfig({ manifest: picked.value, scope: 'project' });

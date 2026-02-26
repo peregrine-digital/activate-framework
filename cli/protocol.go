@@ -47,10 +47,11 @@ type ConfigGetParams struct {
 
 // ConfigSetParams specifies config updates and scope.
 type ConfigSetParams struct {
-	Scope    string  `json:"scope,omitempty"` // "project" (default), "global"
-	Manifest string  `json:"manifest,omitempty"`
-	Tier     string  `json:"tier,omitempty"`
-	Updates  *Config `json:"updates,omitempty"` // for full config patches
+	Scope            string  `json:"scope,omitempty"` // "project" (default), "global"
+	Manifest         string  `json:"manifest,omitempty"`
+	Tier             string  `json:"tier,omitempty"`
+	TelemetryEnabled *bool   `json:"telemetryEnabled,omitempty"`
+	Updates          *Config `json:"updates,omitempty"` // for full config patches
 }
 
 // ManifestFilesParams specifies which manifest/tier/category to list files for.

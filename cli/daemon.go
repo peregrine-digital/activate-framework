@@ -161,6 +161,9 @@ func (d *Daemon) handleConfigSet(req *Request) *Response {
 	if params.Tier != "" {
 		updates.Tier = params.Tier
 	}
+	if params.TelemetryEnabled != nil {
+		updates.TelemetryEnabled = params.TelemetryEnabled
+	}
 
 	result, err := d.service.SetConfig(params.Scope, updates)
 	if err != nil {

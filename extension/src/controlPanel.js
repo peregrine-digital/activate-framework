@@ -117,8 +117,10 @@ class ControlPanelProvider {
     if (!this._view) return;
     try {
       if (this._currentPage === 'usage') {
+        const state = await this._client.getState();
+        const telemetryEnabled = state?.config?.telemetryEnabled === true;
         const entries = await this._client.readTelemetryLog();
-        this._view.webview.html = this._getUsageHtml(entries || []);
+        this._view.webview.html = this._getUsageHtml(entries || [], telemetryEnabled);
       } else {
         const state = await this._gatherState();
         this._view.webview.html = this._getHtml(state);
@@ -179,6 +181,15 @@ class ControlPanelProvider {
           () => this._render(), // render even on failure to show stale data
         );
         break;
+      case 'toggleTelemetry':
+        this._client.setConfig({
+          telemetryEnabled: msg.enabled,
+          scope: 'global',
+        }).then(
+          () => this._render(),
+          () => this._render(),
+        );
+        break;
       case 'openLogFile': {
         const logPath = this._telemetryLogPath;
         if (!logPath) {
@@ -191,9 +202,6 @@ class ControlPanelProvider {
         );
         break;
       }
-      case 'openSettings':
-        vscode.commands.executeCommand('workbench.action.openSettings', '@ext:peregrine.peregrine-activate');
-        break;
     }
   }
 
@@ -579,7 +587,6 @@ class ControlPanelProvider {
     <span class="dot">·</span>
     <span class="ws-status">${isActive ? '✓' : '○'} Installed</span>
     <span class="spacer"></span>
-    <span class="gear-btn" onclick="send('openSettings')" title="Peregrine Activate Settings">⚙</span>
   </div>
 
   <div class="button-row">
@@ -635,7 +642,7 @@ class ControlPanelProvider {
 
   // ── Usage page HTML ─────────────────────────────────────
 
-  _getUsageHtml(entries) {
+  _getUsageHtml(entries, telemetryEnabled) {
     // Sort entries by date descending (most recent first)
     const sorted = [...entries].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
 
@@ -872,11 +879,12 @@ class ControlPanelProvider {
 
   <div class="button-row">
     <button class="secondary" onclick="send('backToMain')">← Back</button>
-    <button class="primary" onclick="send('refreshUsage')">↻ Refresh</button>
+    <button class="primary" onclick="send('refreshUsage')" ${telemetryEnabled ? '' : 'disabled'}>↻ Refresh</button>
     <button class="secondary" onclick="send('openLogFile')">📄 Open Log</button>
+    <button class="secondary" onclick="send('toggleTelemetry', { enabled: ${!telemetryEnabled} })">${telemetryEnabled ? '⏸ Disable' : '▶ Enable'} Telemetry</button>
   </div>
 
-  <hr>
+  ${!telemetryEnabled ? '<div class="empty">Telemetry is disabled. Click Enable to start tracking Copilot usage.</div><hr>' : '<hr>'}
 
   ${latest ? `
   <div class="summary-row">
@@ -928,8 +936,8 @@ class ControlPanelProvider {
 
   <script>
     const vscode = acquireVsCodeApi();
-    function send(command) {
-      vscode.postMessage({ command });
+    function send(command, data) {
+      vscode.postMessage({ command, ...data });
     }
   </script>
 </body>

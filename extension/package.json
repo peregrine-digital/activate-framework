@@ -110,56 +110,7 @@
     ],
     "configuration": {
       "title": "Peregrine Activate",
-      "properties": {
-        "peregrine-activate.defaultTier": {
-          "type": "string",
-          "default": "standard",
-          "enum": [
-            "minimal",
-            "standard",
-            "advanced"
-          ],
-          "enumDescriptions": [
-            "Core workflow guidance (AGENTS.md, instructions, prompts)",
-            "Core + ad-hoc instructions, skills, and agents",
-            "Standard + advanced tooling"
-          ],
-          "description": "Default installation tier for Peregrine Activate."
-        },
-        "peregrine-activate.source": {
-          "type": "string",
-          "default": "bundled",
-          "enum": [
-            "bundled",
-            "remote"
-          ],
-          "enumDescriptions": [
-            "Use files bundled with the extension (offline, stable)",
-            "Fetch files from GitHub (always latest, requires network)"
-          ],
-          "description": "Where Peregrine Activate loads manifest and files from."
-        },
-        "peregrine-activate.remoteRepo": {
-          "type": "string",
-          "default": "peregrine-digital/activate-framework",
-          "description": "GitHub repository (owner/repo) for Peregrine Activate when source is 'remote'."
-        },
-        "peregrine-activate.remoteBranch": {
-          "type": "string",
-          "default": "main",
-          "description": "Git branch or tag for Peregrine Activate when source is 'remote'."
-        },
-        "peregrine-activate.telemetry.enabled": {
-          "type": "boolean",
-          "default": true,
-          "description": "Enable Peregrine Activate's daily logging of GitHub Copilot premium-interaction quota usage to ~/.activate/copilot-telemetry.jsonl."
-        },
-        "peregrine-activate.telemetry.logDirectory": {
-          "type": "string",
-          "default": "",
-          "description": "Directory for Peregrine Activate's Copilot telemetry log. Empty uses ~/.activate/. Supports ~ for home directory."
-        }
-      }
+      "properties": {}
     }
   },
   "scripts": {
