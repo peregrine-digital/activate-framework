@@ -12,6 +12,9 @@ let client = null;
 /** Cached install directory from daemon (e.g. ".github"). */
 let installDir = '.github';
 
+/** Temp directories created for diff views; cleaned up on deactivate. */
+const tempDirs = [];
+
 // ── Binary resolution ─────────────────────────────────────────
 
 /**
@@ -269,6 +272,7 @@ async function activate(context) {
         }
 
         const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'activate-diff-'));
+        tempDirs.push(tmpDir);
         const name = file.dest.split('/').pop();
         const diffPath = path.join(tmpDir, `${name}.diff`);
         fs.writeFileSync(diffPath, result.diff, 'utf8');
@@ -351,6 +355,15 @@ async function deactivate() {
     await client.stop();
     client = null;
   }
+  // Clean up temp directories created for diff views
+  for (const dir of tempDirs) {
+    try {
+      fs.rmSync(dir, { recursive: true, force: true });
+    } catch {
+      // best-effort cleanup
+    }
+  }
+  tempDirs.length = 0;
 }
 
 module.exports = { activate, deactivate };

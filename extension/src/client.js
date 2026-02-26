@@ -218,7 +218,16 @@ class ActivateClient extends EventEmitter {
 
     const id = this._nextId++;
     return new Promise((resolve, reject) => {
-      this._pending.set(id, { resolve, reject });
+      const timer = setTimeout(() => {
+        this._pending.delete(id);
+        reject(new Error(`Request ${method} (id=${id}) timed out after 30s`));
+      }, 30_000);
+
+      this._pending.set(id, {
+        resolve: (v) => { clearTimeout(timer); resolve(v); },
+        reject:  (e) => { clearTimeout(timer); reject(e); },
+      });
+
       writeFrame(this._process.stdin, {
         jsonrpc: '2.0',
         id,

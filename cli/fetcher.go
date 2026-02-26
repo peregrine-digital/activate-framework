@@ -7,17 +7,23 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"time"
 )
 
 const (
 	DefaultRepo   = "peregrine-digital/activate-framework"
 	DefaultBranch = "main"
+
+	httpTimeout = 30 // seconds
 )
 
 // Package-level base URLs; overridden in tests to point at httptest servers.
 var (
 	rawBase = "https://raw.githubusercontent.com"
 	apiBase = "https://api.github.com"
+
+	// httpClient is the shared client for all outbound requests.
+	httpClient = &http.Client{Timeout: httpTimeout * time.Second}
 )
 
 // FetchFile downloads a file from GitHub. Uses the API with auth token if
@@ -39,7 +45,7 @@ func fetchWithAPI(filePath, repo, branch, token string) ([]byte, error) {
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Accept", "application/vnd.github.raw+json")
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("fetch %s: %w", filePath, err)
 	}
@@ -47,12 +53,12 @@ func fetchWithAPI(filePath, repo, branch, token string) ([]byte, error) {
 	if resp.StatusCode != 200 {
 		return nil, fmt.Errorf("fetch %s: %d %s", filePath, resp.StatusCode, resp.Status)
 	}
-	return io.ReadAll(resp.Body)
+	return io.ReadAll(io.LimitReader(resp.Body, 10<<20)) // 10 MB max
 }
 
 func fetchRaw(filePath, repo, branch string) ([]byte, error) {
 	url := fmt.Sprintf("%s/%s/%s/%s", rawBase, repo, branch, filePath)
-	resp, err := http.Get(url)
+	resp, err := httpClient.Get(url)
 	if err != nil {
 		return nil, fmt.Errorf("fetch %s: %w", filePath, err)
 	}
@@ -63,7 +69,7 @@ func fetchRaw(filePath, repo, branch string) ([]byte, error) {
 	if resp.StatusCode != 200 {
 		return nil, fmt.Errorf("fetch %s: %d %s", filePath, resp.StatusCode, resp.Status)
 	}
-	return io.ReadAll(resp.Body)
+	return io.ReadAll(io.LimitReader(resp.Body, 10<<20)) // 10 MB max
 }
 
 // FetchJSON fetches and parses a remote JSON file.

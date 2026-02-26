@@ -62,7 +62,7 @@ func FetchCopilotUserData(token string) (map[string]interface{}, error) {
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("User-Agent", telemetryUserAgent)
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("request failed: %w", err)
 	}
@@ -72,7 +72,7 @@ func FetchCopilotUserData(token string) (map[string]interface{}, error) {
 		return nil, fmt.Errorf("GitHub API returned %d", resp.StatusCode)
 	}
 
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20)) // 1 MB max
 	if err != nil {
 		return nil, err
 	}

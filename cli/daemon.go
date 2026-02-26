@@ -281,7 +281,9 @@ func (d *Daemon) handleFileOverride(req *Request) *Response {
 func (d *Daemon) handleTelemetryRun(req *Request) *Response {
 	var params TelemetryRunParams
 	if req.Params != nil {
-		_ = json.Unmarshal(req.Params, &params)
+		if err := json.Unmarshal(req.Params, &params); err != nil {
+			return ErrorResponse(req.ID, ErrCodeInvalidParams, "invalid telemetryRun params")
+		}
 	}
 	result, err := d.service.RunTelemetry(params.Token)
 	if err != nil {
