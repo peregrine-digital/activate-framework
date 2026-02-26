@@ -15,6 +15,8 @@ class MockClient extends EventEmitter {
   async getState() { return this._mockResults.getState || {}; }
   async listManifests() { return this._mockResults.listManifests || []; }
   async readTelemetryLog() { return this._mockResults.readTelemetryLog || []; }
+  async getConfig(scope) { return this._mockResults[`config_${scope}`] || {}; }
+  async setConfig() { return { ok: true }; }
 }
 
 // ── Import controlPanel helpers by loading the module ────────
@@ -218,6 +220,28 @@ describe('ControlPanelProvider', () => {
         // HTML generation may fail without full webview mock — that's fine
       }
       assert.ok(logCalled, 'readTelemetryLog should have been called');
+    });
+
+    it('renders settings page with config scopes', async () => {
+      mockClient._mockResults.getState = {
+        config: { tier: 'standard', manifest: 'test-manifest', telemetryEnabled: true },
+        state: { hasInstallMarker: true },
+        tiers: [{ id: 'standard', label: 'Standard', includes: ['core'] }],
+        projectDir: '/test/project',
+      };
+      mockClient._mockResults.config_global = { manifest: 'test-manifest', tier: 'standard', telemetryEnabled: true };
+      mockClient._mockResults.config_project = { tier: 'standard' };
+
+      panel._currentPage = 'settings';
+      panel._view = {
+        webview: { html: '', options: {}, cspSource: '' },
+      };
+
+      await panel._render();
+      assert.ok(panel._view.webview.html.includes('Settings'), 'should render settings page');
+      assert.ok(panel._view.webview.html.includes('Global Defaults'), 'should show global section');
+      assert.ok(panel._view.webview.html.includes('Project Overrides'), 'should show project section');
+      assert.ok(panel._view.webview.html.includes('Enabled'), 'should show telemetry status');
     });
   });
 });

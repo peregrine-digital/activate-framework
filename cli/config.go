@@ -9,10 +9,13 @@ import (
 )
 
 const (
-	activateDirName = ".activate"
+	activateDirName  = ".activate"
 	globalConfigFile = "config.json"
 	defaultManifest  = "activate-framework"
 	defaultTier      = "standard"
+
+	// ClearValue is a sentinel passed via configSet to unset a string field.
+	ClearValue = "__clear__"
 )
 
 // activateBaseDir overrides the base store path for testing.
@@ -170,11 +173,16 @@ func WriteGlobalConfig(updates *Config) error {
 }
 
 // mergeInto applies non-zero fields from src onto dst.
+// Use ClearValue ("__clear__") to explicitly unset a string field.
 func mergeInto(dst, src *Config) {
-	if src.Manifest != "" {
+	if src.Manifest == ClearValue {
+		dst.Manifest = ""
+	} else if src.Manifest != "" {
 		dst.Manifest = src.Manifest
 	}
-	if src.Tier != "" {
+	if src.Tier == ClearValue {
+		dst.Tier = ""
+	} else if src.Tier != "" {
 		dst.Tier = src.Tier
 	}
 	if src.FileOverrides != nil {

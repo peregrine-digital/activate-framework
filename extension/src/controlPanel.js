@@ -22,7 +22,7 @@ class ControlPanelProvider {
   constructor(client) {
     this._client = client;
     this._view = null;
-    /** @type {'main'|'usage'} */
+    /** @type {'main'|'usage'|'settings'} */
     this._currentPage = 'main';
   }
 
@@ -121,6 +121,11 @@ class ControlPanelProvider {
         const telemetryEnabled = state?.config?.telemetryEnabled === true;
         const entries = await this._client.readTelemetryLog();
         this._view.webview.html = this._getUsageHtml(entries || [], telemetryEnabled);
+      } else if (this._currentPage === 'settings') {
+        const state = await this._client.getState();
+        const globalCfg = await this._client.getConfig('global');
+        const projectCfg = await this._client.getConfig('project');
+        this._view.webview.html = this._getSettingsHtml(state, globalCfg, projectCfg);
       } else {
         const state = await this._gatherState();
         this._view.webview.html = this._getHtml(state);
@@ -171,6 +176,10 @@ class ControlPanelProvider {
         this._currentPage = 'usage';
         this._render();
         break;
+      case 'showSettings':
+        this._currentPage = 'settings';
+        this._render();
+        break;
       case 'backToMain':
         this._currentPage = 'main';
         this._render();
@@ -178,13 +187,31 @@ class ControlPanelProvider {
       case 'refreshUsage':
         vscode.commands.executeCommand('activate-framework.telemetryRunNow').then(
           () => this._render(),
-          () => this._render(), // render even on failure to show stale data
+          () => this._render(),
         );
         break;
       case 'toggleTelemetry':
         this._client.setConfig({
           telemetryEnabled: msg.enabled,
           scope: 'global',
+        }).then(
+          () => this._render(),
+          () => this._render(),
+        );
+        break;
+      case 'setGlobalDefault':
+        this._client.setConfig({
+          ...msg.updates,
+          scope: 'global',
+        }).then(
+          () => this._render(),
+          () => this._render(),
+        );
+        break;
+      case 'clearProjectOverride':
+        this._client.setConfig({
+          ...msg.updates,
+          scope: 'project',
         }).then(
           () => this._render(),
           () => this._render(),
@@ -587,6 +614,7 @@ class ControlPanelProvider {
     <span class="dot">·</span>
     <span class="ws-status">${isActive ? '✓' : '○'} Installed</span>
     <span class="spacer"></span>
+    <span class="gear-btn" onclick="send('showSettings')" title="Settings">⚙</span>
   </div>
 
   <div class="button-row">
@@ -932,6 +960,232 @@ class ControlPanelProvider {
       ${rows}
     </tbody>
   </table>
+  ` : ''}
+
+  <script>
+    const vscode = acquireVsCodeApi();
+    function send(command, data) {
+      vscode.postMessage({ command, ...data });
+    }
+  </script>
+</body>
+</html>`;
+  }
+
+  // ── Settings page HTML ─────────────────────────────────
+
+  _getSettingsHtml(state, globalCfg, projectCfg) {
+    const resolved = state?.config || {};
+    const global = globalCfg || {};
+    const project = projectCfg || {};
+    const tiers = state?.tiers || [];
+    const telemetryEnabled = resolved.telemetryEnabled === true;
+
+    const manifestLabel = resolved.manifest || '—';
+    const tierLabel = (tiers.find((t) => t.id === resolved.tier) || {}).label || resolved.tier || '—';
+
+    // Helper: show where a value comes from
+    const source = (field) => {
+      if (project[field] != null && project[field] !== '') return 'project';
+      if (global[field] != null && global[field] !== '') return 'global';
+      return 'default';
+    };
+
+    const manifestSrc = source('manifest');
+    const tierSrc = source('tier');
+    const telemetrySrc = project.telemetryEnabled != null ? 'project'
+      : global.telemetryEnabled != null ? 'global' : 'default';
+
+    const srcBadge = (s) => `<span class="source-badge ${s}">${s}</span>`;
+
+    return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <style>
+    body {
+      font-family: var(--vscode-font-family);
+      font-size: var(--vscode-font-size);
+      color: var(--vscode-foreground);
+      padding: 0 12px 20px 12px;
+      line-height: 1.5;
+    }
+    h2 { font-size: 14px; margin: 12px 0 8px; }
+    hr {
+      border: none;
+      border-top: 1px solid var(--vscode-panel-border, rgba(128,128,128,0.2));
+      margin: 10px 0;
+    }
+    .button-row {
+      display: flex;
+      gap: 6px;
+      margin: 8px 0;
+      flex-wrap: wrap;
+    }
+    button {
+      font-family: inherit;
+      font-size: 11px;
+      padding: 4px 10px;
+      border-radius: 3px;
+      cursor: pointer;
+      border: 1px solid var(--vscode-button-border, transparent);
+    }
+    .primary {
+      background: var(--vscode-button-background);
+      color: var(--vscode-button-foreground);
+    }
+    .secondary {
+      background: var(--vscode-button-secondaryBackground);
+      color: var(--vscode-button-secondaryForeground);
+    }
+    .setting-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 6px 0;
+      border-bottom: 1px solid var(--vscode-panel-border, rgba(128,128,128,0.1));
+    }
+    .setting-label {
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .setting-value {
+      font-size: 12px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .source-badge {
+      font-size: 10px;
+      padding: 1px 5px;
+      border-radius: 3px;
+      opacity: 0.8;
+    }
+    .source-badge.project {
+      background: var(--vscode-badge-background);
+      color: var(--vscode-badge-foreground);
+    }
+    .source-badge.global {
+      background: var(--vscode-button-secondaryBackground);
+      color: var(--vscode-button-secondaryForeground);
+    }
+    .source-badge.default {
+      opacity: 0.4;
+      font-style: italic;
+    }
+    .toggle-btn {
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 3px;
+      cursor: pointer;
+      border: 1px solid var(--vscode-button-border, transparent);
+      background: var(--vscode-button-secondaryBackground);
+      color: var(--vscode-button-secondaryForeground);
+    }
+    .toggle-btn.active {
+      background: var(--vscode-button-background);
+      color: var(--vscode-button-foreground);
+    }
+    .section-label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      opacity: 0.6;
+      margin: 14px 0 4px;
+    }
+    .path-display {
+      font-size: 11px;
+      opacity: 0.5;
+      word-break: break-all;
+      padding: 2px 0;
+    }
+  </style>
+</head>
+<body>
+  <div class="button-row">
+    <button class="secondary" onclick="send('backToMain')">← Back</button>
+    <h2 style="margin: 0; flex: 1;">⚙ Settings</h2>
+  </div>
+
+  <hr>
+
+  <div class="section-label">Configuration</div>
+
+  <div class="setting-row">
+    <span class="setting-label">Manifest</span>
+    <span class="setting-value">
+      ${esc(manifestLabel)} ${srcBadge(manifestSrc)}
+    </span>
+  </div>
+
+  <div class="setting-row">
+    <span class="setting-label">Tier</span>
+    <span class="setting-value">
+      ${esc(tierLabel)} ${srcBadge(tierSrc)}
+    </span>
+  </div>
+
+  <div class="setting-row">
+    <span class="setting-label">Telemetry</span>
+    <span class="setting-value">
+      <button class="toggle-btn ${telemetryEnabled ? 'active' : ''}"
+        onclick="send('toggleTelemetry', { enabled: ${!telemetryEnabled} })">
+        ${telemetryEnabled ? '● Enabled' : '○ Disabled'}
+      </button>
+      ${srcBadge(telemetrySrc)}
+    </span>
+  </div>
+
+  <hr>
+
+  <div class="section-label">Global Defaults</div>
+  <div class="path-display">${esc(state?.projectDir ? '~/.activate/config.json' : '')}</div>
+
+  <div class="setting-row">
+    <span class="setting-label">Manifest</span>
+    <span class="setting-value">${esc(global.manifest || '(not set)')}</span>
+  </div>
+  <div class="setting-row">
+    <span class="setting-label">Tier</span>
+    <span class="setting-value">${esc(global.tier || '(not set)')}</span>
+  </div>
+  <div class="setting-row">
+    <span class="setting-label">Telemetry</span>
+    <span class="setting-value">${global.telemetryEnabled === true ? 'Enabled' : global.telemetryEnabled === false ? 'Disabled' : '(not set)'}</span>
+  </div>
+
+  <hr>
+
+  <div class="section-label">Project Overrides</div>
+  <div class="path-display">~/.activate/repos/&lt;hash&gt;/config.json</div>
+
+  <div class="setting-row">
+    <span class="setting-label">Manifest</span>
+    <span class="setting-value">
+      ${esc(project.manifest || '(not set)')}
+      ${project.manifest ? `<button class="toggle-btn" onclick="send('clearProjectOverride', { updates: { manifest: '__clear__' } })">✕</button>` : ''}
+    </span>
+  </div>
+  <div class="setting-row">
+    <span class="setting-label">Tier</span>
+    <span class="setting-value">
+      ${esc(project.tier || '(not set)')}
+      ${project.tier ? `<button class="toggle-btn" onclick="send('clearProjectOverride', { updates: { tier: '__clear__' } })">✕</button>` : ''}
+    </span>
+  </div>
+
+  ${Object.keys(project.fileOverrides || {}).length > 0 ? `
+  <div class="setting-row">
+    <span class="setting-label">File Overrides</span>
+    <span class="setting-value">${Object.keys(project.fileOverrides).length} file(s)</span>
+  </div>
+  ` : ''}
+
+  ${Object.keys(project.skippedVersions || {}).length > 0 ? `
+  <div class="setting-row">
+    <span class="setting-label">Skipped Updates</span>
+    <span class="setting-value">${Object.keys(project.skippedVersions).length} file(s)</span>
+  </div>
   ` : ''}
 
   <script>

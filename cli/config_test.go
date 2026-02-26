@@ -308,6 +308,18 @@ func TestConfig_mergeInto_NonEmptyOverwrites(t *testing.T) {
 	}
 }
 
+func TestConfig_mergeInto_ClearValueUnsetsField(t *testing.T) {
+	dst := &Config{Manifest: "my-manifest", Tier: "advanced"}
+	src := &Config{Manifest: ClearValue, Tier: ClearValue}
+	mergeInto(dst, src)
+	if dst.Manifest != "" {
+		t.Fatalf("expected Manifest cleared, got %q", dst.Manifest)
+	}
+	if dst.Tier != "" {
+		t.Fatalf("expected Tier cleared, got %q", dst.Tier)
+	}
+}
+
 func TestConfig_mergeInto_NilMapDoesNotOverwrite(t *testing.T) {
 	dst := &Config{
 		FileOverrides: map[string]string{"a": "pinned"},
