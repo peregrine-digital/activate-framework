@@ -157,6 +157,15 @@ const (
 	phaseConfigure              // select tier + target dir + confirm
 )
 
+// installerValues holds form-bound fields on the heap so pointers survive
+// Bubble Tea's value-receiver model copies.
+type installerValues struct {
+	manifestID string
+	tierID     string
+	targetDir  string
+	confirm    bool
+}
+
 // model is the top-level Bubble Tea model for the interactive installer.
 type model struct {
 	phase  phase
@@ -170,11 +179,8 @@ type model struct {
 	manifests []Manifest
 	cfg       Config
 
-	// form-bound values
-	manifestID string
-	tierID     string
-	targetDir  string
-	confirm    bool
+	// form-bound values (heap-allocated so pointers survive model copies)
+	vals *installerValues
 
 	// resolved after manifest selection
 	chosen Manifest
@@ -198,6 +204,12 @@ type fullscreenTextModel struct {
 	body     string
 }
 
+// menuValues holds form-bound fields on the heap so pointers survive
+// Bubble Tea's value-receiver model copies.
+type menuValues struct {
+	choice string
+}
+
 type mainMenuModel struct {
 	form      *huh.Form
 	width     int
@@ -207,7 +219,7 @@ type mainMenuModel struct {
 	state     InstallState
 	projectDir string
 
-	choice string
+	vals   *menuValues
 	action string
 
 	mode     string // "menu" | "text"
@@ -216,27 +228,29 @@ type mainMenuModel struct {
 }
 
 func initialModel(manifests []Manifest, cfg Config) model {
+	vals := &installerValues{}
 	m := model{
 		manifests: manifests,
 		cfg:       cfg,
+		vals:      vals,
 	}
 
 	// Resolve manifest default from config
-	m.manifestID = cfg.Manifest
+	vals.manifestID = cfg.Manifest
 	found := false
 	for _, man := range manifests {
-		if man.ID == m.manifestID {
+		if man.ID == vals.manifestID {
 			found = true
 			break
 		}
 	}
 	if !found {
-		m.manifestID = manifests[0].ID
+		vals.manifestID = manifests[0].ID
 	}
 
 	if len(manifests) == 1 {
 		// Skip manifest phase
-		m.manifestID = manifests[0].ID
+		vals.manifestID = manifests[0].ID
 		m.chosen = manifests[0]
 		m.phase = phaseConfigure
 		m.form = m.buildConfigureForm()
@@ -267,7 +281,7 @@ func (m *model) buildManifestForm() *huh.Form {
 				Title("Select manifest").
 				Description("Choose which collection to install").
 				Options(opts...).
-				Value(&m.manifestID),
+				Value(&m.vals.manifestID),
 		),
 	).WithTheme(huh.ThemeCharm()).WithShowHelp(false)
 }
@@ -275,7 +289,7 @@ func (m *model) buildManifestForm() *huh.Form {
 func (m *model) buildConfigureForm() *huh.Form {
 	// Resolve chosen manifest
 	for _, man := range m.manifests {
-		if man.ID == m.manifestID {
+		if man.ID == m.vals.manifestID {
 			m.chosen = man
 			break
 		}
@@ -284,16 +298,16 @@ func (m *model) buildConfigureForm() *huh.Form {
 	tiers := DiscoverAvailableTiers(m.chosen)
 
 	// Tier default
-	m.tierID = m.cfg.Tier
+	m.vals.tierID = m.cfg.Tier
 	tierFound := false
 	for _, t := range tiers {
-		if t.ID == m.tierID {
+		if t.ID == m.vals.tierID {
 			tierFound = true
 			break
 		}
 	}
 	if !tierFound && len(tiers) > 0 {
-		m.tierID = tiers[0].ID
+		m.vals.tierID = tiers[0].ID
 	}
 
 	var tierOpts []huh.Option[string]
@@ -315,10 +329,10 @@ func (m *model) buildConfigureForm() *huh.Form {
 				Title("Select tier").
 				Description("Higher tiers include everything from lower tiers").
 				Options(tierOpts...).
-				Value(&m.tierID),
+				Value(&m.vals.tierID),
 		)
 	} else if len(tiers) == 1 {
-		m.tierID = tiers[0].ID
+		m.vals.tierID = tiers[0].ID
 	}
 
 	fields = append(fields,
@@ -326,12 +340,12 @@ func (m *model) buildConfigureForm() *huh.Form {
 			Title("Target directory").
 			Description("Where to install files").
 			Placeholder(defaultTarget).
-			Value(&m.targetDir),
+			Value(&m.vals.targetDir),
 		huh.NewConfirm().
 			Title("Install?").
 			Affirmative("  Install  ").
 			Negative("  Cancel  ").
-			Value(&m.confirm),
+			Value(&m.vals.confirm),
 	)
 
 	return huh.NewForm(
@@ -366,7 +380,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch msg.String() {
 		case "ctrl+c":
 			m.quitting = true
-			m.confirm = false
+			m.vals.confirm = false
 			return m, tea.Quit
 		}
 	}
@@ -378,7 +392,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		if f.State == huh.StateAborted {
 			m.quitting = true
-			m.confirm = false
+			m.vals.confirm = false
 			return m, tea.Quit
 		}
 
@@ -451,7 +465,7 @@ func (m mainMenuModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "esc", "q", "enter":
 			if m.mode == "text" {
 				m.mode = "menu"
-				m.form = buildMainMenuForm(m.state, &m.choice)
+				m.form = buildMainMenuForm(m.state, &m.vals.choice)
 				return m, m.form.Init()
 			}
 		}
@@ -469,21 +483,21 @@ func (m mainMenuModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		}
 		if f.State == huh.StateCompleted {
-			switch m.choice {
+			switch m.vals.choice {
 			case "list":
 				m.mode = "text"
 				m.textTitle = "Frameworks"
 				m.textBody = strings.TrimSpace(FormatManifestList(m.manifests))
-				m.form = buildMainMenuForm(m.state, &m.choice)
+				m.form = buildMainMenuForm(m.state, &m.vals.choice)
 				return m, nil
 			case "state":
 				m.mode = "text"
 				m.textTitle = "Current State"
 				m.textBody = m.stateBody()
-				m.form = buildMainMenuForm(m.state, &m.choice)
+				m.form = buildMainMenuForm(m.state, &m.vals.choice)
 				return m, nil
 			default:
-				m.action = m.choice
+				m.action = m.vals.choice
 				return m, tea.Quit
 			}
 		}
@@ -776,14 +790,16 @@ func RunInteractiveMenu(svc *ActivateService) error {
 		cfg := svc.Config
 		state := DetectInstallState(svc.ProjectDir)
 
+		vals := &menuValues{}
 		menuModel := mainMenuModel{
 			manifests: svc.Manifests,
 			cfg:       cfg,
 			state:     state,
 			projectDir: svc.ProjectDir,
 			mode:      "menu",
+			vals:      vals,
 		}
-		menuModel.form = buildMainMenuForm(menuModel.state, &menuModel.choice)
+		menuModel.form = buildMainMenuForm(menuModel.state, &vals.choice)
 
 		p := tea.NewProgram(menuModel, tea.WithAltScreen())
 		finalModel, err := p.Run()
@@ -861,16 +877,16 @@ func RunInteractiveInstall(svc *ActivateService) error {
 		return fmt.Errorf("unexpected TUI model type: %T", finalModel)
 	}
 
-	if !result.confirm {
+	if !result.vals.confirm {
 		fmt.Println(dimStyle.Render("\n  Cancelled.\n"))
 		return nil
 	}
 
 	// ── Resolve target ──────────────────────────────────────────
-	target := resolveTargetPath(result.targetDir)
+	target := resolveTargetPath(result.vals.targetDir)
 
 	// ── Show summary ────────────────────────────────────────────
-	files := SelectFiles(result.chosen.Files, result.chosen, result.tierID)
+	files := SelectFiles(result.chosen.Files, result.chosen, result.vals.tierID)
 
 	summary := fmt.Sprintf(
 		"%s  %s v%s\n%s  %s\n%s  %d files\n%s  %s",
@@ -878,7 +894,7 @@ func RunInteractiveInstall(svc *ActivateService) error {
 		brightStyle.Render(result.chosen.Name),
 		result.chosen.Version,
 		dimStyle.Render("Tier:    "),
-		brightStyle.Render(result.tierID),
+		brightStyle.Render(result.vals.tierID),
 		dimStyle.Render("Files:   "),
 		len(files),
 		dimStyle.Render("Target:  "),
@@ -899,7 +915,7 @@ func RunInteractiveInstall(svc *ActivateService) error {
 	}
 
 	// Persist config via service
-	_, _ = svc.SetConfig("project", &Config{Manifest: result.chosen.ID, Tier: result.tierID})
+	_, _ = svc.SetConfig("project", &Config{Manifest: result.chosen.ID, Tier: result.vals.tierID})
 
 	// ── Success ─────────────────────────────────────────────────
 	resultMsg := fmt.Sprintf(
@@ -907,7 +923,7 @@ func RunInteractiveInstall(svc *ActivateService) error {
 		successStyle.Render("✓"),
 		result.chosen.Name,
 		result.chosen.Version,
-		result.tierID,
+		result.vals.tierID,
 		dimStyle.Render("→"),
 		target,
 	)

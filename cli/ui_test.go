@@ -44,6 +44,53 @@ func testConfig() Config {
 	return Config{Manifest: "alpha", Tier: "core"}
 }
 
+// sendToForm sends a tea.Msg to a huh.Form and drains resulting commands
+// so that state transitions (e.g. StateCompleted) propagate properly.
+func sendToForm(form *huh.Form, msg tea.Msg) *huh.Form {
+	updated, cmd := form.Update(msg)
+	if f, ok := updated.(*huh.Form); ok {
+		form = f
+	}
+	for i := 0; i < 5 && cmd != nil; i++ {
+		m := cmd()
+		if m == nil {
+			break
+		}
+		if _, ok := m.(tea.QuitMsg); ok {
+			break
+		}
+		updated, cmd = form.Update(m)
+		if f, ok := updated.(*huh.Form); ok {
+			form = f
+		}
+	}
+	return form
+}
+
+// sendKey is a convenience wrapper for sending a single key to a form.
+func sendKey(form *huh.Form, key tea.KeyType) *huh.Form {
+	return sendToForm(form, tea.KeyMsg{Type: key})
+}
+
+// updateModel sends a message through a Bubble Tea model, then repeatedly
+// drains returned commands (up to 10 levels) so form state transitions
+// (e.g. huh.StateCompleted) fully propagate through the model.
+func updateModel(m tea.Model, msg tea.Msg) (tea.Model, tea.Cmd) {
+	updated, cmd := m.Update(msg)
+	for i := 0; i < 10 && cmd != nil; i++ {
+		innerMsg := cmd()
+		if innerMsg == nil {
+			break
+		}
+		if _, ok := innerMsg.(tea.QuitMsg); ok {
+			// Return a synthetic quit command so callers can detect it
+			return updated, tea.Quit
+		}
+		updated, cmd = updated.Update(innerMsg)
+	}
+	return updated, cmd
+}
+
 // ── resolveTargetPath ───────────────────────────────────────────
 
 func TestResolveTargetPath_Empty(t *testing.T) {
@@ -166,8 +213,8 @@ func TestInitialModel_SingleManifest(t *testing.T) {
 	if m.phase != phaseConfigure {
 		t.Fatalf("expected phaseConfigure with single manifest, got %d", m.phase)
 	}
-	if m.manifestID != "alpha" {
-		t.Fatalf("expected manifestID=alpha, got %q", m.manifestID)
+	if m.vals.manifestID != "alpha" {
+		t.Fatalf("expected manifestID=alpha, got %q", m.vals.manifestID)
 	}
 	if m.chosen.ID != "alpha" {
 		t.Fatalf("expected chosen=alpha, got %q", m.chosen.ID)
@@ -185,8 +232,8 @@ func TestInitialModel_MultipleManifests(t *testing.T) {
 	if m.phase != phaseManifest {
 		t.Fatalf("expected phaseManifest with multiple manifests, got %d", m.phase)
 	}
-	if m.manifestID != "alpha" {
-		t.Fatalf("expected manifestID from config, got %q", m.manifestID)
+	if m.vals.manifestID != "alpha" {
+		t.Fatalf("expected manifestID from config, got %q", m.vals.manifestID)
 	}
 }
 
@@ -195,8 +242,8 @@ func TestInitialModel_UnknownManifestFallsToFirst(t *testing.T) {
 	cfg := Config{Manifest: "nonexistent", Tier: "core"}
 	m := initialModel(manifests, cfg)
 
-	if m.manifestID != "alpha" {
-		t.Fatalf("expected fallback to first manifest, got %q", m.manifestID)
+	if m.vals.manifestID != "alpha" {
+		t.Fatalf("expected fallback to first manifest, got %q", m.vals.manifestID)
 	}
 }
 
@@ -212,7 +259,7 @@ func TestModelUpdate_CtrlCQuits(t *testing.T) {
 	if !result.quitting {
 		t.Fatal("expected quitting=true after ctrl+c")
 	}
-	if result.confirm {
+	if result.vals.confirm {
 		t.Fatal("expected confirm=false after ctrl+c")
 	}
 	if cmd == nil {
@@ -391,8 +438,8 @@ func TestFullscreenFormModel_View(t *testing.T) {
 
 func TestBuildMainMenuForm_Fresh(t *testing.T) {
 	state := InstallState{}
-	var choice string
-	form := buildMainMenuForm(state, &choice)
+	vals := &menuValues{}
+	form := buildMainMenuForm(state, &vals.choice)
 
 	if form == nil {
 		t.Fatal("expected form to be created")
@@ -403,8 +450,8 @@ func TestBuildMainMenuForm_Fresh(t *testing.T) {
 
 func TestBuildMainMenuForm_WithProjectConfig(t *testing.T) {
 	state := InstallState{HasProjectConfig: true}
-	var choice string
-	form := buildMainMenuForm(state, &choice)
+	vals := &menuValues{}
+	form := buildMainMenuForm(state, &vals.choice)
 
 	if form == nil {
 		t.Fatal("expected form to be created")
@@ -419,8 +466,8 @@ func TestBuildMainMenuForm_Installed(t *testing.T) {
 		InstalledManifest: "alpha",
 		InstalledVersion:  "1.0.0",
 	}
-	var choice string
-	form := buildMainMenuForm(state, &choice)
+	vals := &menuValues{}
+	form := buildMainMenuForm(state, &vals.choice)
 
 	if form == nil {
 		t.Fatal("expected form to be created")
@@ -492,9 +539,9 @@ func TestStateBody_ShowsConfig(t *testing.T) {
 
 func TestMainMenuModel_CtrlCExits(t *testing.T) {
 	state := InstallState{}
-	var choice string
-	form := buildMainMenuForm(state, &choice)
-	m := mainMenuModel{form: form, mode: "menu", choice: ""}
+	vals := &menuValues{}
+	form := buildMainMenuForm(state, &vals.choice)
+	m := mainMenuModel{form: form, mode: "menu", vals: vals}
 
 	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
 	result := updated.(mainMenuModel)
@@ -509,13 +556,13 @@ func TestMainMenuModel_CtrlCExits(t *testing.T) {
 
 func TestMainMenuModel_TextModeEscReturnsToMenu(t *testing.T) {
 	state := InstallState{}
-	var choice string
-	form := buildMainMenuForm(state, &choice)
+	vals := &menuValues{choice: "list"}
+	form := buildMainMenuForm(state, &vals.choice)
 	m := mainMenuModel{
 		form:     form,
 		mode:     "text",
 		state:    state,
-		choice:   "list",
+		vals:     vals,
 	}
 
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEscape})
@@ -528,13 +575,13 @@ func TestMainMenuModel_TextModeEscReturnsToMenu(t *testing.T) {
 
 func TestMainMenuModel_TextModeEnterReturnsToMenu(t *testing.T) {
 	state := InstallState{}
-	var choice string
-	form := buildMainMenuForm(state, &choice)
+	vals := &menuValues{choice: "state"}
+	form := buildMainMenuForm(state, &vals.choice)
 	m := mainMenuModel{
 		form:   form,
 		mode:   "text",
 		state:  state,
-		choice: "state",
+		vals:   vals,
 	}
 
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
@@ -547,8 +594,8 @@ func TestMainMenuModel_TextModeEnterReturnsToMenu(t *testing.T) {
 
 func TestMainMenuModel_WindowSize(t *testing.T) {
 	state := InstallState{}
-	var choice string
-	form := buildMainMenuForm(state, &choice)
+	vals := &menuValues{}
+	form := buildMainMenuForm(state, &vals.choice)
 	m := mainMenuModel{form: form, mode: "menu"}
 
 	updated, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 50})
@@ -563,8 +610,8 @@ func TestMainMenuModel_WindowSize(t *testing.T) {
 
 func TestMainMenuModel_View_MenuMode(t *testing.T) {
 	state := InstallState{HasProjectConfig: true, HasInstallMarker: true, InstalledManifest: "alpha", InstalledVersion: "1.0.0"}
-	var choice string
-	form := buildMainMenuForm(state, &choice)
+	vals := &menuValues{}
+	form := buildMainMenuForm(state, &vals.choice)
 	m := mainMenuModel{
 		form:       form,
 		mode:       "menu",
@@ -582,8 +629,8 @@ func TestMainMenuModel_View_MenuMode(t *testing.T) {
 
 func TestMainMenuModel_View_TextMode(t *testing.T) {
 	state := InstallState{}
-	var choice string
-	form := buildMainMenuForm(state, &choice)
+	vals := &menuValues{}
+	form := buildMainMenuForm(state, &vals.choice)
 	m := mainMenuModel{
 		form:      form,
 		mode:      "text",
@@ -815,8 +862,8 @@ func TestFullscreenTextModel_VerticalCentering(t *testing.T) {
 
 func TestMainMenuModel_View_ExitAction(t *testing.T) {
 	state := InstallState{}
-	var choice string
-	form := buildMainMenuForm(state, &choice)
+	vals := &menuValues{}
+	form := buildMainMenuForm(state, &vals.choice)
 	m := mainMenuModel{
 		form:   form,
 		mode:   "menu",
@@ -848,5 +895,578 @@ func TestRunInteractiveInstall_TargetPath(t *testing.T) {
 		if c.checkAbs && !filepath.IsAbs(result) {
 			t.Errorf("resolveTargetPath(%q) = %q, want absolute", c.input, result)
 		}
+	}
+}
+
+// ════════════════════════════════════════════════════════════════
+// Keyboard Navigation Tests — real key sequences through forms
+// ════════════════════════════════════════════════════════════════
+
+// ── Manifest select form: arrow key navigation ──────────────────
+
+func TestManifestForm_ArrowNavSelectsManifest(t *testing.T) {
+	manifests := testManifests()
+	m := initialModel(manifests, testConfig())
+
+	// Should start at phaseManifest with default "alpha"
+	if m.vals.manifestID != "alpha" {
+		t.Fatalf("expected default alpha, got %q", m.vals.manifestID)
+	}
+
+	// Init the form so it can accept key events
+	m.form.Init()
+
+	// Press down to move to "beta"
+	m.form = sendKey(m.form, tea.KeyDown)
+	if m.vals.manifestID != "beta" {
+		t.Fatalf("after ↓: expected beta, got %q", m.vals.manifestID)
+	}
+
+	// Press up to go back to "alpha"
+	m.form = sendKey(m.form, tea.KeyUp)
+	if m.vals.manifestID != "alpha" {
+		t.Fatalf("after ↑: expected alpha, got %q", m.vals.manifestID)
+	}
+}
+
+func TestManifestForm_EnterCompletesSelection(t *testing.T) {
+	manifests := testManifests()
+	m := initialModel(manifests, testConfig())
+	m.form.Init()
+
+	// Navigate to beta
+	m.form = sendKey(m.form, tea.KeyDown)
+	if m.vals.manifestID != "beta" {
+		t.Fatalf("expected beta after ↓, got %q", m.vals.manifestID)
+	}
+
+	// Press enter to confirm selection
+	m.form = sendKey(m.form, tea.KeyEnter)
+	if m.form.State != huh.StateCompleted {
+		t.Fatalf("expected form completed after enter, got state %d", m.form.State)
+	}
+}
+
+// ── Manifest form: completing triggers phase transition ─────────
+
+func TestManifestForm_CompletionAdvancesToConfigure(t *testing.T) {
+	manifests := testManifests()
+	m := initialModel(manifests, testConfig())
+	m.form.Init()
+
+	// Navigate to beta and confirm
+	m.form = sendKey(m.form, tea.KeyDown)
+
+	// Send enter through the model (not just the form) so phase transition fires
+	updated, _ := updateModel(m, tea.KeyMsg{Type: tea.KeyEnter})
+	result := updated.(model)
+
+	if result.phase != phaseConfigure {
+		t.Fatalf("expected phaseConfigure after manifest select, got %d", result.phase)
+	}
+	if result.vals.manifestID != "beta" {
+		t.Fatalf("expected manifestID=beta, got %q", result.vals.manifestID)
+	}
+	if result.chosen.ID != "beta" {
+		t.Fatalf("expected chosen.ID=beta, got %q", result.chosen.ID)
+	}
+}
+
+// ── Configure form: tier selection ──────────────────────────────
+
+func TestConfigureForm_TierNavigation(t *testing.T) {
+	manifests := testManifests()[:1] // alpha has 2 tiers: core, ad-hoc
+	cfg := Config{Manifest: "alpha", Tier: "core"}
+	m := initialModel(manifests, cfg)
+
+	// Should start in configure phase (single manifest)
+	if m.phase != phaseConfigure {
+		t.Fatalf("expected phaseConfigure, got %d", m.phase)
+	}
+	if m.vals.tierID != "core" {
+		t.Fatalf("expected default tier=core, got %q", m.vals.tierID)
+	}
+
+	m.form.Init()
+
+	// Down arrow selects the second tier
+	m.form = sendKey(m.form, tea.KeyDown)
+	if m.vals.tierID != "ad-hoc" {
+		t.Fatalf("expected ad-hoc after ↓, got %q", m.vals.tierID)
+	}
+
+	// Up arrow goes back
+	m.form = sendKey(m.form, tea.KeyUp)
+	if m.vals.tierID != "core" {
+		t.Fatalf("expected core after ↑, got %q", m.vals.tierID)
+	}
+}
+
+func TestConfigureForm_TierSelectAndAdvance(t *testing.T) {
+	manifests := testManifests()[:1]
+	cfg := Config{Manifest: "alpha", Tier: "core"}
+	m := initialModel(manifests, cfg)
+	m.form.Init()
+
+	// Select second tier and press enter to advance to target dir input
+	m.form = sendKey(m.form, tea.KeyDown)
+	if m.vals.tierID != "ad-hoc" {
+		t.Fatalf("expected ad-hoc, got %q", m.vals.tierID)
+	}
+
+	// Enter advances from tier select to target dir input field
+	m.form = sendKey(m.form, tea.KeyEnter)
+	// Form should NOT be completed yet (still has input + confirm fields)
+	if m.form.State == huh.StateCompleted {
+		t.Fatal("form should not complete after first field enter")
+	}
+}
+
+// ── Configure form: complete full wizard flow ───────────────────
+
+func TestConfigureForm_FullFlowWithConfirm(t *testing.T) {
+	manifests := testManifests()[:1]
+	cfg := Config{Manifest: "alpha", Tier: "core"}
+	m := initialModel(manifests, cfg)
+	m.form.Init()
+
+	// 1) Select tier (accept default core, press enter)
+	m.form = sendKey(m.form, tea.KeyEnter)
+
+	// 2) Target dir input (accept default, press enter)
+	m.form = sendKey(m.form, tea.KeyEnter)
+
+	// 3) Confirm: default is Cancel (false), press left to select Install
+	m.form = sendToForm(m.form, tea.KeyMsg{Type: tea.KeyLeft})
+	m.form = sendKey(m.form, tea.KeyEnter)
+
+	if m.form.State != huh.StateCompleted {
+		t.Fatalf("expected form completed after full flow, got state %d", m.form.State)
+	}
+	if m.vals.tierID != "core" {
+		t.Fatalf("expected tier=core, got %q", m.vals.tierID)
+	}
+	if !m.vals.confirm {
+		t.Fatal("expected confirm=true")
+	}
+}
+
+func TestConfigureForm_CancelFlow(t *testing.T) {
+	manifests := testManifests()[:1]
+	cfg := Config{Manifest: "alpha", Tier: "core"}
+	m := initialModel(manifests, cfg)
+	m.form.Init()
+
+	// 1) Accept tier
+	m.form = sendKey(m.form, tea.KeyEnter)
+	// 2) Accept target dir
+	m.form = sendKey(m.form, tea.KeyEnter)
+	// 3) On confirm field, default is Cancel (false) — just press enter
+	m.form = sendKey(m.form, tea.KeyEnter)
+
+	if m.form.State != huh.StateCompleted {
+		t.Fatalf("expected form completed, got state %d", m.form.State)
+	}
+	if m.vals.confirm {
+		t.Fatal("expected confirm=false after selecting Cancel")
+	}
+}
+
+// ── Full installer wizard: manifest → configure phase transition ──
+
+func TestInstallerWizard_FullKeyboardFlow(t *testing.T) {
+	manifests := testManifests()
+	cfg := testConfig()
+	m := initialModel(manifests, cfg)
+	m.form.Init()
+
+	// Phase 1: manifest selection — select "beta" (↓ then enter)
+	m.form = sendKey(m.form, tea.KeyDown)
+	if m.vals.manifestID != "beta" {
+		t.Fatalf("expected beta after ↓, got %q", m.vals.manifestID)
+	}
+
+	// Press enter through the full model to trigger phase transition
+	updated, _ := updateModel(m, tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(model)
+
+	if m.phase != phaseConfigure {
+		t.Fatalf("expected phaseConfigure, got %d", m.phase)
+	}
+	if m.chosen.ID != "beta" {
+		t.Fatalf("expected chosen=beta, got %q", m.chosen.ID)
+	}
+
+	// Phase 2: configure — beta has only 1 tier, so no tier select
+	// Form has: target dir input + confirm
+	m.form.Init()
+
+	// Accept default target dir
+	m.form = sendKey(m.form, tea.KeyEnter)
+	// Confirm install
+	m.form = sendKey(m.form, tea.KeyEnter)
+
+	if m.form.State != huh.StateCompleted {
+		t.Fatalf("expected completed, got state %d", m.form.State)
+	}
+}
+
+// ── Main menu: keyboard navigation through menu items ───────────
+
+func TestMainMenu_NavigateToSpecificOption(t *testing.T) {
+	state := InstallState{}
+	vals := &menuValues{}
+	form := buildMainMenuForm(state, &vals.choice)
+	form.Init()
+
+	// Fresh state menu: [guided-install, repo-add, list, state, exit]
+	if vals.choice != "guided-install" {
+		t.Fatalf("expected default=guided-install, got %q", vals.choice)
+	}
+
+	// Navigate down to "list" (3rd item: guided-install → repo-add → list)
+	form = sendKey(form, tea.KeyDown)
+	form = sendKey(form, tea.KeyDown)
+	if vals.choice != "list" {
+		t.Fatalf("expected list after 2 ↓, got %q", vals.choice)
+	}
+
+	// Navigate down once more to "state"
+	form = sendKey(form, tea.KeyDown)
+	if vals.choice != "state" {
+		t.Fatalf("expected state after 3 ↓, got %q", vals.choice)
+	}
+
+	// Press enter to select "state"
+	form = sendKey(form, tea.KeyEnter)
+	if form.State != huh.StateCompleted {
+		t.Fatalf("expected completed, got state %d", form.State)
+	}
+	if vals.choice != "state" {
+		t.Fatalf("expected choice=state after enter, got %q", vals.choice)
+	}
+}
+
+func TestMainMenu_NavigateToExit(t *testing.T) {
+	state := InstallState{}
+	vals := &menuValues{}
+	form := buildMainMenuForm(state, &vals.choice)
+	form.Init()
+
+	// Fresh state: [guided-install, repo-add, list, state, exit] = 5 items
+	for i := 0; i < 4; i++ {
+		form = sendKey(form, tea.KeyDown)
+	}
+	if vals.choice != "exit" {
+		t.Fatalf("expected exit after 4 ↓, got %q", vals.choice)
+	}
+
+	form = sendKey(form, tea.KeyEnter)
+	if vals.choice != "exit" {
+		t.Fatalf("expected choice=exit, got %q", vals.choice)
+	}
+}
+
+func TestMainMenu_InstalledStateHasRemoveOption(t *testing.T) {
+	state := InstallState{
+		HasProjectConfig:  true,
+		HasInstallMarker:  true,
+		InstalledManifest: "alpha",
+		InstalledVersion:  "1.0.0",
+	}
+	vals := &menuValues{}
+	form := buildMainMenuForm(state, &vals.choice)
+	form.Init()
+
+	// Installed state: [quick-install, guided-install, repo-add, repo-remove, list, state, exit]
+	var items []string
+	items = append(items, vals.choice)
+	for i := 0; i < 6; i++ {
+		form = sendKey(form, tea.KeyDown)
+		items = append(items, vals.choice)
+	}
+
+	expected := []string{"quick-install", "guided-install", "repo-add", "repo-remove", "list", "state", "exit"}
+	if len(items) != len(expected) {
+		t.Fatalf("expected %d items, got %d: %v", len(expected), len(items), items)
+	}
+	for i, exp := range expected {
+		if items[i] != exp {
+			t.Fatalf("item %d: expected %q, got %q\nall: %v", i, exp, items[i], items)
+		}
+	}
+}
+
+// ── Main menu model: selection triggers action ──────────────────
+
+func TestMainMenuModel_SelectListShowsFrameworks(t *testing.T) {
+	manifests := testManifests()
+	state := InstallState{}
+	vals := &menuValues{}
+	form := buildMainMenuForm(state, &vals.choice)
+	form.Init()
+
+	m := mainMenuModel{
+		form:      form,
+		mode:      "menu",
+		manifests: manifests,
+		state:     state,
+		vals: vals,
+	}
+
+	// Navigate to "list" (2 downs from guided-install)
+	m.form = sendKey(m.form, tea.KeyDown)
+	m.form = sendKey(m.form, tea.KeyDown)
+
+	// Press enter through the model to trigger action handling
+	updated, cmd := updateModel(m, tea.KeyMsg{Type: tea.KeyEnter})
+	result := updated.(mainMenuModel)
+
+	if result.mode != "text" {
+		t.Fatalf("expected mode=text after selecting list, got %q", result.mode)
+	}
+	if result.textTitle != "Frameworks" {
+		t.Fatalf("expected title=Frameworks, got %q", result.textTitle)
+	}
+	if !strings.Contains(result.textBody, "Alpha Framework") {
+		t.Fatal("expected framework names in text body")
+	}
+	if cmd != nil {
+		t.Fatal("selecting list should not quit — it shows text inline")
+	}
+}
+
+func TestMainMenuModel_SelectStateShowsBody(t *testing.T) {
+	state := InstallState{HasProjectConfig: true, HasInstallMarker: true, InstalledManifest: "alpha", InstalledVersion: "1.0.0"}
+	vals := &menuValues{}
+	form := buildMainMenuForm(state, &vals.choice)
+	form.Init()
+
+	m := mainMenuModel{
+		form:       form,
+		mode:       "menu",
+		state:      state,
+		cfg:        testConfig(),
+		projectDir: "/tmp/test",
+		vals: vals,
+	}
+
+	// Installed: [quick-install, guided-install, repo-add, repo-remove, list, state, exit]
+	// Navigate to "state" (5 downs)
+	for i := 0; i < 5; i++ {
+		m.form = sendKey(m.form, tea.KeyDown)
+	}
+
+	updated, _ := updateModel(m, tea.KeyMsg{Type: tea.KeyEnter})
+	result := updated.(mainMenuModel)
+
+	if result.mode != "text" {
+		t.Fatalf("expected text mode, got %q", result.mode)
+	}
+	if result.textTitle != "Current State" {
+		t.Fatalf("expected title=Current State, got %q", result.textTitle)
+	}
+	if !strings.Contains(result.textBody, "/tmp/test") {
+		t.Fatal("expected project dir in state body")
+	}
+}
+
+func TestMainMenuModel_SelectGuidedInstallQuits(t *testing.T) {
+	state := InstallState{}
+	vals := &menuValues{}
+	form := buildMainMenuForm(state, &vals.choice)
+	form.Init()
+
+	m := mainMenuModel{
+		form:   form,
+		mode:   "menu",
+		state:  state,
+		vals: vals,
+	}
+
+	// First item is already "guided-install" — just enter
+	updated, cmd := updateModel(m, tea.KeyMsg{Type: tea.KeyEnter})
+	result := updated.(mainMenuModel)
+
+	if result.action != "guided-install" {
+		t.Fatalf("expected action=guided-install, got %q", result.action)
+	}
+	if cmd == nil {
+		t.Fatal("expected quit command for action that exits menu loop")
+	}
+}
+
+func TestMainMenuModel_SelectExitQuits(t *testing.T) {
+	state := InstallState{}
+	vals := &menuValues{}
+	form := buildMainMenuForm(state, &vals.choice)
+	form.Init()
+
+	m := mainMenuModel{
+		form:   form,
+		mode:   "menu",
+		state:  state,
+		vals: vals,
+	}
+
+	// Navigate to exit (4 downs)
+	for i := 0; i < 4; i++ {
+		m.form = sendKey(m.form, tea.KeyDown)
+	}
+
+	updated, cmd := updateModel(m, tea.KeyMsg{Type: tea.KeyEnter})
+	result := updated.(mainMenuModel)
+
+	if result.action != "exit" {
+		t.Fatalf("expected action=exit, got %q", result.action)
+	}
+	if cmd == nil {
+		t.Fatal("expected quit command")
+	}
+}
+
+// ── Main menu model: text mode keyboard navigation ──────────────
+
+func TestMainMenuModel_TextModeFullCycle(t *testing.T) {
+	manifests := testManifests()
+	state := InstallState{}
+	vals := &menuValues{}
+	form := buildMainMenuForm(state, &vals.choice)
+	form.Init()
+
+	m := mainMenuModel{
+		form:      form,
+		mode:      "menu",
+		manifests: manifests,
+		state:     state,
+		vals: vals,
+	}
+
+	// Navigate to "list" and select it
+	m.form = sendKey(m.form, tea.KeyDown)
+	m.form = sendKey(m.form, tea.KeyDown)
+	updated, _ := updateModel(m, tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(mainMenuModel)
+
+	if m.mode != "text" {
+		t.Fatalf("expected text mode, got %q", m.mode)
+	}
+
+	// View should show framework list
+	view := m.View()
+	if !strings.Contains(view, "Frameworks") {
+		t.Fatal("expected Frameworks in text mode view")
+	}
+
+	// Press escape to return to menu
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEscape})
+	m = updated.(mainMenuModel)
+
+	if m.mode != "menu" {
+		t.Fatalf("expected menu mode after esc, got %q", m.mode)
+	}
+
+	// View should show menu form again
+	view = m.View()
+	if !strings.Contains(view, "navigate") {
+		t.Fatal("expected menu footer hint after returning from text mode")
+	}
+}
+
+// ── Installer wizard via model.Update: full e2e ─────────────────
+
+func TestInstallerWizard_ModelUpdatePhaseTransitions(t *testing.T) {
+	manifests := testManifests()
+	m := initialModel(manifests, testConfig())
+	m.form.Init()
+
+	// Start in manifest phase
+	if m.phase != phaseManifest {
+		t.Fatalf("expected phaseManifest, got %d", m.phase)
+	}
+
+	// Select beta (↓) and confirm (enter) — this should trigger phase transition
+	m.form = sendKey(m.form, tea.KeyDown)
+	if m.vals.manifestID != "beta" {
+		t.Fatalf("expected beta, got %q", m.vals.manifestID)
+	}
+
+	// Send enter through model.Update to trigger state machine
+	var updated tea.Model
+	updated, _ = updateModel(m, tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(model)
+
+	// Should now be in configure phase with beta selected
+	if m.phase != phaseConfigure {
+		t.Fatalf("expected phaseConfigure, got %d", m.phase)
+	}
+	if m.chosen.ID != "beta" {
+		t.Fatalf("expected chosen=beta, got %q", m.chosen.ID)
+	}
+
+	// Beta has 1 tier, so form should have just target dir + confirm
+	// Init the new form
+	m.form.Init()
+
+	// Accept target dir
+	m.form = sendKey(m.form, tea.KeyEnter)
+	// On confirm: default is Cancel (false), press left for Install
+	m.form = sendToForm(m.form, tea.KeyMsg{Type: tea.KeyLeft})
+	m.form = sendKey(m.form, tea.KeyEnter)
+
+	// Send final state through model
+	updated, _ = updateModel(m, tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(model)
+
+	if !m.quitting {
+		t.Fatal("expected quitting=true after full wizard completion")
+	}
+	if m.vals.confirm != true {
+		t.Fatal("expected confirm=true")
+	}
+	if m.chosen.ID != "beta" {
+		t.Fatal("expected chosen manifest to stay as beta")
+	}
+}
+
+// ── Wrap-around / boundary: navigate past end ───────────────────
+
+func TestManifestForm_WraparoundBehavior(t *testing.T) {
+	manifests := testManifests()
+	m := initialModel(manifests, testConfig())
+	m.form.Init()
+
+	// With 2 manifests, pressing down twice should wrap or stop
+	m.form = sendKey(m.form, tea.KeyDown)
+	first := m.vals.manifestID
+	m.form = sendKey(m.form, tea.KeyDown)
+	second := m.vals.manifestID
+
+	// Either it wraps (second == alpha) or stays at end (second == beta)
+	// Just verify it doesn't crash and produces a valid value
+	if second != "alpha" && second != "beta" {
+		t.Fatalf("unexpected manifestID after 2 downs: %q", second)
+	}
+	_ = first
+}
+
+func TestConfigureForm_SingleTierSkipsTierSelect(t *testing.T) {
+	// Beta has only 1 tier — form should skip tier selection
+	betaOnly := []Manifest{testManifests()[1]} // beta
+	cfg := Config{Manifest: "beta", Tier: "foundation"}
+	m := initialModel(betaOnly, cfg)
+	m.form.Init()
+
+	if m.vals.tierID != "foundation" {
+		t.Fatalf("expected auto-set tier=foundation, got %q", m.vals.tierID)
+	}
+
+	// First field should be target dir (not tier select), then confirm
+	// Enter twice should complete (target + confirm)
+	m.form = sendKey(m.form, tea.KeyEnter)
+	m.form = sendKey(m.form, tea.KeyEnter)
+
+	if m.form.State != huh.StateCompleted {
+		t.Fatalf("expected completed for single-tier form, got state %d", m.form.State)
 	}
 }
