@@ -1,19 +1,20 @@
-package main
+package storage
 
 import (
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/peregrine-digital/activate-framework/cli/model"
 )
 
 // setupTestStore isolates all activate state to a temp directory.
 func setupTestStore(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
-	old := activateBaseDir
-	activateBaseDir = dir
-	t.Cleanup(func() { activateBaseDir = old })
+	old := ActivateBaseDir
+	ActivateBaseDir = dir
+	t.Cleanup(func() { ActivateBaseDir = old })
 	return dir
 }
 
@@ -97,7 +98,7 @@ func TestConfig_ReadProjectConfig_Missing(t *testing.T) {
 func TestConfig_WriteProjectConfig_CreatesFile(t *testing.T) {
 	setupTestStore(t)
 	tmp := t.TempDir()
-	err := WriteProjectConfig(tmp, &Config{Manifest: "ironarch", Tier: "minimal"})
+	err := WriteProjectConfig(tmp, &model.Config{Manifest: "ironarch", Tier: "minimal"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -117,11 +118,11 @@ func TestConfig_WriteProjectConfig_MergeUpdate(t *testing.T) {
 	setupTestStore(t)
 	tmp := t.TempDir()
 	// Write initial config
-	if err := WriteProjectConfig(tmp, &Config{Manifest: "ironarch", Tier: "full"}); err != nil {
+	if err := WriteProjectConfig(tmp, &model.Config{Manifest: "ironarch", Tier: "full"}); err != nil {
 		t.Fatal(err)
 	}
 	// Merge-update with only tier change; manifest should survive
-	if err := WriteProjectConfig(tmp, &Config{Tier: "minimal"}); err != nil {
+	if err := WriteProjectConfig(tmp, &model.Config{Tier: "minimal"}); err != nil {
 		t.Fatal(err)
 	}
 	cfg, err := ReadProjectConfig(tmp)
@@ -139,13 +140,13 @@ func TestConfig_WriteProjectConfig_MergeUpdate(t *testing.T) {
 func TestConfig_WriteProjectConfig_PreservesExistingMaps(t *testing.T) {
 	setupTestStore(t)
 	tmp := t.TempDir()
-	if err := WriteProjectConfig(tmp, &Config{
+	if err := WriteProjectConfig(tmp, &model.Config{
 		FileOverrides: map[string]string{"a.md": "pinned"},
 	}); err != nil {
 		t.Fatal(err)
 	}
 	// Add a second override without clobbering the first
-	if err := WriteProjectConfig(tmp, &Config{
+	if err := WriteProjectConfig(tmp, &model.Config{
 		FileOverrides: map[string]string{"b.md": "excluded"},
 	}); err != nil {
 		t.Fatal(err)
@@ -164,7 +165,7 @@ func TestConfig_WriteProjectConfig_PreservesExistingMaps(t *testing.T) {
 func TestConfig_WriteGlobalConfig_CreatesDirectory(t *testing.T) {
 	storeDir := setupTestStore(t)
 
-	err := WriteGlobalConfig(&Config{Manifest: "ironarch"})
+	err := WriteGlobalConfig(&model.Config{Manifest: "ironarch"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -185,11 +186,11 @@ func TestConfig_WriteGlobalConfig_CreatesDirectory(t *testing.T) {
 func TestConfig_WriteGlobalConfig_MergeUpdate(t *testing.T) {
 	setupTestStore(t)
 
-	if err := WriteGlobalConfig(&Config{Manifest: "ironarch", Tier: "full"}); err != nil {
+	if err := WriteGlobalConfig(&model.Config{Manifest: "ironarch", Tier: "full"}); err != nil {
 		t.Fatal(err)
 	}
 	// Update only tier
-	if err := WriteGlobalConfig(&Config{Tier: "minimal"}); err != nil {
+	if err := WriteGlobalConfig(&model.Config{Tier: "minimal"}); err != nil {
 		t.Fatal(err)
 	}
 	cfg, _ := ReadGlobalConfig()
@@ -208,11 +209,11 @@ func TestConfig_ResolveConfig_DefaultsOnly(t *testing.T) {
 	tmp := t.TempDir()
 
 	cfg := ResolveConfig(tmp, nil)
-	if cfg.Manifest != defaultManifest {
-		t.Fatalf("expected default manifest %q, got %q", defaultManifest, cfg.Manifest)
+	if cfg.Manifest != model.DefaultManifest {
+		t.Fatalf("expected default manifest %q, got %q", model.DefaultManifest, cfg.Manifest)
 	}
-	if cfg.Tier != defaultTier {
-		t.Fatalf("expected default tier %q, got %q", defaultTier, cfg.Tier)
+	if cfg.Tier != model.DefaultTier {
+		t.Fatalf("expected default tier %q, got %q", model.DefaultTier, cfg.Tier)
 	}
 	if cfg.FileOverrides == nil {
 		t.Fatal("expected initialized FileOverrides map")
@@ -226,11 +227,11 @@ func TestConfig_ResolveConfig_GlobalOverridesDefaults(t *testing.T) {
 	setupTestStore(t)
 	tmp := t.TempDir()
 
-	if err := WriteGlobalConfig(&Config{Tier: "full"}); err != nil {
+	if err := WriteGlobalConfig(&model.Config{Tier: "full"}); err != nil {
 		t.Fatal(err)
 	}
 	cfg := ResolveConfig(tmp, nil)
-	if cfg.Manifest != defaultManifest {
+	if cfg.Manifest != model.DefaultManifest {
 		t.Fatalf("manifest should stay default, got %q", cfg.Manifest)
 	}
 	if cfg.Tier != "full" {
@@ -242,10 +243,10 @@ func TestConfig_ResolveConfig_ProjectOverridesGlobal(t *testing.T) {
 	setupTestStore(t)
 	tmp := t.TempDir()
 
-	if err := WriteGlobalConfig(&Config{Manifest: "global-manifest", Tier: "full"}); err != nil {
+	if err := WriteGlobalConfig(&model.Config{Manifest: "global-manifest", Tier: "full"}); err != nil {
 		t.Fatal(err)
 	}
-	if err := WriteProjectConfig(tmp, &Config{Manifest: "project-manifest"}); err != nil {
+	if err := WriteProjectConfig(tmp, &model.Config{Manifest: "project-manifest"}); err != nil {
 		t.Fatal(err)
 	}
 	cfg := ResolveConfig(tmp, nil)
@@ -261,13 +262,13 @@ func TestConfig_ResolveConfig_OverridesWin(t *testing.T) {
 	setupTestStore(t)
 	tmp := t.TempDir()
 
-	if err := WriteGlobalConfig(&Config{Manifest: "global-manifest"}); err != nil {
+	if err := WriteGlobalConfig(&model.Config{Manifest: "global-manifest"}); err != nil {
 		t.Fatal(err)
 	}
-	if err := WriteProjectConfig(tmp, &Config{Manifest: "project-manifest"}); err != nil {
+	if err := WriteProjectConfig(tmp, &model.Config{Manifest: "project-manifest"}); err != nil {
 		t.Fatal(err)
 	}
-	cfg := ResolveConfig(tmp, &Config{Manifest: "override-manifest"})
+	cfg := ResolveConfig(tmp, &model.Config{Manifest: "override-manifest"})
 	if cfg.Manifest != "override-manifest" {
 		t.Fatalf("override should win: got %q", cfg.Manifest)
 	}
@@ -276,154 +277,13 @@ func TestConfig_ResolveConfig_OverridesWin(t *testing.T) {
 func TestConfig_ResolveConfig_EmptyProjectDir(t *testing.T) {
 	setupTestStore(t)
 
-	if err := WriteGlobalConfig(&Config{Tier: "full"}); err != nil {
+	if err := WriteGlobalConfig(&model.Config{Tier: "full"}); err != nil {
 		t.Fatal(err)
 	}
 	cfg := ResolveConfig("", nil)
 	if cfg.Tier != "full" {
 		t.Fatalf("global tier should apply when projectDir is empty: got %q", cfg.Tier)
 	}
-}
-
-// --- mergeInto ---
-
-func TestConfig_mergeInto_EmptyStringDoesNotOverwrite(t *testing.T) {
-	dst := &Config{Manifest: "original", Tier: "full"}
-	src := &Config{Manifest: "", Tier: ""}
-	mergeInto(dst, src)
-	if dst.Manifest != "original" {
-		t.Fatalf("empty string overwrote Manifest: got %q", dst.Manifest)
-	}
-	if dst.Tier != "full" {
-		t.Fatalf("empty string overwrote Tier: got %q", dst.Tier)
-	}
-}
-
-func TestConfig_mergeInto_NonEmptyOverwrites(t *testing.T) {
-	dst := &Config{Manifest: "old", Tier: "old"}
-	src := &Config{Manifest: "new", Tier: "new"}
-	mergeInto(dst, src)
-	if dst.Manifest != "new" || dst.Tier != "new" {
-		t.Fatalf("expected new values, got %+v", dst)
-	}
-}
-
-func TestConfig_mergeInto_ClearValueUnsetsField(t *testing.T) {
-	dst := &Config{Manifest: "my-manifest", Tier: "advanced"}
-	src := &Config{Manifest: ClearValue, Tier: ClearValue}
-	mergeInto(dst, src)
-	if dst.Manifest != "" {
-		t.Fatalf("expected Manifest cleared, got %q", dst.Manifest)
-	}
-	if dst.Tier != "" {
-		t.Fatalf("expected Tier cleared, got %q", dst.Tier)
-	}
-}
-
-func TestConfig_mergeInto_NilMapDoesNotOverwrite(t *testing.T) {
-	dst := &Config{
-		FileOverrides: map[string]string{"a": "pinned"},
-	}
-	src := &Config{FileOverrides: nil}
-	mergeInto(dst, src)
-	if dst.FileOverrides["a"] != "pinned" {
-		t.Fatal("nil src map overwrote dst map")
-	}
-}
-
-func TestConfig_mergeInto_MapMerge(t *testing.T) {
-	dst := &Config{
-		FileOverrides: map[string]string{"a": "pinned"},
-	}
-	src := &Config{
-		FileOverrides: map[string]string{"b": "excluded"},
-	}
-	mergeInto(dst, src)
-	if dst.FileOverrides["a"] != "pinned" {
-		t.Fatal("existing key lost during merge")
-	}
-	if dst.FileOverrides["b"] != "excluded" {
-		t.Fatal("new key not added during merge")
-	}
-}
-
-func TestConfig_mergeInto_MapEmptyValueDeletes(t *testing.T) {
-	dst := &Config{
-		FileOverrides:   map[string]string{"a": "pinned", "b": "excluded"},
-		SkippedVersions: map[string]string{"x": "1.0.0"},
-	}
-	src := &Config{
-		FileOverrides:   map[string]string{"a": ""},
-		SkippedVersions: map[string]string{"x": ""},
-	}
-	mergeInto(dst, src)
-	if _, ok := dst.FileOverrides["a"]; ok {
-		t.Fatal("empty value did not delete FileOverrides key")
-	}
-	if dst.FileOverrides["b"] != "excluded" {
-		t.Fatal("unrelated key was affected")
-	}
-	if _, ok := dst.SkippedVersions["x"]; ok {
-		t.Fatal("empty value did not delete SkippedVersions key")
-	}
-}
-
-func TestConfig_mergeInto_DstNilMapInitialized(t *testing.T) {
-	dst := &Config{}
-	src := &Config{
-		FileOverrides:   map[string]string{"a": "pinned"},
-		SkippedVersions: map[string]string{"x": "1.0.0"},
-	}
-	mergeInto(dst, src)
-	if dst.FileOverrides["a"] != "pinned" {
-		t.Fatal("FileOverrides not initialized on dst")
-	}
-	if dst.SkippedVersions["x"] != "1.0.0" {
-		t.Fatal("SkippedVersions not initialized on dst")
-	}
-}
-
-func TestConfig_mergeInto_BoolPointer(t *testing.T) {
-	t.Run("nil does not overwrite", func(t *testing.T) {
-		tr := true
-		dst := &Config{TelemetryEnabled: &tr}
-		src := &Config{TelemetryEnabled: nil}
-		mergeInto(dst, src)
-		if dst.TelemetryEnabled == nil || *dst.TelemetryEnabled != true {
-			t.Fatal("nil *bool overwrote existing value")
-		}
-	})
-
-	t.Run("true overwrites nil", func(t *testing.T) {
-		tr := true
-		dst := &Config{}
-		src := &Config{TelemetryEnabled: &tr}
-		mergeInto(dst, src)
-		if dst.TelemetryEnabled == nil || *dst.TelemetryEnabled != true {
-			t.Fatal("*bool true not applied")
-		}
-	})
-
-	t.Run("false overwrites true", func(t *testing.T) {
-		tr := true
-		fa := false
-		dst := &Config{TelemetryEnabled: &tr}
-		src := &Config{TelemetryEnabled: &fa}
-		mergeInto(dst, src)
-		if dst.TelemetryEnabled == nil || *dst.TelemetryEnabled != false {
-			t.Fatal("*bool false did not overwrite true")
-		}
-	})
-
-	t.Run("false overwrites nil", func(t *testing.T) {
-		fa := false
-		dst := &Config{}
-		src := &Config{TelemetryEnabled: &fa}
-		mergeInto(dst, src)
-		if dst.TelemetryEnabled == nil || *dst.TelemetryEnabled != false {
-			t.Fatal("*bool false not applied to nil dst")
-		}
-	})
 }
 
 // --- SetFileOverride ---
@@ -455,7 +315,7 @@ func TestConfig_SetFileOverride_ClearsWithEmpty(t *testing.T) {
 
 func TestConfig_SetFileOverride_PreservesOtherFields(t *testing.T) {
 	tmp := t.TempDir()
-	if err := WriteProjectConfig(tmp, &Config{Manifest: "ironarch", Tier: "full"}); err != nil {
+	if err := WriteProjectConfig(tmp, &model.Config{Manifest: "ironarch", Tier: "full"}); err != nil {
 		t.Fatal(err)
 	}
 	if err := SetFileOverride(tmp, "a.md", "excluded"); err != nil {
@@ -496,7 +356,7 @@ func TestConfig_ClearSkippedVersion(t *testing.T) {
 
 func TestConfig_SetSkippedVersion_PreservesOtherFields(t *testing.T) {
 	tmp := t.TempDir()
-	if err := WriteProjectConfig(tmp, &Config{
+	if err := WriteProjectConfig(tmp, &model.Config{
 		Manifest:      "ironarch",
 		FileOverrides: map[string]string{"x.md": "pinned"},
 	}); err != nil {
@@ -519,7 +379,7 @@ func TestConfig_SetSkippedVersion_PreservesOtherFields(t *testing.T) {
 func TestConfig_TelemetryEnabled_RoundTrip(t *testing.T) {
 	tmp := t.TempDir()
 	fa := false
-	if err := WriteProjectConfig(tmp, &Config{TelemetryEnabled: &fa}); err != nil {
+	if err := WriteProjectConfig(tmp, &model.Config{TelemetryEnabled: &fa}); err != nil {
 		t.Fatal(err)
 	}
 	cfg, _ := ReadProjectConfig(tmp)
@@ -533,34 +393,11 @@ func TestConfig_TelemetryEnabled_RoundTrip(t *testing.T) {
 
 func TestConfig_TelemetryEnabled_NilByDefault(t *testing.T) {
 	tmp := t.TempDir()
-	if err := WriteProjectConfig(tmp, &Config{Manifest: "test"}); err != nil {
+	if err := WriteProjectConfig(tmp, &model.Config{Manifest: "test"}); err != nil {
 		t.Fatal(err)
 	}
 	cfg, _ := ReadProjectConfig(tmp)
 	if cfg.TelemetryEnabled != nil {
 		t.Fatalf("TelemetryEnabled should be nil when not set, got %v", *cfg.TelemetryEnabled)
-	}
-}
-
-// --- JSON serialization ---
-
-func TestConfig_JSONOmitsEmptyMaps(t *testing.T) {
-	cfg := Config{Manifest: "test", Tier: "standard"}
-	data, err := json.Marshal(cfg)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var raw map[string]interface{}
-	if err := json.Unmarshal(data, &raw); err != nil {
-		t.Fatal(err)
-	}
-	if _, ok := raw["fileOverrides"]; ok {
-		t.Fatal("nil FileOverrides should be omitted from JSON")
-	}
-	if _, ok := raw["skippedVersions"]; ok {
-		t.Fatal("nil SkippedVersions should be omitted from JSON")
-	}
-	if _, ok := raw["telemetryEnabled"]; ok {
-		t.Fatal("nil TelemetryEnabled should be omitted from JSON")
 	}
 }

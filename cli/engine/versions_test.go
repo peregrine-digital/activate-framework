@@ -1,82 +1,13 @@
-package main
+package engine
 
 import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/peregrine-digital/activate-framework/cli/model"
+	"github.com/peregrine-digital/activate-framework/cli/storage"
 )
-
-func TestParseFrontmatterVersionBasic(t *testing.T) {
-	content := []byte("---\nversion: '0.5.0'\ntitle: Test\n---\n# Hello")
-	got := ParseFrontmatterVersion(content)
-	if got != "0.5.0" {
-		t.Fatalf("expected 0.5.0, got %q", got)
-	}
-}
-
-func TestParseFrontmatterVersionDoubleQuotes(t *testing.T) {
-	content := []byte("---\ntitle: Foo\nversion: \"1.2.3\"\n---\nbody")
-	got := ParseFrontmatterVersion(content)
-	if got != "1.2.3" {
-		t.Fatalf("expected 1.2.3, got %q", got)
-	}
-}
-
-func TestParseFrontmatterVersionUnquoted(t *testing.T) {
-	content := []byte("---\nversion: 2.0.0\n---\n")
-	got := ParseFrontmatterVersion(content)
-	if got != "2.0.0" {
-		t.Fatalf("expected 2.0.0, got %q", got)
-	}
-}
-
-func TestParseFrontmatterVersionMissing(t *testing.T) {
-	content := []byte("---\ntitle: No version here\n---\nbody")
-	got := ParseFrontmatterVersion(content)
-	if got != "" {
-		t.Fatalf("expected empty, got %q", got)
-	}
-}
-
-func TestParseFrontmatterVersionNoFrontmatter(t *testing.T) {
-	content := []byte("# Just a markdown file\nNo frontmatter at all.")
-	got := ParseFrontmatterVersion(content)
-	if got != "" {
-		t.Fatalf("expected empty, got %q", got)
-	}
-}
-
-func TestParseFrontmatterVersionEmptyContent(t *testing.T) {
-	got := ParseFrontmatterVersion([]byte{})
-	if got != "" {
-		t.Fatalf("expected empty, got %q", got)
-	}
-}
-
-func TestParseFrontmatterVersionWithWhitespace(t *testing.T) {
-	content := []byte("---\nversion:   3.1.4  \n---\n")
-	got := ParseFrontmatterVersion(content)
-	if got != "3.1.4" {
-		t.Fatalf("expected 3.1.4, got %q", got)
-	}
-}
-
-func TestParseFrontmatterVersionNotAtStart(t *testing.T) {
-	// Frontmatter must be at the very start of the file
-	content := []byte("\n---\nversion: '1.0.0'\n---\n")
-	got := ParseFrontmatterVersion(content)
-	if got != "" {
-		t.Fatalf("expected empty (not at start), got %q", got)
-	}
-}
-
-func TestParseFrontmatterVersionIgnoresBodyVersion(t *testing.T) {
-	content := []byte("---\ntitle: Test\n---\nversion: 9.9.9\n")
-	got := ParseFrontmatterVersion(content)
-	if got != "" {
-		t.Fatalf("expected empty (version outside frontmatter), got %q", got)
-	}
-}
 
 func TestReadFileVersion(t *testing.T) {
 	dir := t.TempDir()
@@ -84,7 +15,7 @@ func TestReadFileVersion(t *testing.T) {
 	if err := os.WriteFile(path, []byte("---\nversion: '0.3.0'\n---\n# Doc"), 0644); err != nil {
 		t.Fatal(err)
 	}
-	got, err := ReadFileVersion(path)
+	got, err := storage.ReadFileVersion(path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -94,54 +25,9 @@ func TestReadFileVersion(t *testing.T) {
 }
 
 func TestReadFileVersionMissingFile(t *testing.T) {
-	_, err := ReadFileVersion("/nonexistent/file.md")
+	_, err := storage.ReadFileVersion("/nonexistent/file.md")
 	if err == nil {
 		t.Fatal("expected error for missing file")
-	}
-}
-
-// ── fileDisplayName tests ───────────────────────────────────────
-
-func TestFileDisplayNameInstructions(t *testing.T) {
-	got := fileDisplayName("instructions/general.instructions.md")
-	if got != "general" {
-		t.Fatalf("expected 'general', got %q", got)
-	}
-}
-
-func TestFileDisplayNamePrompt(t *testing.T) {
-	got := fileDisplayName("prompts/review.prompt.md")
-	if got != "review" {
-		t.Fatalf("expected 'review', got %q", got)
-	}
-}
-
-func TestFileDisplayNameAgent(t *testing.T) {
-	got := fileDisplayName("agents/planner.agent.md")
-	if got != "planner" {
-		t.Fatalf("expected 'planner', got %q", got)
-	}
-}
-
-func TestFileDisplayNameSkill(t *testing.T) {
-	got := fileDisplayName("skills/go-testing/SKILL.md")
-	if got != "go-testing" {
-		t.Fatalf("expected 'go-testing', got %q", got)
-	}
-}
-
-func TestFileDisplayNamePlainMd(t *testing.T) {
-	got := fileDisplayName("other/README.md")
-	if got != "README" {
-		t.Fatalf("expected 'README', got %q", got)
-	}
-}
-
-func TestFileDisplayNameSkillTopLevel(t *testing.T) {
-	// SKILL.md at top level (no parent) — should return "SKILL"
-	got := fileDisplayName("SKILL.md")
-	if got != "SKILL" {
-		t.Fatalf("expected 'SKILL', got %q", got)
 	}
 }
 
@@ -167,20 +53,20 @@ func TestComputeFileStatusesBasic(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	manifest := Manifest{
+	manifest := model.Manifest{
 		ID:       "test",
 		Version:  "0.5.0",
 		BasePath: bundleDir,
-		Files: []ManifestFile{
+		Files: []model.ManifestFile{
 			{Src: "instructions/general.md", Dest: "instructions/general.md", Tier: "core"},
 			{Src: "skills/test.md", Dest: "skills/test.md", Tier: "ad-hoc"},
 		},
 	}
 
-	sidecar := &repoSidecar{
+	sidecar := &model.RepoSidecar{
 		Files: []string{".github/instructions/general.md"},
 	}
-	cfg := Config{}
+	cfg := model.Config{}
 
 	statuses := ComputeFileStatuses(manifest, sidecar, cfg, projectDir)
 	if len(statuses) != 2 {
@@ -238,12 +124,12 @@ func TestComputeFileStatusesSkipped(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	manifest := Manifest{
+	manifest := model.Manifest{
 		ID: "test", Version: "0.5.0", BasePath: bundleDir,
-		Files: []ManifestFile{{Src: "instructions/sec.md", Dest: "instructions/sec.md", Tier: "core"}},
+		Files: []model.ManifestFile{{Src: "instructions/sec.md", Dest: "instructions/sec.md", Tier: "core"}},
 	}
-	sidecar := &repoSidecar{Files: []string{".github/instructions/sec.md"}}
-	cfg := Config{SkippedVersions: map[string]string{"instructions/sec.md": "0.5.0"}}
+	sidecar := &model.RepoSidecar{Files: []string{".github/instructions/sec.md"}}
+	cfg := model.Config{SkippedVersions: map[string]string{"instructions/sec.md": "0.5.0"}}
 
 	statuses := ComputeFileStatuses(manifest, sidecar, cfg, projectDir)
 	if len(statuses) != 1 {
@@ -261,14 +147,14 @@ func TestComputeFileStatusesOverrides(t *testing.T) {
 	projectDir := t.TempDir()
 	bundleDir := t.TempDir()
 
-	manifest := Manifest{
+	manifest := model.Manifest{
 		ID: "test", Version: "1.0.0", BasePath: bundleDir,
-		Files: []ManifestFile{
+		Files: []model.ManifestFile{
 			{Src: "a.md", Dest: "a.md", Tier: "core"},
 			{Src: "b.md", Dest: "b.md", Tier: "core"},
 		},
 	}
-	cfg := Config{FileOverrides: map[string]string{
+	cfg := model.Config{FileOverrides: map[string]string{
 		"a.md": "pinned",
 		"b.md": "excluded",
 	}}
@@ -286,12 +172,12 @@ func TestComputeFileStatusesNilSidecar(t *testing.T) {
 	projectDir := t.TempDir()
 	bundleDir := t.TempDir()
 
-	manifest := Manifest{
+	manifest := model.Manifest{
 		ID: "test", Version: "1.0.0", BasePath: bundleDir,
-		Files: []ManifestFile{{Src: "a.md", Dest: "a.md", Tier: "core"}},
+		Files: []model.ManifestFile{{Src: "a.md", Dest: "a.md", Tier: "core"}},
 	}
 
-	statuses := ComputeFileStatuses(manifest, nil, Config{}, projectDir)
+	statuses := ComputeFileStatuses(manifest, nil, model.Config{}, projectDir)
 	if len(statuses) != 1 {
 		t.Fatalf("expected 1, got %d", len(statuses))
 	}
@@ -316,13 +202,13 @@ func TestComputeFileStatusesSameVersion(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	manifest := Manifest{
+	manifest := model.Manifest{
 		ID: "test", Version: "1.0.0", BasePath: bundleDir,
-		Files: []ManifestFile{{Src: "a.md", Dest: "a.md", Tier: "core"}},
+		Files: []model.ManifestFile{{Src: "a.md", Dest: "a.md", Tier: "core"}},
 	}
-	sidecar := &repoSidecar{Files: []string{".github/a.md"}}
+	sidecar := &model.RepoSidecar{Files: []string{".github/a.md"}}
 
-	statuses := ComputeFileStatuses(manifest, sidecar, Config{}, projectDir)
+	statuses := ComputeFileStatuses(manifest, sidecar, model.Config{}, projectDir)
 	if statuses[0].UpdateAvailable {
 		t.Fatal("expected no update when versions match")
 	}
