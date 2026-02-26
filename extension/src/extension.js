@@ -16,9 +16,15 @@ let client = null;
  * @returns {string|null}
  */
 function resolveBinPath(context) {
+  // 1. Bundled in extension package (production)
   const bundled = path.join(context.extensionUri.fsPath, 'bin', 'activate');
   if (fs.existsSync(bundled)) return bundled;
 
+  // 2. Sibling cli/ directory (development — running from repo)
+  const dev = path.join(context.extensionUri.fsPath, '..', 'cli', 'activate');
+  if (fs.existsSync(dev)) return dev;
+
+  // 3. On system PATH
   try {
     return execFileSync('which', ['activate'], { encoding: 'utf8' }).trim();
   } catch {
@@ -26,7 +32,7 @@ function resolveBinPath(context) {
   }
 
   vscode.window.showErrorMessage(
-    'Activate CLI binary not found. Install the CLI or reinstall the extension.',
+    'Activate CLI binary not found. Run "make build" in cli/ or install the CLI.',
   );
   return null;
 }
