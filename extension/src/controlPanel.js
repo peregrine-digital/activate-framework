@@ -45,28 +45,24 @@ class ControlPanelProvider {
     const manifests = await this._client.listManifests();
 
     const cfg = state.config || {};
-    const tier = cfg.tier || 'standard';
+    const tier = cfg.tier || '';
     const fileOverrides = cfg.fileOverrides || {};
     const skippedVersions = cfg.skippedVersions || {};
     const isActive = state.state?.hasInstallMarker || false;
     const version = state.state?.installedVersion || '';
-    const manifestName = cfg.manifest || 'activate-framework';
+    const manifestName = cfg.manifest || '';
     const manifestCount = Array.isArray(manifests) ? manifests.length : 1;
 
     // Cache metadata from daemon for use by other methods
     this._categories = state.categories || [];
     this._telemetryLogPath = state.telemetryLogPath || '';
 
-    // Build file lists from daemon FileStatus[]
+    // Build file lists from daemon FileStatus[] — uses daemon-computed inTier
     const files = state.files || [];
     const versionMap = new Map();
     const installedFiles = [];
     const availableFiles = [];
     const outsideTierFiles = [];
-
-    // Get allowed tiers from daemon (dynamic per manifest)
-    const tiers = state.tiers || [];
-    const tierIncludes = getTierIncludesFromState(tiers, tier);
 
     for (const f of files) {
       if (f.installed) {
@@ -78,7 +74,7 @@ class ControlPanelProvider {
 
       const isExcluded = f.override === 'excluded';
       const isPinned = f.override === 'pinned';
-      const inTier = isPinned || tierIncludes.has(f.tier);
+      const inTier = isPinned || f.inTier;
 
       if (isExcluded) continue;
 
@@ -92,6 +88,7 @@ class ControlPanelProvider {
     }
 
     // Tier label from daemon tier definitions
+    const tiers = state.tiers || [];
     const activeTier = tiers.find((t) => t.id === tier);
     const tierLabel = activeTier ? activeTier.label : tier;
 
@@ -172,6 +169,11 @@ class ControlPanelProvider {
       case 'skipUpdate':
         vscode.commands.executeCommand('activate-framework.skipFileUpdate', msg.file);
         break;
+      case 'setOverride': {
+        const data = msg.file || {};
+        this._client.setFileOverride(data.file, data.override).then(() => this._render());
+        break;
+      }
       case 'showUsage':
         this._currentPage = 'usage';
         this._render();
@@ -245,8 +247,8 @@ class ControlPanelProvider {
       const tierBadge = esc(f.tier);
       const json = esc(JSON.stringify(f));
 
-      // File override badge (pinned / excluded)
-      const override = fileOverrides?.[f.dest];
+      // File override badge (pinned / excluded) — from daemon FileStatus
+      const override = f.override || '';
       const overrideBadge = override === 'pinned'
         ? '<span class="override-badge pinned" title="Pinned — always included">📌</span>'
         : override === 'excluded'
@@ -294,6 +296,20 @@ class ControlPanelProvider {
         ? `onclick="send('openFile', ${json})"` : '';
       const cursorClass = installed ? 'clickable' : '';
 
+      // Override action buttons
+      let overrideButtons = '';
+      if (override === 'pinned') {
+        overrideButtons = `
+          <button class="icon-btn" title="Remove pin" onclick="event.stopPropagation(); send('setOverride', { file: '${esc(f.dest)}', override: '' })">📌✕</button>`;
+      } else if (override === 'excluded') {
+        overrideButtons = `
+          <button class="icon-btn" title="Remove exclusion" onclick="event.stopPropagation(); send('setOverride', { file: '${esc(f.dest)}', override: '' })">🚫✕</button>`;
+      } else {
+        overrideButtons = `
+          <button class="icon-btn" title="Pin (always include)" onclick="event.stopPropagation(); send('setOverride', { file: '${esc(f.dest)}', override: 'pinned' })">📌</button>
+          <button class="icon-btn" title="Exclude (never install)" onclick="event.stopPropagation(); send('setOverride', { file: '${esc(f.dest)}', override: 'excluded' })">🚫</button>`;
+      }
+
       return `
         <div class="file-card ${installed ? 'installed' : 'available'}${outdated ? ' outdated-card' : ''}">
           <div class="file-main ${cursorClass}" ${openClick}>
@@ -306,6 +322,7 @@ class ControlPanelProvider {
           <div class="file-actions">
             <span class="file-tier">${tierBadge}</span>
             ${actionButtons}
+            ${overrideButtons}
           </div>
         </div>`;
     };
@@ -1215,15 +1232,6 @@ function esc(str) {
 }
 
 // ── Tier helpers (dynamic — reads from daemon state) ───────────
-
-function getTierIncludesFromState(tiers, tierId) {
-  const match = tiers.find((t) => t.id === tierId);
-  if (match) return new Set(match.includes || []);
-  // Fallback: use second tier (standard-equivalent) or first
-  const fallback = tiers[1] || tiers[0];
-  if (fallback) return new Set(fallback.includes || []);
-  return new Set(['core']);
-}
 
 // ── Category grouping (uses daemon-provided categories) ────────
 

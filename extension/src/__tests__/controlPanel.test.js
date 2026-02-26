@@ -89,9 +89,9 @@ describe('ControlPanelProvider', () => {
         state: { hasInstallMarker: true, installedVersion: '1.0.0' },
         tiers: DEFAULT_TIERS,
         files: [
-          { dest: 'instructions/a.md', category: 'instructions', tier: 'core', installed: true, installedVersion: '1.0.0', bundledVersion: '1.0.0', override: '' },
-          { dest: 'prompts/b.md', category: 'prompts', tier: 'ad-hoc', installed: false, bundledVersion: '1.0.0', override: '' },
-          { dest: 'agents/c.md', category: 'agents', tier: 'ad-hoc-advanced', installed: false, bundledVersion: '1.0.0', override: '' },
+          { dest: 'instructions/a.md', category: 'instructions', tier: 'core', installed: true, installedVersion: '1.0.0', bundledVersion: '1.0.0', override: '', inTier: true },
+          { dest: 'prompts/b.md', category: 'prompts', tier: 'ad-hoc', installed: false, bundledVersion: '1.0.0', override: '', inTier: true },
+          { dest: 'agents/c.md', category: 'agents', tier: 'ad-hoc-advanced', installed: false, bundledVersion: '1.0.0', override: '', inTier: false },
         ],
       };
       mockClient._mockResults.listManifests = [
@@ -136,7 +136,7 @@ describe('ControlPanelProvider', () => {
         state: { hasInstallMarker: true },
         tiers: DEFAULT_TIERS,
         files: [
-          { dest: 'a.md', category: 'instructions', tier: 'core', installed: false, override: 'excluded' },
+          { dest: 'a.md', category: 'instructions', tier: 'core', installed: false, override: 'excluded', inTier: true },
         ],
       };
       mockClient._mockResults.listManifests = [];
@@ -153,7 +153,7 @@ describe('ControlPanelProvider', () => {
         state: { hasInstallMarker: true },
         tiers: DEFAULT_TIERS,
         files: [
-          { dest: 'prompts/b.md', category: 'prompts', tier: 'ad-hoc', installed: false, override: 'pinned' },
+          { dest: 'prompts/b.md', category: 'prompts', tier: 'ad-hoc', installed: false, override: 'pinned', inTier: false },
         ],
       };
       mockClient._mockResults.listManifests = [];
@@ -169,7 +169,7 @@ describe('ControlPanelProvider', () => {
       mockClient._mockResults.listManifests = [];
 
       const state = await panel._gatherState();
-      assert.equal(state.tier, 'standard');
+      assert.equal(state.tier, '');
       assert.equal(state.isActive, false);
       assert.equal(state.installedFiles.length, 0);
     });
@@ -184,8 +184,8 @@ describe('ControlPanelProvider', () => {
         state: { hasInstallMarker: true },
         tiers: customTiers,
         files: [
-          { dest: 'a.md', category: 'instructions', tier: 'foundation', installed: false, override: '' },
-          { dest: 'b.md', category: 'prompts', tier: 'extras', installed: false, override: '' },
+          { dest: 'a.md', category: 'instructions', tier: 'foundation', installed: false, override: '', inTier: true },
+          { dest: 'b.md', category: 'prompts', tier: 'extras', installed: false, override: '', inTier: false },
         ],
       };
       mockClient._mockResults.listManifests = [];
@@ -265,10 +265,10 @@ describe('groupByCategory (via controlPanel module)', () => {
         { id: 'advanced', label: 'Advanced', includes: ['core', 'ad-hoc', 'ad-hoc-advanced'] },
       ],
       files: [
-        { dest: 'instructions/a.md', category: 'instructions', tier: 'core', installed: true },
-        { dest: 'instructions/b.md', category: 'instructions', tier: 'core', installed: true },
-        { dest: 'prompts/c.md', category: 'prompts', tier: 'ad-hoc', installed: true },
-        { dest: 'agents/d.md', category: 'agents', tier: 'ad-hoc-advanced', installed: true },
+        { dest: 'instructions/a.md', category: 'instructions', tier: 'core', installed: true, inTier: true },
+        { dest: 'instructions/b.md', category: 'instructions', tier: 'core', installed: true, inTier: true },
+        { dest: 'prompts/c.md', category: 'prompts', tier: 'ad-hoc', installed: true, inTier: true },
+        { dest: 'agents/d.md', category: 'agents', tier: 'ad-hoc-advanced', installed: true, inTier: true },
       ],
     };
     mockClient._mockResults.listManifests = [];
@@ -289,7 +289,7 @@ describe('groupByCategory (via controlPanel module)', () => {
         { id: 'standard', label: 'Standard', includes: ['core', 'ad-hoc'] },
       ],
       files: [
-        { dest: 'instructions/a.md', category: 'instructions', tier: 'core', installed: false, bundledVersion: '2.0.0', description: 'Test file' },
+        { dest: 'instructions/a.md', category: 'instructions', tier: 'core', installed: false, bundledVersion: '2.0.0', description: 'Test file', inTier: true },
       ],
     };
     mockClient._mockResults.listManifests = [];
