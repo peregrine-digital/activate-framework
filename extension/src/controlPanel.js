@@ -63,6 +63,7 @@ class ControlPanelProvider {
     const installedFiles = [];
     const availableFiles = [];
     const outsideTierFiles = [];
+    const excludedFiles = [];
 
     for (const f of files) {
       if (f.installed) {
@@ -76,7 +77,10 @@ class ControlPanelProvider {
       const isPinned = f.override === 'pinned';
       const inTier = isPinned || f.inTier;
 
-      if (isExcluded) continue;
+      if (isExcluded) {
+        excludedFiles.push(f);
+        continue;
+      }
 
       if (f.installed) {
         installedFiles.push(f);
@@ -102,6 +106,7 @@ class ControlPanelProvider {
       installedFiles,
       availableFiles,
       outsideTierFiles,
+      excludedFiles,
       versionMap,
       fileOverrides,
       skippedVersions,
@@ -236,7 +241,7 @@ class ControlPanelProvider {
 
   // ── HTML ──────────────────────────────────────────────
 
-  _getHtml({ version, tier, tierLabel, isActive, manifestName, manifestCount, installedFiles, availableFiles, outsideTierFiles, versionMap, fileOverrides, skippedVersions }) {
+  _getHtml({ version, tier, tierLabel, isActive, manifestName, manifestCount, installedFiles, availableFiles, outsideTierFiles, excludedFiles, versionMap, fileOverrides, skippedVersions }) {
     const installAction = isActive ? 'removeFromWorkspace' : 'addToWorkspace';
     const installButtonLabel = isActive ? '− Remove' : '+ Install';
 
@@ -287,6 +292,9 @@ class ControlPanelProvider {
           actionButtons = `
             <button class="icon-btn danger" title="Uninstall" onclick="event.stopPropagation(); send('uninstallFile', ${json})">✕</button>`;
         }
+      } else if (override === 'excluded') {
+        // Excluded files should not show install/uninstall buttons
+        actionButtons = '';
       } else {
         actionButtons = `
           <button class="icon-btn" title="Install" onclick="event.stopPropagation(); send('installFile', ${json})">↓</button>`;
@@ -344,6 +352,7 @@ class ControlPanelProvider {
     const installedGroups = groupByCategory(installedFiles, categories);
     const availableGroups = groupByCategory(availableFiles, categories);
     const outsideTierGroups = groupByCategory(outsideTierFiles || [], categories);
+    const excludedGroups = groupByCategory(excludedFiles || [], categories);
 
     const installedHtml = installedGroups
       .map((g) => categorySection(g.label, CATEGORY_ICONS_DEFAULT[g.category] || '📄', g.files, true, 'installed'))
@@ -355,6 +364,10 @@ class ControlPanelProvider {
 
     const outsideTierHtml = outsideTierGroups
       .map((g) => categorySection(g.label, CATEGORY_ICONS_DEFAULT[g.category] || '📄', g.files, false, 'outside'))
+      .join('');
+
+    const excludedHtml = excludedGroups
+      .map((g) => categorySection(g.label, CATEGORY_ICONS_DEFAULT[g.category] || '📄', g.files, false, 'excluded'))
       .join('');
 
     return /* html */ `<!DOCTYPE html>
@@ -609,11 +622,11 @@ class ControlPanelProvider {
       vertical-align: middle;
     }
 
-    /* ── Outside tier section ── */
-    .outside-tier-label {
+    /* ── Outside tier / Excluded sections ── */
+    .dim-section-label {
       opacity: 0.5;
     }
-    .outside-tier-hint {
+    .dim-section-hint {
       font-size: 11px;
       opacity: 0.4;
       font-style: italic;
@@ -651,9 +664,15 @@ class ControlPanelProvider {
   ${availableHtml || '<div class="empty">All tier files installed</div>'}
 
   ${outsideTierFiles && outsideTierFiles.length > 0 ? `
-  <div class="section-label outside-tier-label">Outside Tier · ${outsideTierFiles.length}</div>
-  <div class="outside-tier-hint">Switch to a higher tier to access these files</div>
+  <div class="section-label dim-section-label">Outside Tier · ${outsideTierFiles.length}</div>
+  <div class="dim-section-hint">Switch to a higher tier to access these files</div>
   ${outsideTierHtml}
+  ` : ''}
+
+  ${excludedFiles && excludedFiles.length > 0 ? `
+  <div class="section-label dim-section-label">Excluded · ${excludedFiles.length}</div>
+  <div class="dim-section-hint">These files are excluded and will not be installed</div>
+  ${excludedHtml}
   ` : ''}
 
   <script>
