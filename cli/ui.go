@@ -979,16 +979,7 @@ func formatGroups(groups []CategoryGroup) string {
 		fmt.Fprintf(&b, "\n%s (%d)\n", g.Label, len(g.Files))
 		b.WriteString(strings.Repeat("─", 40) + "\n")
 		for _, f := range g.Files {
-			name := filepath.Base(f.Dest)
-			for _, suf := range []string{".instructions.md", ".prompt.md", ".agent.md"} {
-				name = strings.TrimSuffix(name, suf)
-			}
-			if name == "SKILL.md" {
-				parts := strings.Split(f.Dest, "/")
-				if len(parts) >= 2 {
-					name = parts[len(parts)-2]
-				}
-			}
+			name := fileDisplayName(f.Dest)
 			fmt.Fprintf(&b, "  %s\n", name)
 			if f.Description != "" {
 				fmt.Fprintf(&b, "    %s\n", f.Description)
@@ -998,5 +989,4 @@ func formatGroups(groups []CategoryGroup) string {
 	}
 	return b.String()
 }
-
 

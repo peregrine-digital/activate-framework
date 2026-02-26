@@ -100,6 +100,51 @@ func TestReadFileVersionMissingFile(t *testing.T) {
 	}
 }
 
+// ── fileDisplayName tests ───────────────────────────────────────
+
+func TestFileDisplayNameInstructions(t *testing.T) {
+	got := fileDisplayName("instructions/general.instructions.md")
+	if got != "general" {
+		t.Fatalf("expected 'general', got %q", got)
+	}
+}
+
+func TestFileDisplayNamePrompt(t *testing.T) {
+	got := fileDisplayName("prompts/review.prompt.md")
+	if got != "review" {
+		t.Fatalf("expected 'review', got %q", got)
+	}
+}
+
+func TestFileDisplayNameAgent(t *testing.T) {
+	got := fileDisplayName("agents/planner.agent.md")
+	if got != "planner" {
+		t.Fatalf("expected 'planner', got %q", got)
+	}
+}
+
+func TestFileDisplayNameSkill(t *testing.T) {
+	got := fileDisplayName("skills/go-testing/SKILL.md")
+	if got != "go-testing" {
+		t.Fatalf("expected 'go-testing', got %q", got)
+	}
+}
+
+func TestFileDisplayNamePlainMd(t *testing.T) {
+	got := fileDisplayName("other/README.md")
+	if got != "README" {
+		t.Fatalf("expected 'README', got %q", got)
+	}
+}
+
+func TestFileDisplayNameSkillTopLevel(t *testing.T) {
+	// SKILL.md at top level (no parent) — should return "SKILL"
+	got := fileDisplayName("SKILL.md")
+	if got != "SKILL" {
+		t.Fatalf("expected 'SKILL', got %q", got)
+	}
+}
+
 func TestComputeFileStatusesBasic(t *testing.T) {
 	projectDir := t.TempDir()
 	bundleDir := t.TempDir()
@@ -158,6 +203,9 @@ func TestComputeFileStatusesBasic(t *testing.T) {
 	}
 	if s.Category != "instructions" {
 		t.Fatalf("expected category instructions, got %q", s.Category)
+	}
+	if s.DisplayName != "general" {
+		t.Fatalf("expected displayName 'general', got %q", s.DisplayName)
 	}
 
 	// Second file: not installed

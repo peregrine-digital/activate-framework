@@ -316,55 +316,6 @@ func TestDiffFileMissingInstalled(t *testing.T) {
 	}
 }
 
-// ── SelectFilesWithOverrides tests ──────────────────────────────
-
-func TestSelectFilesWithOverridesPinned(t *testing.T) {
-	m := Manifest{
-		Files: []ManifestFile{
-			{Src: "a.md", Dest: "a.md", Tier: "core"},
-			{Src: "b.md", Dest: "b.md", Tier: "ad-hoc-advanced"}, // normally excluded from minimal
-		},
-	}
-	overrides := map[string]string{"b.md": "pinned"}
-
-	result := SelectFilesWithOverrides(m.Files, m, "minimal", overrides)
-	if len(result) != 2 {
-		t.Fatalf("expected 2 files (pinned bypasses tier), got %d", len(result))
-	}
-}
-
-func TestSelectFilesWithOverridesExcluded(t *testing.T) {
-	m := Manifest{
-		Files: []ManifestFile{
-			{Src: "a.md", Dest: "a.md", Tier: "core"},
-			{Src: "b.md", Dest: "b.md", Tier: "core"},
-		},
-	}
-	overrides := map[string]string{"b.md": "excluded"}
-
-	result := SelectFilesWithOverrides(m.Files, m, "advanced", overrides)
-	if len(result) != 1 {
-		t.Fatalf("expected 1 file (b excluded), got %d", len(result))
-	}
-	if result[0].Dest != "a.md" {
-		t.Fatalf("expected a.md, got %s", result[0].Dest)
-	}
-}
-
-func TestSelectFilesWithOverridesNoOverrides(t *testing.T) {
-	m := Manifest{
-		Files: []ManifestFile{
-			{Src: "a.md", Dest: "a.md", Tier: "core"},
-			{Src: "b.md", Dest: "b.md", Tier: "ad-hoc"},
-		},
-	}
-
-	result := SelectFilesWithOverrides(m.Files, m, "minimal", nil)
-	if len(result) != 1 {
-		t.Fatalf("expected 1 file for minimal tier, got %d", len(result))
-	}
-}
-
 // ── unifiedDiff tests ───────────────────────────────────────────
 
 func TestUnifiedDiffIdentical(t *testing.T) {
@@ -412,26 +363,6 @@ func TestFindManifestFile(t *testing.T) {
 	}
 	if f := findManifestFile(files, "nope"); f != nil {
 		t.Fatal("expected nil for missing file")
-	}
-}
-
-// ── SelectFilesWithOverrides nil map ────────────────────────────
-
-func TestSelectFilesWithOverridesNilMap(t *testing.T) {
-	m := Manifest{
-		Files: []ManifestFile{
-			{Src: "a.md", Dest: "a.md", Tier: "core"},
-			{Src: "b.md", Dest: "b.md", Tier: "ad-hoc"},
-		},
-	}
-
-	// nil overrides should not panic and should behave like no overrides
-	result := SelectFilesWithOverrides(m.Files, m, "minimal", nil)
-	if len(result) != 1 {
-		t.Fatalf("expected 1 file for minimal tier with nil overrides, got %d", len(result))
-	}
-	if result[0].Dest != "a.md" {
-		t.Fatalf("expected a.md, got %s", result[0].Dest)
 	}
 }
 

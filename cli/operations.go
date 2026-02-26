@@ -276,26 +276,6 @@ func runSyncCommand(svc *ActivateService, jsonOutput bool) error {
 	return nil
 }
 
-// ── File overrides in SelectFiles ───────────────────────────────
-
-// SelectFilesWithOverrides filters manifest files by tier and applies file overrides.
-// "pinned" files are always included regardless of tier.
-// "excluded" files are always omitted.
-func SelectFilesWithOverrides(files []ManifestFile, m Manifest, tierID string, overrides map[string]string) []ManifestFile {
-	allowed := GetAllowedFileTiers(m, tierID)
-	var result []ManifestFile
-	for _, f := range files {
-		ov := overrides[f.Dest]
-		if ov == "excluded" {
-			continue
-		}
-		if ov == "pinned" || allowed[f.Tier] {
-			result = append(result, f)
-		}
-	}
-	return result
-}
-
 // ── Helpers ─────────────────────────────────────────────────────
 
 func containsString(slice []string, s string) bool {
