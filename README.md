@@ -158,6 +158,7 @@ See [AGENTS.md](AGENTS.md) for development workflow guidance:
 
 ## Documentation
 
+- [Architecture](docs/architecture.md) — System design: CLI, extension, TUI, daemon protocol
 - [Plugin File Hierarchy](docs/plugin-file-hierarchy.md) — Structure requirements for plugins
 - [Creating Customization Files](docs/creating-customization-files.md) — How to create instructions, prompts, skills, and agents
 - [Example Usage](docs/EXAMPLE-USAGE.md) — Installation and usage examples
