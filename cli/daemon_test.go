@@ -559,3 +559,103 @@ func TestDaemonStateChangedNotification(t *testing.T) {
 		t.Errorf("notification method = %q, want activate/stateChanged", notif.Method)
 	}
 }
+
+func TestDaemonFileSkip(t *testing.T) {
+	h := newHarness(t)
+	defer h.cleanup()
+
+	sendRequest(t, h.clientWriter, h.clientReader, MethodInitialize, 1, InitializeParams{ProjectDir: h.projectDir})
+
+	// Skip update for an existing file
+	resp := sendRequest(t, h.clientWriter, h.clientReader, MethodFileSkip, 2, FileParams{
+		File: "instructions/setup.instructions.md",
+	})
+	m := resultMap(t, resp)
+	if m["ok"] != true {
+		t.Errorf("expected ok=true, got %v", m["ok"])
+	}
+	// Consume state-changed notification
+	readNotification(t, h.clientReader)
+
+	// Verify skipped version persisted via configGet
+	resp2 := sendRequest(t, h.clientWriter, h.clientReader, MethodConfigGet, 3, ConfigGetParams{Scope: "project"})
+	m2 := resultMap(t, resp2)
+	skipped, ok := m2["skippedVersions"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("skippedVersions type = %T, want map", m2["skippedVersions"])
+	}
+	if skipped["instructions/setup.instructions.md"] != "1.0.0" {
+		t.Errorf("skipped version = %v, want 1.0.0", skipped["instructions/setup.instructions.md"])
+	}
+}
+
+func TestDaemonFileSkipNotFound(t *testing.T) {
+	h := newHarness(t)
+	defer h.cleanup()
+
+	sendRequest(t, h.clientWriter, h.clientReader, MethodInitialize, 1, InitializeParams{ProjectDir: h.projectDir})
+
+	resp := sendRequest(t, h.clientWriter, h.clientReader, MethodFileSkip, 2, FileParams{
+		File: "nonexistent/file.md",
+	})
+	if resp.Error == nil {
+		t.Fatal("expected error for nonexistent file")
+	}
+}
+
+func TestDaemonUpdate(t *testing.T) {
+	h := newHarness(t)
+	defer h.cleanup()
+
+	sendRequest(t, h.clientWriter, h.clientReader, MethodInitialize, 1, InitializeParams{ProjectDir: h.projectDir})
+
+	// Install files first via repoAdd
+	sendRequest(t, h.clientWriter, h.clientReader, MethodRepoAdd, 2, nil)
+	readNotification(t, h.clientReader)
+
+	// Update — files are already current, so updated should be empty
+	resp := sendRequest(t, h.clientWriter, h.clientReader, MethodUpdate, 3, nil)
+	m := resultMap(t, resp)
+	readNotification(t, h.clientReader)
+
+	updated, _ := m["updated"].([]interface{})
+	// Update re-copies all tracked files
+	if len(updated) != 2 {
+		t.Errorf("expected 2 updated files, got %d", len(updated))
+	}
+}
+
+func TestDaemonTelemetryLog(t *testing.T) {
+	h := newHarness(t)
+	defer h.cleanup()
+
+	sendRequest(t, h.clientWriter, h.clientReader, MethodInitialize, 1, InitializeParams{ProjectDir: h.projectDir})
+
+	// Read telemetry log (empty since no telemetry has been run)
+	resp := sendRequest(t, h.clientWriter, h.clientReader, MethodTelemetryLog, 2, nil)
+	if resp.Error != nil {
+		t.Fatalf("unexpected error: %v", resp.Error)
+	}
+	// Result should be null or empty array
+	data, _ := json.Marshal(resp.Result)
+	var entries []interface{}
+	if err := json.Unmarshal(data, &entries); err != nil {
+		// null is valid (no log file)
+		if string(data) != "null" {
+			t.Fatalf("unexpected result: %s", string(data))
+		}
+	}
+}
+
+func TestDaemonTelemetryRunDisabled(t *testing.T) {
+	h := newHarness(t)
+	defer h.cleanup()
+
+	sendRequest(t, h.clientWriter, h.clientReader, MethodInitialize, 1, InitializeParams{ProjectDir: h.projectDir})
+
+	// Telemetry is disabled by default — should return error
+	resp := sendRequest(t, h.clientWriter, h.clientReader, MethodTelemetryRun, 2, TelemetryRunParams{})
+	if resp.Error == nil {
+		t.Fatal("expected error when telemetry is disabled")
+	}
+}

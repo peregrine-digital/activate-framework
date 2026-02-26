@@ -826,3 +826,124 @@ func TestServiceReadTelemetryLog(t *testing.T) {
 		t.Fatalf("expected empty log, got %d entries", len(entries))
 	}
 }
+
+// ── Error Path Tests ───────────────────────────────────────────
+
+func TestServiceInstallFileErrors(t *testing.T) {
+	t.Run("unknown manifest", func(t *testing.T) {
+		m, projectDir, _ := setupBundle(t)
+		svc := newTestService(m, projectDir)
+		svc.Config.Manifest = "nonexistent"
+
+		_, err := svc.InstallFile("instructions/test.instructions.md")
+		if err == nil {
+			t.Fatal("expected error for unknown manifest")
+		}
+		if !strings.Contains(err.Error(), "unknown manifest") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("file not in manifest", func(t *testing.T) {
+		m, projectDir, _ := setupBundle(t)
+		svc := newTestService(m, projectDir)
+
+		_, err := svc.InstallFile("agents/nonexistent.md")
+		if err == nil {
+			t.Fatal("expected error for missing file")
+		}
+		if !strings.Contains(err.Error(), "not found in manifest") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+}
+
+func TestServiceDiffFileErrors(t *testing.T) {
+	t.Run("unknown manifest", func(t *testing.T) {
+		m, projectDir, _ := setupBundle(t)
+		svc := newTestService(m, projectDir)
+		svc.Config.Manifest = "nonexistent"
+
+		_, err := svc.DiffFile("instructions/test.instructions.md")
+		if err == nil {
+			t.Fatal("expected error for unknown manifest")
+		}
+		if !strings.Contains(err.Error(), "unknown manifest") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("file not in manifest", func(t *testing.T) {
+		m, projectDir, _ := setupBundle(t)
+		svc := newTestService(m, projectDir)
+
+		_, err := svc.DiffFile("agents/nonexistent.md")
+		if err == nil {
+			t.Fatal("expected error for missing file")
+		}
+		if !strings.Contains(err.Error(), "not found in manifest") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+}
+
+func TestServiceSkipUpdateErrors(t *testing.T) {
+	t.Run("unknown manifest", func(t *testing.T) {
+		m, projectDir, _ := setupBundle(t)
+		svc := newTestService(m, projectDir)
+		svc.Config.Manifest = "nonexistent"
+
+		_, err := svc.SkipUpdate("instructions/test.instructions.md")
+		if err == nil {
+			t.Fatal("expected error for unknown manifest")
+		}
+		if !strings.Contains(err.Error(), "unknown manifest") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("file not in manifest", func(t *testing.T) {
+		m, projectDir, _ := setupBundle(t)
+		svc := newTestService(m, projectDir)
+
+		_, err := svc.SkipUpdate("agents/nonexistent.md")
+		if err == nil {
+			t.Fatal("expected error for missing file")
+		}
+		if !strings.Contains(err.Error(), "not found in manifest") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+}
+
+func TestServiceUpdateErrors(t *testing.T) {
+	t.Run("unknown manifest", func(t *testing.T) {
+		m, projectDir, _ := setupBundle(t)
+		svc := newTestService(m, projectDir)
+		svc.Config.Manifest = "nonexistent"
+
+		_, err := svc.Update()
+		if err == nil {
+			t.Fatal("expected error for unknown manifest")
+		}
+		if !strings.Contains(err.Error(), "unknown manifest") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+}
+
+func TestServiceSyncErrors(t *testing.T) {
+	t.Run("unknown manifest", func(t *testing.T) {
+		m, projectDir, _ := setupBundle(t)
+		svc := newTestService(m, projectDir)
+		svc.Config.Manifest = "nonexistent"
+
+		_, err := svc.Sync()
+		if err == nil {
+			t.Fatal("expected error for unknown manifest")
+		}
+		if !strings.Contains(err.Error(), "unknown manifest") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+}
