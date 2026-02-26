@@ -850,13 +850,19 @@ func RunInteractiveMenu(svc ActivateAPI) error {
 			}
 
 		case "repo-add":
-			if _, err := svc.RepoAdd(); err != nil {
+			result, err := svc.RepoAdd()
+			if err != nil {
 				_ = runFullscreenText("Action Failed", "Repo add", err.Error())
+			} else {
+				msg := fmt.Sprintf("✓ Added managed files to repository\n\n  Manifest: %s\n  Tier:     %s", result.Manifest, result.Tier)
+				_ = runFullscreenText("Repo Add Complete", "", msg)
 			}
 
 		case "repo-remove":
 			if err := svc.RepoRemove(); err != nil {
 				_ = runFullscreenText("Action Failed", "Repo remove", err.Error())
+			} else {
+				_ = runFullscreenText("Repo Remove Complete", "", "✓ Removed all managed files from repository")
 			}
 
 		case "manage-files":
