@@ -6,6 +6,8 @@ on:
     paths: ['cli/**']
   pull_request:
     paths: ['cli/**']
+  release:
+    types: [published]
 
 permissions:
   contents: read
@@ -32,3 +34,57 @@ jobs:
 
       - name: Test
         run: go test ./...
+
+  release:
+    if: github.event_name == 'release'
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    defaults:
+      run:
+        working-directory: cli
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: cli/go.mod
+          cache-dependency-path: cli/go.sum
+
+      - name: Cross-compile and package
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          PLATFORMS="darwin-arm64 darwin-amd64 linux-arm64 linux-amd64 windows-amd64"
+
+          for plat in $PLATFORMS; do
+            OS="${plat%%-*}"
+            ARCH="${plat##*-}"
+            EXT=""
+            ARCHIVE_EXT="tar.gz"
+            [ "$OS" = "windows" ] && EXT=".exe" && ARCHIVE_EXT="zip"
+
+            echo "Building ${OS}/${ARCH}..."
+            GOOS="$OS" GOARCH="$ARCH" go build -ldflags "-s -w" -o "staging/activate${EXT}" .
+
+            ARCHIVE_NAME="activate-framework_${VERSION}_${OS}-${ARCH}.${ARCHIVE_EXT}"
+            mkdir -p dist
+            if [ "$ARCHIVE_EXT" = "zip" ]; then
+              (cd staging && zip "../dist/${ARCHIVE_NAME}" "activate${EXT}")
+            else
+              tar -czf "dist/${ARCHIVE_NAME}" -C staging "activate${EXT}"
+            fi
+            rm -rf staging
+          done
+
+      - name: Generate checksums
+        working-directory: cli/dist
+        run: sha256sum * > checksums.txt
+
+      - name: Attach to release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: cli/dist/*
