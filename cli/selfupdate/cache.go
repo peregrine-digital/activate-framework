@@ -11,7 +11,7 @@ const (
 	// CacheFileName is the file name for the update check cache.
 	CacheFileName = "update-check.json"
 	// CheckInterval is how long between automatic update checks.
-	CheckInterval = 24 * time.Hour
+	CheckInterval = 1 * time.Hour
 )
 
 // CacheEntry stores the result of the most recent update check.
