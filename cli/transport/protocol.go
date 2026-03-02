@@ -83,6 +83,11 @@ type TelemetryRunParams struct {
 	Token string `json:"token,omitempty"`
 }
 
+// CheckUpdateParams optionally provides the current extension version.
+type CheckUpdateParams struct {
+	ExtensionVersion string `json:"extensionVersion,omitempty"`
+}
+
 // StateChangedNotification creates a state-changed notification.
 func StateChangedNotification() *Notification {
 	return &Notification{

@@ -310,7 +310,11 @@ func (d *Daemon) handleTelemetryLog(req *transport.Request) *transport.Response 
 }
 
 func (d *Daemon) handleCheckUpdate(req *transport.Request) *transport.Response {
-	entry := selfupdate.CheckCached(d.version)
+	var params transport.CheckUpdateParams
+	if req.Params != nil {
+		_ = json.Unmarshal(req.Params, &params)
+	}
+	entry := selfupdate.CheckCached(d.version, params.ExtensionVersion)
 	if entry == nil {
 		return transport.SuccessResponse(req.ID, selfupdate.CacheEntry{})
 	}

@@ -20,6 +20,7 @@ type CacheEntry struct {
 	LatestVersion  string    `json:"latestVersion"`
 	CurrentVersion string    `json:"currentVersion"`
 	UpdateAvail    bool      `json:"updateAvailable"`
+	Extension      VsixInfo  `json:"extension,omitempty"`
 }
 
 func cachePath() (string, error) {
@@ -65,9 +66,10 @@ func WriteCache(entry *CacheEntry) error {
 
 // CheckCached returns a cached result if fresh (< CheckInterval), otherwise
 // performs a live check against GitHub and caches the result.
+// currentExtVersion is the VS Code extension version (pass "" from CLI).
 // Errors during the live check are silently swallowed and nil is returned,
 // so callers can safely use this for non-critical notifications.
-func CheckCached(currentVersion string) *CacheEntry {
+func CheckCached(currentVersion, currentExtVersion string) *CacheEntry {
 	if cached, err := ReadCache(); err == nil {
 		if time.Since(cached.CheckedAt) < CheckInterval && cached.CurrentVersion == currentVersion {
 			return cached
@@ -79,11 +81,14 @@ func CheckCached(currentVersion string) *CacheEntry {
 		return nil
 	}
 
+	vsix := CheckVsix(currentExtVersion)
+
 	entry := &CacheEntry{
 		CheckedAt:      time.Now(),
 		LatestVersion:  result.LatestVersion,
 		CurrentVersion: currentVersion,
 		UpdateAvail:    result.LatestVersion != "" && result.LatestVersion != currentVersion && !isUpToDate(result),
+		Extension:      vsix,
 	}
 	_ = WriteCache(entry)
 	return entry

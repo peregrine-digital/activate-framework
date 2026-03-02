@@ -3,6 +3,7 @@ const path = require('path');
 const { execFileSync } = require('child_process');
 const fs = require('fs');
 const os = require('os');
+const https = require('https');
 const { ActivateClient, Method } = require('./client');
 const { ControlPanelProvider } = require('./controlPanel');
 
@@ -337,12 +338,12 @@ async function activate(context) {
   );
 
   // Auto-setup: sync on activation
-  await autoSetup(controlPanel);
+  await autoSetup(controlPanel, context);
 }
 
 // ── Auto-setup ────────────────────────────────────────────────
 
-async function autoSetup(controlPanel) {
+async function autoSetup(controlPanel, context) {
   try {
     const state = await client.getState();
     if (state.installDir) installDir = state.installDir;
@@ -365,38 +366,99 @@ async function autoSetup(controlPanel) {
 
   controlPanel.refresh();
 
-  // Check for CLI binary updates (non-blocking)
-  checkForBinaryUpdate();
+  // Check for updates (non-blocking)
+  checkForUpdates(context);
 }
 
-async function checkForBinaryUpdate() {
+async function checkForUpdates(context) {
   try {
-    const update = await client.checkUpdate();
-    if (!update || !update.updateAvailable) return;
+    const extVersion = context.extension?.packageJSON?.version || '';
+    const update = await client.checkUpdate(extVersion);
+    if (!update) return;
 
-    const action = await vscode.window.showInformationMessage(
-      `Activate CLI update available: v${update.currentVersion} → v${update.latestVersion}`,
-      'Update Now',
-      'Dismiss',
-    );
-    if (action !== 'Update Now') return;
+    // CLI binary update
+    if (update.updateAvailable) {
+      const action = await vscode.window.showInformationMessage(
+        `Activate CLI update available: v${update.currentVersion} → v${update.latestVersion}`,
+        'Update Now',
+        'Dismiss',
+      );
+      if (action === 'Update Now') {
+        await vscode.window.withProgress(
+          { location: vscode.ProgressLocation.Notification, title: 'Updating Activate CLI…' },
+          async () => { await client.selfUpdate(); },
+        );
+        await client.stop();
+        await client.start();
+        vscode.window.showInformationMessage(
+          `Activate CLI updated to v${update.latestVersion}. Daemon restarted.`,
+        );
+      }
+    }
 
-    await vscode.window.withProgress(
-      { location: vscode.ProgressLocation.Notification, title: 'Updating Activate CLI…' },
-      async () => {
-        await client.selfUpdate();
-      },
-    );
-
-    // Restart the daemon to use the new binary
-    await client.stop();
-    await client.start();
-    vscode.window.showInformationMessage(
-      `Activate CLI updated to v${update.latestVersion}. Daemon restarted.`,
-    );
+    // Extension VSIX update
+    const ext = update.extension;
+    if (ext && ext.available && ext.downloadUrl) {
+      const action = await vscode.window.showInformationMessage(
+        `Activate extension update available: v${extVersion} → v${ext.version}`,
+        'Update Now',
+        'Dismiss',
+      );
+      if (action === 'Update Now') {
+        await vscode.window.withProgress(
+          { location: vscode.ProgressLocation.Notification, title: 'Updating Activate extension…' },
+          () => downloadAndInstallVsix(ext.downloadUrl, ext.assetName),
+        );
+      }
+    }
   } catch {
     // Silently ignore update check failures
   }
+}
+
+function downloadAndInstallVsix(url, filename) {
+  return new Promise((resolve, reject) => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'activate-vsix-'));
+    tempDirs.push(tmpDir);
+    const dest = path.join(tmpDir, filename);
+    const file = fs.createWriteStream(dest);
+
+    const get = (reqUrl) => {
+      https.get(reqUrl, { headers: { 'User-Agent': 'activate-extension' } }, (resp) => {
+        // Follow redirects (GitHub download URLs redirect)
+        if (resp.statusCode >= 300 && resp.statusCode < 400 && resp.headers.location) {
+          get(resp.headers.location);
+          return;
+        }
+        if (resp.statusCode !== 200) {
+          reject(new Error(`Download failed: ${resp.statusCode}`));
+          return;
+        }
+        resp.pipe(file);
+        file.on('finish', async () => {
+          file.close();
+          try {
+            await vscode.commands.executeCommand(
+              'workbench.extensions.installExtension',
+              vscode.Uri.file(dest),
+            );
+            const action = await vscode.window.showInformationMessage(
+              'Activate extension updated. Reload to apply changes.',
+              'Reload',
+            );
+            if (action === 'Reload') {
+              await vscode.commands.executeCommand('workbench.action.reloadWindow');
+            }
+            resolve();
+          } catch (err) {
+            reject(err);
+          }
+        });
+      }).on('error', reject);
+    };
+
+    get(url);
+  });
 }
 
 // ── Deactivation ──────────────────────────────────────────────
