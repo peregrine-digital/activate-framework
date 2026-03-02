@@ -64,3 +64,10 @@ func TestParseArgsLegacyListFlag(t *testing.T) {
 		t.Fatalf("expected json flag to be true")
 	}
 }
+
+func TestParseArgsSelfUpdate(t *testing.T) {
+	args := parseArgs([]string{"self-update"})
+	if args.command != "self-update" {
+		t.Fatalf("expected command self-update, got %q", args.command)
+	}
+}

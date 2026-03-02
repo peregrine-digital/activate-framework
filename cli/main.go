@@ -16,6 +16,7 @@ import (
 	"github.com/peregrine-digital/activate-framework/cli/commands"
 	"github.com/peregrine-digital/activate-framework/cli/engine"
 	"github.com/peregrine-digital/activate-framework/cli/model"
+	"github.com/peregrine-digital/activate-framework/cli/selfupdate"
 	"github.com/peregrine-digital/activate-framework/cli/storage"
 	"github.com/peregrine-digital/activate-framework/cli/transport"
 	"github.com/peregrine-digital/activate-framework/cli/tui"
@@ -53,7 +54,7 @@ func parseArgs(args []string) cliArgs {
 	i := 0
 	if i < len(args) && !strings.HasPrefix(args[i], "-") {
 		switch args[i] {
-		case "menu", "install", "list", "state", "config", "repo", "update", "diff", "sync", "serve", "version", "help":
+		case "menu", "install", "list", "state", "config", "repo", "update", "diff", "sync", "serve", "self-update", "version", "help":
 			a.command = args[i]
 			i++
 		}
@@ -156,6 +157,7 @@ Commands:
 	menu        State-aware interactive menu (default)
 	install     Interactive installer (or --file for single file)
 	update      Re-install currently installed files
+	self-update Update the activate binary to the latest release
 	sync        Detect version mismatch and re-inject if needed
 	serve       Start JSON-RPC daemon (--stdio for stdio transport)
 	diff        Show diff between bundled and installed file
@@ -207,6 +209,18 @@ func main() {
 
 	if args.version || args.command == "version" {
 		fmt.Printf("activate v%s\n", version)
+		os.Exit(0)
+	}
+
+	// ── Self-update (no manifests needed) ──────────────────────
+	if args.command == "self-update" {
+		fmt.Printf("Checking for updates (current: v%s)...\n", version)
+		result, err := selfupdate.Run(version)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+			os.Exit(1)
+		}
+		fmt.Println(result.Message)
 		os.Exit(0)
 	}
 
