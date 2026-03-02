@@ -31,6 +31,8 @@ const Method = {
   FileOverride:  'activate/fileOverride',
   TelemetryRun:  'activate/telemetryRun',
   TelemetryLog:  'activate/telemetryLog',
+  CheckUpdate:   'activate/checkUpdate',
+  SelfUpdate:    'activate/selfUpdate',
 
   // Notifications (server → client)
   NotifyStateChanged: 'activate/stateChanged',
@@ -301,6 +303,14 @@ class ActivateClient extends EventEmitter {
 
   readTelemetryLog() {
     return this.request(Method.TelemetryLog);
+  }
+
+  checkUpdate() {
+    return this.request(Method.CheckUpdate);
+  }
+
+  selfUpdate() {
+    return this.request(Method.SelfUpdate);
   }
 
   // ── Internal ───────────────────────────────────────────────────

@@ -224,6 +224,13 @@ func main() {
 		os.Exit(0)
 	}
 
+	// ── Passive update hint (non-blocking, cached) ─────────────
+	if args.command != "serve" {
+		if cached := selfupdate.CheckCached(version); cached != nil && cached.UpdateAvail {
+			fmt.Fprintf(os.Stderr, "Update available: v%s → v%s (run 'activate self-update')\n\n", cached.CurrentVersion, cached.LatestVersion)
+		}
+	}
+
 	// ── Discover manifests ──────────────────────────────────────
 	var manifests []model.Manifest
 	var err error

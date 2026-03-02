@@ -26,6 +26,8 @@ const (
 	MethodFileOverride  = "activate/fileOverride"
 	MethodTelemetryRun  = "activate/telemetryRun"
 	MethodTelemetryLog  = "activate/telemetryLog"
+	MethodCheckUpdate   = "activate/checkUpdate"
+	MethodSelfUpdate    = "activate/selfUpdate"
 
 	// Notification methods (server → client)
 	NotifyStateChanged = "activate/stateChanged"

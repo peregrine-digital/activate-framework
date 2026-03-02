@@ -7,6 +7,7 @@ import (
 	"io"
 
 	"github.com/peregrine-digital/activate-framework/cli/model"
+	"github.com/peregrine-digital/activate-framework/cli/selfupdate"
 	"github.com/peregrine-digital/activate-framework/cli/transport"
 )
 
@@ -82,6 +83,10 @@ func (d *Daemon) dispatch(req *transport.Request) *transport.Response {
 		return d.handleTelemetryRun(req)
 	case transport.MethodTelemetryLog:
 		return d.handleTelemetryLog(req)
+	case transport.MethodCheckUpdate:
+		return d.handleCheckUpdate(req)
+	case transport.MethodSelfUpdate:
+		return d.handleSelfUpdate(req)
 	default:
 		return transport.ErrorResponse(req.ID, transport.ErrCodeMethodNotFound, fmt.Sprintf("method not found: %s", req.Method))
 	}
@@ -121,7 +126,7 @@ func (d *Daemon) handleInitialize(req *transport.Request) *transport.Response {
 		Capabilities: []string{
 			"state", "config", "manifests", "files",
 			"repo", "sync", "update", "diff",
-			"telemetry", "overrides",
+			"telemetry", "overrides", "selfUpdate",
 		},
 	})
 }
@@ -302,4 +307,20 @@ func (d *Daemon) handleTelemetryLog(req *transport.Request) *transport.Response 
 		return transport.ErrorResponse(req.ID, transport.ErrCodeInternal, err.Error())
 	}
 	return transport.SuccessResponse(req.ID, entries)
+}
+
+func (d *Daemon) handleCheckUpdate(req *transport.Request) *transport.Response {
+	entry := selfupdate.CheckCached(d.version)
+	if entry == nil {
+		return transport.SuccessResponse(req.ID, selfupdate.CacheEntry{})
+	}
+	return transport.SuccessResponse(req.ID, entry)
+}
+
+func (d *Daemon) handleSelfUpdate(req *transport.Request) *transport.Response {
+	result, err := selfupdate.Run(d.version)
+	if err != nil {
+		return transport.ErrorResponse(req.ID, transport.ErrCodeInternal, err.Error())
+	}
+	return transport.SuccessResponse(req.ID, result)
 }

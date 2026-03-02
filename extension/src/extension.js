@@ -364,6 +364,39 @@ async function autoSetup(controlPanel) {
   }
 
   controlPanel.refresh();
+
+  // Check for CLI binary updates (non-blocking)
+  checkForBinaryUpdate();
+}
+
+async function checkForBinaryUpdate() {
+  try {
+    const update = await client.checkUpdate();
+    if (!update || !update.updateAvailable) return;
+
+    const action = await vscode.window.showInformationMessage(
+      `Activate CLI update available: v${update.currentVersion} → v${update.latestVersion}`,
+      'Update Now',
+      'Dismiss',
+    );
+    if (action !== 'Update Now') return;
+
+    await vscode.window.withProgress(
+      { location: vscode.ProgressLocation.Notification, title: 'Updating Activate CLI…' },
+      async () => {
+        await client.selfUpdate();
+      },
+    );
+
+    // Restart the daemon to use the new binary
+    await client.stop();
+    await client.start();
+    vscode.window.showInformationMessage(
+      `Activate CLI updated to v${update.latestVersion}. Daemon restarted.`,
+    );
+  } catch {
+    // Silently ignore update check failures
+  }
 }
 
 // ── Deactivation ──────────────────────────────────────────────
