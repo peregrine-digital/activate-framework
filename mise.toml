@@ -1,3 +1,90 @@
 [tools]
 go = "latest"
 node = "20"
+
+[tasks.release]
+description = "Create a GitHub release (bumps version, tags, publishes)"
+run = '''
+#!/usr/bin/env bash
+set -euo pipefail
+
+CLI_VERSION_FILE="cli/main.go"
+EXT_VERSION_FILE="extension/package.json"
+
+# Read current versions
+CLI_VERSION=$(grep 'const version' "$CLI_VERSION_FILE" | head -1 | cut -d'"' -f2)
+EXT_VERSION=$(grep '"version"' "$EXT_VERSION_FILE" | head -1 | sed 's/.*"\([0-9][^"]*\)".*/\1/')
+
+echo "Current versions:"
+echo "  CLI:       v${CLI_VERSION}"
+echo "  Extension: v${EXT_VERSION}"
+echo ""
+
+# Ask for bump type
+echo "What kind of release?"
+echo "  1) patch  (e.g. 0.1.0 → 0.1.1)"
+echo "  2) minor  (e.g. 0.1.0 → 0.2.0)"
+echo "  3) major  (e.g. 0.1.0 → 1.0.0)"
+echo "  4) pre-release (e.g. 0.1.0 → 0.1.1-rc.1)"
+echo "  5) custom (enter version manually)"
+read -rp "Choice [1-5]: " BUMP_TYPE
+
+IFS='.' read -r MAJOR MINOR PATCH <<< "$CLI_VERSION"
+# Strip any pre-release suffix from patch for arithmetic
+PATCH_NUM="${PATCH%%-*}"
+
+case "$BUMP_TYPE" in
+  1) NEW_VERSION="${MAJOR}.${MINOR}.$((PATCH_NUM + 1))" ;;
+  2) NEW_VERSION="${MAJOR}.$((MINOR + 1)).0" ;;
+  3) NEW_VERSION="$((MAJOR + 1)).0.0" ;;
+  4)
+    read -rp "Pre-release label [rc.1]: " PRE_LABEL
+    PRE_LABEL="${PRE_LABEL:-rc.1}"
+    NEW_VERSION="${MAJOR}.${MINOR}.$((PATCH_NUM + 1))-${PRE_LABEL}"
+    ;;
+  5)
+    read -rp "Enter version (without v prefix): " NEW_VERSION
+    ;;
+  *)
+    echo "Invalid choice"; exit 1 ;;
+esac
+
+IS_PRERELEASE=false
+[[ "$NEW_VERSION" == *-* ]] && IS_PRERELEASE=true
+
+echo ""
+echo "New version: v${NEW_VERSION}"
+echo "Pre-release: ${IS_PRERELEASE}"
+read -rp "Continue? [y/N]: " CONFIRM
+[[ "$CONFIRM" != "y" && "$CONFIRM" != "Y" ]] && echo "Aborted." && exit 0
+
+# Bump CLI version
+sed -i.bak "s/const version = \"${CLI_VERSION}\"/const version = \"${NEW_VERSION}\"/" "$CLI_VERSION_FILE"
+rm -f "${CLI_VERSION_FILE}.bak"
+
+# Bump extension version (use non-prerelease for extension since VS Code doesn't support semver pre-release)
+EXT_NEW_VERSION="${NEW_VERSION%%-*}"
+cd extension && npm version "$EXT_NEW_VERSION" --no-git-tag-version --allow-same-version && cd ..
+
+echo "✓ Bumped CLI to v${NEW_VERSION}"
+echo "✓ Bumped extension to v${EXT_NEW_VERSION}"
+
+# Commit, tag, push
+git add "$CLI_VERSION_FILE" "$EXT_VERSION_FILE"
+git commit -m "chore: bump version to v${NEW_VERSION}"
+git tag "v${NEW_VERSION}"
+git push origin HEAD
+git push origin "v${NEW_VERSION}"
+
+# Create GitHub release
+PRERELEASE_FLAG=""
+$IS_PRERELEASE && PRERELEASE_FLAG="--prerelease"
+
+gh release create "v${NEW_VERSION}" $PRERELEASE_FLAG \
+  --title "v${NEW_VERSION}" \
+  --generate-notes
+
+echo ""
+echo "✓ Release v${NEW_VERSION} created!"
+echo "  CI will build and attach CLI binaries + VSIX automatically."
+'''
