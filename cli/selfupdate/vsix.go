@@ -3,6 +3,7 @@ package selfupdate
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"strings"
@@ -15,6 +16,7 @@ type VsixInfo struct {
 	Version     string `json:"version"`
 	DownloadURL string `json:"downloadUrl"`
 	AssetName   string `json:"assetName"`
+	SHA256      string `json:"sha256,omitempty"`
 }
 
 type githubRelease struct {
@@ -57,20 +59,61 @@ func CheckVsix(currentExtVersion string) VsixInfo {
 		return VsixInfo{}
 	}
 
-	for _, asset := range release.Assets {
+	var vsixAsset *githubAsset
+	var checksumsURL string
+
+	for i, asset := range release.Assets {
 		if strings.HasSuffix(asset.Name, ".vsix") {
-			version := strings.TrimPrefix(release.TagName, "v")
-			info := VsixInfo{
-				Version:     version,
-				DownloadURL: asset.BrowserDownloadURL,
-				AssetName:   asset.Name,
-			}
-			if currentExtVersion == "" || version != currentExtVersion {
-				info.Available = true
-			}
-			return info
+			vsixAsset = &release.Assets[i]
+		}
+		if asset.Name == "checksums.txt" || asset.Name == "SHA256SUMS" || asset.Name == "sha256sums.txt" {
+			checksumsURL = asset.BrowserDownloadURL
 		}
 	}
 
-	return VsixInfo{}
+	if vsixAsset == nil {
+		return VsixInfo{}
+	}
+
+	version := strings.TrimPrefix(release.TagName, "v")
+	info := VsixInfo{
+		Version:     version,
+		DownloadURL: vsixAsset.BrowserDownloadURL,
+		AssetName:   vsixAsset.Name,
+	}
+	if currentExtVersion == "" || version != currentExtVersion {
+		info.Available = true
+	}
+
+	// Fetch checksum for the VSIX if a checksums file is available.
+	if checksumsURL != "" {
+		info.SHA256 = fetchChecksum(checksumsURL, vsixAsset.Name)
+	}
+
+	return info
+}
+
+// fetchChecksum downloads a checksums file and extracts the hash for the given filename.
+// Expected format: "<hash>  <filename>" or "<hash> <filename>" (one per line).
+func fetchChecksum(url, filename string) string {
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Get(url)
+	if err != nil || resp.StatusCode != 200 {
+		return ""
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if err != nil {
+		return ""
+	}
+
+	for _, line := range strings.Split(string(body), "\n") {
+		// Format: "sha256hash  filename" or "sha256hash filename"
+		parts := strings.Fields(strings.TrimSpace(line))
+		if len(parts) == 2 && parts[1] == filename {
+			return parts[0]
+		}
+	}
+	return ""
 }

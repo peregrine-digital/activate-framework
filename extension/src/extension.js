@@ -1,6 +1,7 @@
 const vscode = require('vscode');
 const path = require('path');
 const { execFileSync } = require('child_process');
+const { createHash } = require('crypto');
 const fs = require('fs');
 const os = require('os');
 const https = require('https');
@@ -407,7 +408,7 @@ async function checkForUpdates(context) {
       if (action === 'Update Now') {
         await vscode.window.withProgress(
           { location: vscode.ProgressLocation.Notification, title: 'Updating Activate extension…' },
-          () => downloadAndInstallVsix(ext.downloadUrl, ext.assetName),
+          () => downloadAndInstallVsix(ext.downloadUrl, ext.assetName, ext.sha256),
         );
       }
     }
@@ -416,7 +417,7 @@ async function checkForUpdates(context) {
   }
 }
 
-function downloadAndInstallVsix(url, filename) {
+function downloadAndInstallVsix(url, filename, expectedSha256) {
   return new Promise((resolve, reject) => {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'activate-vsix-'));
     tempDirs.push(tmpDir);
@@ -438,6 +439,19 @@ function downloadAndInstallVsix(url, filename) {
         file.on('finish', async () => {
           file.close();
           try {
+            // Verify SHA-256 checksum if provided
+            if (expectedSha256) {
+              const data = fs.readFileSync(dest);
+              const actual = createHash('sha256').update(data).digest('hex');
+              if (actual !== expectedSha256) {
+                reject(new Error(
+                  `Checksum mismatch: expected ${expectedSha256}, got ${actual}. ` +
+                  'Download may be corrupted or tampered with.',
+                ));
+                return;
+              }
+            }
+
             await vscode.commands.executeCommand(
               'workbench.extensions.installExtension',
               vscode.Uri.file(dest),
