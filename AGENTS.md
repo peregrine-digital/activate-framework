@@ -59,6 +59,8 @@ activate-framework/
 │   │   ├── service.go               #     ActivateAPI interface, ActivateService facade
 │   │   ├── cli.go                   #     RunUpdateCommand, RunDiffCommand, RunSyncCommand
 │   │   └── daemon.go                #     JSON-RPC daemon, all handlers
+│   ├── selfupdate/                  #   binary self-update via GitHub releases
+│   │   └── selfupdate.go            #     CheckUpdate, Run (→ go-selfupdate)
 │   ├── tui/                         #   interactive Bubbletea client
 │   │   ├── app.go                   #     RunInteractiveInstall, RunList
 │   │   ├── menu.go                  #     RunInteractiveMenu, main menu model
