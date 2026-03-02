@@ -72,7 +72,7 @@ jobs:
             [ "$OS" = "windows" ] && EXT=".exe" && ARCHIVE_EXT="zip"
 
             echo "Building ${OS}/${ARCH}..."
-            GOOS="$OS" GOARCH="$ARCH" go build -ldflags "-s -w" -o "staging/activate${EXT}" .
+            CGO_ENABLED=0 GOOS="$OS" GOARCH="$ARCH" go build -ldflags "-s -w" -o "staging/activate${EXT}" .
 
             # Ad-hoc sign on macOS so binaries run on Apple Silicon
             if [ "$OS" = "darwin" ] && command -v codesign &>/dev/null; then
