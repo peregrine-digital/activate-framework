@@ -1,0 +1,34 @@
+name: CLI
+
+on:
+  push:
+    branches: [main, 'feat/**']
+    paths: ['cli/**']
+  pull_request:
+    paths: ['cli/**']
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: cli
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: cli/go.mod
+          cache-dependency-path: cli/go.sum
+
+      - name: Build
+        run: go build -ldflags "-s -w" -o activate .
+
+      - name: Test
+        run: go test ./...
