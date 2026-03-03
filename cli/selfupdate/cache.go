@@ -81,7 +81,7 @@ func CheckCached(currentVersion, currentExtVersion, token string) *CacheEntry {
 		return nil
 	}
 
-	vsix := CheckVsix(currentExtVersion)
+	vsix := CheckVsix(currentExtVersion, token)
 
 	entry := &CacheEntry{
 		CheckedAt:      time.Now(),
@@ -102,7 +102,7 @@ func CheckLive(currentVersion, currentExtVersion, token string) *CacheEntry {
 		return nil
 	}
 
-	vsix := CheckVsix(currentExtVersion)
+	vsix := CheckVsix(currentExtVersion, token)
 
 	entry := &CacheEntry{
 		CheckedAt:      time.Now(),

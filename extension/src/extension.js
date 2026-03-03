@@ -456,9 +456,9 @@ async function startDaemon(context, binPath, projectDir, outputChannel, controlP
     }
   });
 
-  // Auto-restart daemon on unexpected exit
+  // Auto-restart daemon on unexpected exit (skip during intentional update)
   client.on('exit', () => {
-    if (!client._disposed) {
+    if (!client._disposed && !client._updating) {
       client.start().catch((err) => {
         outputChannel.appendLine(`[error] Daemon restart failed: ${err.message}`);
       });
@@ -514,7 +514,7 @@ async function checkForUpdates(context, force = false) {
     const extVersion = context.extension?.packageJSON?.version || '';
     const update = await client.checkUpdate(extVersion, force, token);
     if (!update) {
-      vscode.window.showInformationMessage('Activate is up to date.');
+      if (force) vscode.window.showInformationMessage('Activate is up to date.');
       return;
     }
 
@@ -529,15 +529,21 @@ async function checkForUpdates(context, force = false) {
         'Dismiss',
       );
       if (action === 'Update Now') {
-        await vscode.window.withProgress(
-          { location: vscode.ProgressLocation.Notification, title: 'Updating Activate CLI…' },
-          async () => { await client.selfUpdate(token); },
-        );
-        await client.stop();
-        await client.start();
-        vscode.window.showInformationMessage(
-          `Activate CLI updated to v${update.latestVersion}. Daemon restarted.`,
-        );
+        // Suppress auto-restart while we intentionally restart
+        client._updating = true;
+        try {
+          await vscode.window.withProgress(
+            { location: vscode.ProgressLocation.Notification, title: 'Updating Activate CLI…' },
+            async () => { await client.selfUpdate(token); },
+          );
+          await client.stop();
+          await client.start();
+          vscode.window.showInformationMessage(
+            `Activate CLI updated to v${update.latestVersion}. Daemon restarted.`,
+          );
+        } finally {
+          client._updating = false;
+        }
       }
     }
 
@@ -553,31 +559,37 @@ async function checkForUpdates(context, force = false) {
       if (action === 'Update Now') {
         await vscode.window.withProgress(
           { location: vscode.ProgressLocation.Notification, title: 'Updating Activate extension…' },
-          () => downloadAndInstallVsix(ext.downloadUrl, ext.assetName, ext.sha256),
+          () => downloadAndInstallVsix(ext.downloadUrl, ext.assetName, ext.sha256, token),
         );
       }
     }
 
     if (!foundUpdate) {
-      vscode.window.showInformationMessage('Activate is up to date.');
+      if (force) vscode.window.showInformationMessage('Activate is up to date.');
     }
   } catch {
     // Silently ignore update check failures on auto-check
   }
 }
 
-function downloadAndInstallVsix(url, filename, expectedSha256) {
+function downloadAndInstallVsix(url, filename, expectedSha256, token) {
   return new Promise((resolve, reject) => {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'activate-vsix-'));
     tempDirs.push(tmpDir);
     const dest = path.join(tmpDir, filename);
     const file = fs.createWriteStream(dest);
 
-    const get = (reqUrl) => {
-      https.get(reqUrl, { headers: { 'User-Agent': 'activate-extension' } }, (resp) => {
-        // Follow redirects (GitHub download URLs redirect)
+    const get = (reqUrl, isRedirect = false) => {
+      const headers = { 'User-Agent': 'activate-extension' };
+      // Only send auth + accept on the initial API request, not on S3 redirects
+      if (!isRedirect) {
+        headers['Accept'] = 'application/octet-stream';
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+      }
+      https.get(reqUrl, { headers }, (resp) => {
+        // Follow redirects (GitHub API asset endpoint redirects to S3)
         if (resp.statusCode >= 300 && resp.statusCode < 400 && resp.headers.location) {
-          get(resp.headers.location);
+          get(resp.headers.location, true);
           return;
         }
         if (resp.statusCode !== 200) {

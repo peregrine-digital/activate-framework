@@ -25,22 +25,35 @@ type githubRelease struct {
 }
 
 type githubAsset struct {
+	ID                 int    `json:"id"`
 	Name               string `json:"name"`
 	BrowserDownloadURL string `json:"browser_download_url"`
 }
 
+// assetAPIURL returns the GitHub API URL for downloading a release asset.
+// For private repos, this endpoint (with Accept: application/octet-stream)
+// is the only way to download assets.
+func assetAPIURL(assetID int) string {
+	return fmt.Sprintf("https://api.github.com/repos/%s/%s/releases/assets/%d",
+		GitHubOwner, GitHubRepo, assetID)
+}
+
 // CheckVsix queries the latest GitHub release for a .vsix asset.
+// Uses /releases?per_page=1 instead of /releases/latest to support
+// repos that only have pre-releases. Token is required for private repos.
 // Returns VsixInfo with Available=false if none found or on error.
-func CheckVsix(currentExtVersion string) VsixInfo {
-	url := fmt.Sprintf("https://api.github.com/repos/%s/%s/releases/latest", GitHubOwner, GitHubRepo)
+func CheckVsix(currentExtVersion, token string) VsixInfo {
+	url := fmt.Sprintf("https://api.github.com/repos/%s/%s/releases?per_page=1", GitHubOwner, GitHubRepo)
 
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return VsixInfo{}
 	}
 	req.Header.Set("Accept", "application/vnd.github+json")
-	if token := os.Getenv("GITHUB_TOKEN"); token != "" {
+	if token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
+	} else if envToken := os.Getenv("GITHUB_TOKEN"); envToken != "" {
+		req.Header.Set("Authorization", "Bearer "+envToken)
 	}
 
 	client := &http.Client{Timeout: 15 * time.Second}
@@ -54,20 +67,21 @@ func CheckVsix(currentExtVersion string) VsixInfo {
 		return VsixInfo{}
 	}
 
-	var release githubRelease
-	if err := json.NewDecoder(resp.Body).Decode(&release); err != nil {
+	var releases []githubRelease
+	if err := json.NewDecoder(resp.Body).Decode(&releases); err != nil || len(releases) == 0 {
 		return VsixInfo{}
 	}
+	release := releases[0]
 
 	var vsixAsset *githubAsset
-	var checksumsURL string
+	var checksumsAsset *githubAsset
 
 	for i, asset := range release.Assets {
 		if strings.HasSuffix(asset.Name, ".vsix") {
 			vsixAsset = &release.Assets[i]
 		}
 		if asset.Name == "checksums.txt" || asset.Name == "SHA256SUMS" || asset.Name == "sha256sums.txt" {
-			checksumsURL = asset.BrowserDownloadURL
+			checksumsAsset = &release.Assets[i]
 		}
 	}
 
@@ -78,7 +92,7 @@ func CheckVsix(currentExtVersion string) VsixInfo {
 	version := strings.TrimPrefix(release.TagName, "v")
 	info := VsixInfo{
 		Version:     version,
-		DownloadURL: vsixAsset.BrowserDownloadURL,
+		DownloadURL: assetAPIURL(vsixAsset.ID),
 		AssetName:   vsixAsset.Name,
 	}
 	if currentExtVersion == "" || version != currentExtVersion {
@@ -86,8 +100,8 @@ func CheckVsix(currentExtVersion string) VsixInfo {
 	}
 
 	// Fetch checksum for the VSIX if a checksums file is available.
-	if checksumsURL != "" {
-		info.SHA256 = fetchChecksum(checksumsURL, vsixAsset.Name)
+	if checksumsAsset != nil {
+		info.SHA256 = fetchChecksum(assetAPIURL(checksumsAsset.ID), vsixAsset.Name, token)
 	}
 
 	return info
@@ -95,9 +109,20 @@ func CheckVsix(currentExtVersion string) VsixInfo {
 
 // fetchChecksum downloads a checksums file and extracts the hash for the given filename.
 // Expected format: "<hash>  <filename>" or "<hash> <filename>" (one per line).
-func fetchChecksum(url, filename string) string {
+func fetchChecksum(url, filename, token string) string {
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return ""
+	}
+	req.Header.Set("Accept", "application/octet-stream")
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	} else if envToken := os.Getenv("GITHUB_TOKEN"); envToken != "" {
+		req.Header.Set("Authorization", "Bearer "+envToken)
+	}
+
 	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Get(url)
+	resp, err := client.Do(req)
 	if err != nil || resp.StatusCode != 200 {
 		return ""
 	}
