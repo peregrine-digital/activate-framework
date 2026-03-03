@@ -1266,6 +1266,10 @@ class ControlPanelProvider {
   <hr>
 
   <div class="section-label">Updates</div>
+  <div class="setting-row">
+    <span class="setting-label">CLI Version</span>
+    <span class="setting-value">${esc(this._client?.serverVersion || '—')}</span>
+  </div>
   <div style="padding: 4px 0;">
     <button class="primary" onclick="send('checkForUpdates')">🔄 Check for Updates</button>
   </div>

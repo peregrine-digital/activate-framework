@@ -196,6 +196,7 @@ class ActivateClient extends EventEmitter {
       projectDir: this._projectDir,
     });
     this._initialized = true;
+    this._serverVersion = result?.version || '';
     return result;
   }
 
@@ -241,6 +242,9 @@ class ActivateClient extends EventEmitter {
   }
 
   // ── Typed API methods ──────────────────────────────────────────
+
+  /** CLI daemon version string (available after start). */
+  get serverVersion() { return this._serverVersion || ''; }
 
   getState() {
     return this.request(Method.StateGet);
