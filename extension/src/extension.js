@@ -26,35 +26,32 @@ const GITHUB_REPO = 'activate-framework';
  * Resolve the `activate` binary: bundled → dev → ~/.activate/bin → PATH → auto-install.
  * @returns {Promise<string|null>}
  */
-async function resolveBinPath(context) {
+async function resolveBinPath(context, outputChannel) {
   // 1. Bundled in extension package (production)
   const bundled = path.join(context.extensionUri.fsPath, 'bin', 'activate');
-  if (fs.existsSync(bundled)) return bundled;
+  if (fs.existsSync(bundled)) { outputChannel.appendLine(`[debug] CLI found: bundled (${bundled})`); return bundled; }
 
   // 2. Sibling cli/ directory (development — running from repo)
   const dev = path.join(context.extensionUri.fsPath, '..', 'cli', 'activate');
-  if (fs.existsSync(dev)) return dev;
+  if (fs.existsSync(dev)) { outputChannel.appendLine(`[debug] CLI found: dev (${dev})`); return dev; }
 
   // 3. ~/.activate/bin/activate (installed by install.sh)
   const home = os.homedir();
   const managed = path.join(home, '.activate', 'bin', 'activate');
-  if (fs.existsSync(managed)) return managed;
+  if (fs.existsSync(managed)) { outputChannel.appendLine(`[debug] CLI found: managed (${managed})`); return managed; }
 
   // 4. On system PATH
   try {
     const which = process.platform === 'win32' ? 'where' : 'which';
-    return execFileSync(which, ['activate'], { encoding: 'utf8' }).trim().split('\n')[0];
+    const found = execFileSync(which, ['activate'], { encoding: 'utf8' }).trim().split('\n')[0];
+    outputChannel.appendLine(`[debug] CLI found: PATH (${found})`);
+    return found;
   } catch {
     // not on PATH
   }
 
-  // 5. Auto-install from GitHub release
-  const installed = await autoInstallCLI();
-  if (installed) return managed;
-
-  vscode.window.showErrorMessage(
-    'Activate CLI binary not found. Use the Install button in the Activate sidebar panel.',
-  );
+  // Not found — return null; the panel shows "not installed" with an install button
+  outputChannel.appendLine('[debug] CLI not found in any location');
   return null;
 }
 
@@ -136,7 +133,12 @@ async function activate(context) {
         const poll = setInterval(async () => {
           if (fs.existsSync(managed)) {
             clearInterval(poll);
-            await startDaemon(context, managed, projectDir, outputChannel, controlPanel);
+            try {
+              await startDaemon(context, managed, projectDir, outputChannel, controlPanel);
+            } catch (err) {
+              outputChannel.appendLine(`[error] Failed to start daemon after install: ${err.message}`);
+              vscode.window.showErrorMessage(`Activate CLI installed but failed to start: ${err.message}`);
+            }
           }
         }, 2000);
         // Stop polling after 5 minutes
@@ -402,10 +404,15 @@ async function activate(context) {
 
   // ── Resolve CLI and start daemon ──────────────────────────
 
-  const binPath = await resolveBinPath(context);
-  if (!binPath) return;
+  const binPath = await resolveBinPath(context, outputChannel);
+  if (!binPath) return; // Panel shows "not installed" state with install button
 
-  await startDaemon(context, binPath, projectDir, outputChannel, controlPanel);
+  try {
+    await startDaemon(context, binPath, projectDir, outputChannel, controlPanel);
+  } catch (err) {
+    outputChannel.appendLine(`[error] Failed to start daemon: ${err.message}`);
+    vscode.window.showErrorMessage(`Activate CLI failed to start: ${err.message}`);
+  }
 }
 
 async function startDaemon(context, binPath, projectDir, outputChannel, controlPanel) {
