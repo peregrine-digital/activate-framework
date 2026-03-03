@@ -5,6 +5,7 @@
 # Environment variables:
 #   INSTALL_DIR   Override install directory (default: ~/.activate/bin)
 #   VERSION       Install a specific version (default: latest)
+#   GITHUB_TOKEN  GitHub token for private repos (optional)
 set -e
 
 REPO="peregrine-digital/activate-framework"
@@ -46,15 +47,31 @@ detect_platform() {
   fi
 }
 
+# --- Auth header ---
+
+auth_header() {
+  if [ -n "$GITHUB_TOKEN" ]; then
+    echo "Authorization: token $GITHUB_TOKEN"
+  fi
+}
+
 # --- Download helpers ---
 
 download() {
   url="$1"
   output="$2"
   if command -v curl >/dev/null 2>&1; then
-    curl -fsSL -o "$output" "$url"
+    if [ -n "$GITHUB_TOKEN" ]; then
+      curl -fsSL -H "Authorization: token $GITHUB_TOKEN" -H "Accept: application/octet-stream" -o "$output" "$url"
+    else
+      curl -fsSL -o "$output" "$url"
+    fi
   elif command -v wget >/dev/null 2>&1; then
-    wget -qO "$output" "$url"
+    if [ -n "$GITHUB_TOKEN" ]; then
+      wget --header="Authorization: token $GITHUB_TOKEN" --header="Accept: application/octet-stream" -qO "$output" "$url"
+    else
+      wget -qO "$output" "$url"
+    fi
   else
     echo "Error: curl or wget is required." >&2
     exit 1
@@ -71,9 +88,17 @@ resolve_version() {
 
   # Query GitHub API for latest release tag
   if command -v curl >/dev/null 2>&1; then
-    TAG=$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest" | grep '"tag_name"' | head -1 | sed 's/.*"tag_name": *"//;s/".*//')
+    if [ -n "$GITHUB_TOKEN" ]; then
+      TAG=$(curl -fsSL -H "Authorization: token $GITHUB_TOKEN" "https://api.github.com/repos/${REPO}/releases/latest" | grep '"tag_name"' | head -1 | sed 's/.*"tag_name": *"//;s/".*//')
+    else
+      TAG=$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest" | grep '"tag_name"' | head -1 | sed 's/.*"tag_name": *"//;s/".*//')
+    fi
   elif command -v wget >/dev/null 2>&1; then
-    TAG=$(wget -qO- "https://api.github.com/repos/${REPO}/releases/latest" | grep '"tag_name"' | head -1 | sed 's/.*"tag_name": *"//;s/".*//')
+    if [ -n "$GITHUB_TOKEN" ]; then
+      TAG=$(wget --header="Authorization: token $GITHUB_TOKEN" -qO- "https://api.github.com/repos/${REPO}/releases/latest" | grep '"tag_name"' | head -1 | sed 's/.*"tag_name": *"//;s/".*//')
+    else
+      TAG=$(wget -qO- "https://api.github.com/repos/${REPO}/releases/latest" | grep '"tag_name"' | head -1 | sed 's/.*"tag_name": *"//;s/".*//')
+    fi
   fi
 
   if [ -z "$TAG" ]; then

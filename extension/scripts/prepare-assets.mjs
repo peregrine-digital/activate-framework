@@ -131,6 +131,16 @@ async function main() {
   if (skipped > 0) {
     console.warn(`${skipped} manifest entries skipped (source files missing).`);
   }
+
+  // Copy install.sh to extension root so it ships in the VSIX
+  try {
+    const installSrc = path.join(repoRoot, 'install.sh');
+    const installDest = path.join(extensionDir, 'install.sh');
+    await copyFile(installSrc, installDest);
+    console.log('  ✓ install.sh');
+  } catch {
+    console.warn('  ⚠ install.sh — not found at repo root');
+  }
 }
 
 main().catch((err) => {

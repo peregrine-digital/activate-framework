@@ -53,7 +53,7 @@ async function resolveBinPath(context) {
   if (installed) return managed;
 
   vscode.window.showErrorMessage(
-    'Activate CLI binary not found. Install it with: curl -fsSL https://raw.githubusercontent.com/peregrine-digital/activate-framework/main/install.sh | sh',
+    'Activate CLI binary not found. Use the Install button in the Activate sidebar panel.',
   );
   return null;
 }
@@ -71,13 +71,29 @@ async function autoInstallCLI() {
   if (action !== 'Install') return false;
 
   try {
-    const extVersion = require('../package.json').version;
-    const ref = `v${extVersion}`;
-    const installUrl = `https://raw.githubusercontent.com/${GITHUB_OWNER}/${GITHUB_REPO}/${ref}/install.sh`;
+    // Get GitHub token for private repo access
+    let token = '';
+    try {
+      const session = await vscode.authentication.getSession('github', ['repo'], {
+        createIfNone: false,
+      });
+      token = session?.accessToken || '';
+    } catch {
+      // No auth available — will work for public repos
+    }
 
-    const terminal = vscode.window.createTerminal({ name: 'Activate CLI Install' });
+    // Bundle the install script path (shipped with the extension)
+    const scriptPath = path.join(__dirname, '..', 'install.sh');
+
+    const env = { ...process.env };
+    if (token) env.GITHUB_TOKEN = token;
+
+    const terminal = vscode.window.createTerminal({
+      name: 'Activate CLI Install',
+      env: token ? { GITHUB_TOKEN: token } : undefined,
+    });
     terminal.show();
-    terminal.sendText(`curl -fsSL ${installUrl} | sh`);
+    terminal.sendText(`sh "${scriptPath}"`);
     return true;
   } catch (err) {
     vscode.window.showErrorMessage(`CLI install failed: ${err.message}`);
