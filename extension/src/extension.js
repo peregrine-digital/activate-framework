@@ -59,36 +59,35 @@ async function resolveBinPath(context) {
 }
 
 /**
- * Prompt user and run the install script to download the CLI binary.
- * @returns {Promise<boolean>} true if install succeeded
+ * Prompt user and run the install script in a VS Code terminal.
+ * @returns {Promise<boolean>} true if install was launched (user must wait for terminal to finish)
  */
 async function autoInstallCLI() {
   const action = await vscode.window.showInformationMessage(
-    'Activate CLI not found. Download it automatically?',
+    'Activate CLI not found. Install it now?',
     'Install',
     'Cancel',
   );
   if (action !== 'Install') return false;
 
-  return vscode.window.withProgress(
-    { location: vscode.ProgressLocation.Notification, title: 'Installing Activate CLI…' },
-    () => new Promise((resolve) => {
-      // Use the extension's own version tag so the script exists at that ref
-      const extVersion = require('../../package.json').version;
-      const ref = `v${extVersion}`;
-      const installUrl = `https://raw.githubusercontent.com/${GITHUB_OWNER}/${GITHUB_REPO}/${ref}/install.sh`;
-      const { exec } = require('child_process');
-      exec(`curl -fsSL ${installUrl} | sh`, (err, stdout, stderr) => {
-        if (err) {
-          vscode.window.showErrorMessage(`CLI install failed: ${stderr || err.message}`);
-          resolve(false);
-        } else {
-          vscode.window.showInformationMessage('Activate CLI installed successfully.');
-          resolve(true);
-        }
-      });
-    }),
-  );
+  const extVersion = require('../../package.json').version;
+  const ref = `v${extVersion}`;
+  const installUrl = `https://raw.githubusercontent.com/${GITHUB_OWNER}/${GITHUB_REPO}/${ref}/install.sh`;
+
+  const terminal = vscode.window.createTerminal({ name: 'Activate CLI Install' });
+  terminal.show();
+  terminal.sendText(`curl -fsSL ${installUrl} | sh`);
+
+  vscode.window.showInformationMessage(
+    'Installing Activate CLI in the terminal. Reload the window when it finishes.',
+    'Reload Window',
+  ).then((choice) => {
+    if (choice === 'Reload Window') {
+      vscode.commands.executeCommand('workbench.action.reloadWindow');
+    }
+  });
+
+  return true;
 }
 
 // ── Activation ────────────────────────────────────────────────
