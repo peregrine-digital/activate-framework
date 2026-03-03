@@ -2,8 +2,8 @@
   "name": "peregrine-activate",
   "displayName": "Peregrine Activate",
   "description": "Cross-functional agentic framework for government delivery teams — install Copilot instructions, prompts, skills, and agents into your workspace.",
-  "version": "0.1.7",
-  "releaseTag": "v0.1.7-rc.1",
+  "version": "0.1.8",
+  "releaseTag": "v0.1.8-rc.1",
   "publisher": "peregrine",
   "license": "SEE LICENSE IN LICENSE",
   "repository": {
