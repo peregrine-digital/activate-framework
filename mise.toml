@@ -64,7 +64,7 @@ rm -f "${CLI_VERSION_FILE}.bak"
 
 # Bump extension version (use non-prerelease for extension since VS Code doesn't support semver pre-release)
 EXT_NEW_VERSION="${NEW_VERSION%%-*}"
-cd extension && npm version "$EXT_NEW_VERSION" --no-git-tag-version --allow-same-version && cd ..
+cd extension && npm version "$EXT_NEW_VERSION" --no-git-tag-version --allow-same-version && npm install --package-lock-only && cd ..
 
 # Store full release tag in extension package.json for install script URL resolution
 sed -i.bak "s/\"releaseTag\": \"[^\"]*\"/\"releaseTag\": \"v${NEW_VERSION}\"/" "$EXT_VERSION_FILE"
@@ -74,7 +74,7 @@ echo "✓ Bumped CLI to v${NEW_VERSION}"
 echo "✓ Bumped extension to v${EXT_NEW_VERSION}"
 
 # Commit, tag, push
-git add "$CLI_VERSION_FILE" "$EXT_VERSION_FILE"
+git add "$CLI_VERSION_FILE" "$EXT_VERSION_FILE" extension/package-lock.json
 git commit -m "chore: bump version to v${NEW_VERSION}"
 git tag "v${NEW_VERSION}"
 git push origin HEAD
