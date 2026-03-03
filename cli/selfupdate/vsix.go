@@ -34,8 +34,8 @@ type githubAsset struct {
 // For private repos, this endpoint (with Accept: application/octet-stream)
 // is the only way to download assets.
 func assetAPIURL(assetID int) string {
-	return fmt.Sprintf("https://api.github.com/repos/%s/%s/releases/assets/%d",
-		GitHubOwner, GitHubRepo, assetID)
+	return fmt.Sprintf("%s/repos/%s/%s/releases/assets/%d",
+		apiBase, GitHubOwner, GitHubRepo, assetID)
 }
 
 // CheckVsix queries the latest GitHub release for a .vsix asset.
@@ -43,7 +43,7 @@ func assetAPIURL(assetID int) string {
 // repos that only have pre-releases. Token is required for private repos.
 // Returns VsixInfo with Available=false if none found or on error.
 func CheckVsix(currentExtVersion, token string) VsixInfo {
-	url := fmt.Sprintf("https://api.github.com/repos/%s/%s/releases?per_page=1", GitHubOwner, GitHubRepo)
+	url := fmt.Sprintf("%s/repos/%s/%s/releases?per_page=1", apiBase, GitHubOwner, GitHubRepo)
 
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
