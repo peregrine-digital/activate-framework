@@ -19,17 +19,25 @@ class ControlPanelProvider {
   static viewType = 'activate-framework.controlPanel';
 
   /** @param {import('./client').ActivateClient|null} client */
-  constructor(client) {
+  constructor(client, extensionVersion) {
     this._client = client;
     this._view = null;
     /** @type {'main'|'usage'|'settings'|'no-cli'} */
     this._currentPage = client ? 'main' : 'no-cli';
+    this._extensionVersion = extensionVersion || '';
+    /** @type {string|null} ISO timestamp of last update check */
+    this._lastUpdateCheck = null;
   }
 
   /** Update the client after CLI is installed and daemon started. */
   setClient(client) {
     this._client = client;
     this._currentPage = 'main';
+  }
+
+  /** Store the timestamp of the last update check (ISO string). */
+  setLastUpdateCheck(isoTimestamp) {
+    this._lastUpdateCheck = isoTimestamp || null;
   }
 
   /** @param {vscode.WebviewView} webviewView */
@@ -1270,6 +1278,16 @@ class ControlPanelProvider {
     <span class="setting-label">CLI Version</span>
     <span class="setting-value">${esc(this._client?.serverVersion || '—')}</span>
   </div>
+  <div class="setting-row">
+    <span class="setting-label">Extension Version</span>
+    <span class="setting-value">${esc(this._extensionVersion || '—')}</span>
+  </div>
+  ${this._lastUpdateCheck ? `
+  <div class="setting-row">
+    <span class="setting-label">Last Checked</span>
+    <span class="setting-value last-checked">${esc(formatTimestamp(this._lastUpdateCheck))}</span>
+  </div>
+  ` : ''}
   <div style="padding: 4px 0;">
     <button class="primary" onclick="send('checkForUpdates')">🔄 Check for Updates</button>
   </div>
@@ -1298,6 +1316,21 @@ function esc(str) {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
+}
+
+/** Format an ISO timestamp as a human-readable relative/absolute string. */
+function formatTimestamp(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return String(iso);
+  const now = Date.now();
+  const diffMs = now - d.getTime();
+  const diffMin = Math.floor(diffMs / 60000);
+  if (diffMin < 1) return 'just now';
+  if (diffMin < 60) return `${diffMin}m ago`;
+  const diffHr = Math.floor(diffMin / 60);
+  if (diffHr < 24) return `${diffHr}h ago`;
+  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
 // ── Tier helpers (dynamic — reads from daemon state) ───────────

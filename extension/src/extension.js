@@ -128,7 +128,8 @@ async function activate(context) {
   const outputChannel = vscode.window.createOutputChannel('Activate Framework');
 
   // Register the control panel immediately (shows "CLI not found" state if needed)
-  const controlPanel = new ControlPanelProvider(null);
+  const extVersion = context.extension?.packageJSON?.version || '';
+  const controlPanel = new ControlPanelProvider(null, extVersion);
   context.subscriptions.push(
     vscode.window.registerWebviewViewProvider(
       ControlPanelProvider.viewType,
@@ -438,7 +439,7 @@ async function activate(context) {
       if (!requireClient()) return;
       await vscode.window.withProgress(
         { location: vscode.ProgressLocation.Notification, title: 'Checking for updates…' },
-        () => checkForUpdates(context, true),
+        () => checkForUpdates(context, controlPanel, true),
       );
     }),
   );
@@ -517,7 +518,7 @@ async function autoSetup(controlPanel, context) {
   controlPanel.refresh();
 
   // Check for updates (non-blocking)
-  checkForUpdates(context);
+  checkForUpdates(context, controlPanel);
 }
 
 /**
@@ -551,7 +552,7 @@ async function performCliUpdate(targetClient, token) {
   }
 }
 
-async function checkForUpdates(context, force = false) {
+async function checkForUpdates(context, controlPanel, force = false) {
   try {
     // Get GitHub token for private repo API access
     let token = '';
@@ -566,6 +567,12 @@ async function checkForUpdates(context, force = false) {
 
     const extVersion = context.extension?.packageJSON?.version || '';
     const update = await client.checkUpdate(extVersion, force, token);
+
+    // Store the check timestamp for display in Settings
+    if (update?.checkedAt && controlPanel) {
+      controlPanel.setLastUpdateCheck(update.checkedAt);
+    }
+
     if (!update) {
       if (force) vscode.window.showInformationMessage('Activate is up to date.');
       return;
@@ -612,6 +619,9 @@ async function checkForUpdates(context, force = false) {
     if (!foundUpdate) {
       if (force) vscode.window.showInformationMessage('Activate is up to date.');
     }
+
+    // Refresh the panel to show updated timestamp
+    if (controlPanel) controlPanel.refresh();
   } catch {
     // Silently ignore update check failures on auto-check
   }
