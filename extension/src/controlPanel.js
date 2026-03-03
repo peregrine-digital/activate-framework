@@ -18,11 +18,17 @@ const vscode = require('vscode');
 class ControlPanelProvider {
   static viewType = 'activate-framework.controlPanel';
 
-  /** @param {import('./client').ActivateClient} client */
+  /** @param {import('./client').ActivateClient|null} client */
   constructor(client) {
     this._client = client;
     this._view = null;
-    /** @type {'main'|'usage'|'settings'} */
+    /** @type {'main'|'usage'|'settings'|'no-cli'} */
+    this._currentPage = client ? 'main' : 'no-cli';
+  }
+
+  /** Update the client after CLI is installed and daemon started. */
+  setClient(client) {
+    this._client = client;
     this._currentPage = 'main';
   }
 
@@ -117,6 +123,10 @@ class ControlPanelProvider {
 
   async _render() {
     if (!this._view) return;
+    if (this._currentPage === 'no-cli') {
+      this._view.webview.html = this._getNoCliHtml();
+      return;
+    }
     try {
       if (this._currentPage === 'usage') {
         const state = await this._client.getState();
@@ -141,6 +151,9 @@ class ControlPanelProvider {
 
   _onMessage(msg) {
     switch (msg.command) {
+      case 'installCLI':
+        vscode.commands.executeCommand('activate-framework.installCLI');
+        break;
       case 'changeTier':
         vscode.commands.executeCommand('activate-framework.changeTier');
         break;
@@ -240,6 +253,29 @@ class ControlPanelProvider {
   }
 
   // ── HTML ──────────────────────────────────────────────
+
+  _getNoCliHtml() {
+    return `<!DOCTYPE html>
+<html><head><style>
+  body { font-family: var(--vscode-font-family); color: var(--vscode-foreground); padding: 16px; text-align: center; }
+  .icon { font-size: 48px; margin: 24px 0 12px; }
+  h3 { margin: 0 0 8px; }
+  p { color: var(--vscode-descriptionForeground); font-size: 13px; margin: 0 0 20px; }
+  button { padding: 8px 16px; background: var(--vscode-button-background); color: var(--vscode-button-foreground);
+    border: none; border-radius: 4px; cursor: pointer; font-size: 13px; }
+  button:hover { background: var(--vscode-button-hoverBackground); }
+  code { background: var(--vscode-textCodeBlock-background); padding: 2px 6px; border-radius: 3px; font-size: 12px; }
+</style></head><body>
+  <div class="icon">⚠️</div>
+  <h3>CLI Not Installed</h3>
+  <p>The Activate CLI is required for this extension to work. Click below to install it.</p>
+  <button onclick="send('installCLI')">Install Activate CLI</button>
+  <script>
+    const vscode = acquireVsCodeApi();
+    function send(command) { vscode.postMessage({ command }); }
+  </script>
+</body></html>`;
+  }
 
   _getHtml({ version, tier, tierLabel, isActive, manifestName, manifestCount, installedFiles, availableFiles, outsideTierFiles, excludedFiles, versionMap, fileOverrides, skippedVersions }) {
     const installAction = isActive ? 'removeFromWorkspace' : 'addToWorkspace';

@@ -78,15 +78,6 @@ async function autoInstallCLI() {
   terminal.show();
   terminal.sendText(`curl -fsSL ${installUrl} | sh`);
 
-  vscode.window.showInformationMessage(
-    'Installing Activate CLI in the terminal. Reload the window when it finishes.',
-    'Reload Window',
-  ).then((choice) => {
-    if (choice === 'Reload Window') {
-      vscode.commands.executeCommand('workbench.action.reloadWindow');
-    }
-  });
-
   return true;
 }
 
@@ -97,23 +88,10 @@ async function activate(context) {
   if (!workspaceFolder) return;
 
   const projectDir = workspaceFolder.uri.fsPath;
-  const binPath = await resolveBinPath(context);
-  if (!binPath) return;
-
   const outputChannel = vscode.window.createOutputChannel('Activate Framework');
 
-  client = new ActivateClient({
-    binPath,
-    projectDir,
-    log: {
-      debug: (msg) => outputChannel.appendLine(`[debug] ${msg}`),
-      error: (msg) => outputChannel.appendLine(`[error] ${msg}`),
-    },
-  });
-
-  await client.start();
-
-  const controlPanel = new ControlPanelProvider(client);
+  // Register the control panel immediately (shows "CLI not found" state if needed)
+  const controlPanel = new ControlPanelProvider(null);
   context.subscriptions.push(
     vscode.window.registerWebviewViewProvider(
       ControlPanelProvider.viewType,
@@ -121,26 +99,36 @@ async function activate(context) {
     ),
   );
 
-  // Refresh UI when daemon notifies of state changes
-  client.on('notification', (method) => {
-    if (method === Method.NotifyStateChanged) {
-      controlPanel.refresh();
+  /** Guard: return early with a warning if the daemon isn't running yet. */
+  function requireClient() {
+    if (!client) {
+      vscode.window.showWarningMessage('Activate CLI is not installed yet.');
+      return false;
     }
-  });
-
-  // Auto-restart daemon on unexpected exit
-  client.on('exit', () => {
-    if (!client._disposed) {
-      client.start().catch((err) => {
-        outputChannel.appendLine(`[error] Daemon restart failed: ${err.message}`);
-      });
-    }
-  });
+    return true;
+  }
 
   // ── Command registrations ──────────────────────────────────
 
   context.subscriptions.push(
+    vscode.commands.registerCommand('activate-framework.installCLI', () => {
+      autoInstallCLI().then((launched) => {
+        if (!launched) return;
+        // Poll for the binary to appear, then start the daemon
+        const managed = path.join(os.homedir(), '.activate', 'bin', 'activate');
+        const poll = setInterval(async () => {
+          if (fs.existsSync(managed)) {
+            clearInterval(poll);
+            await startDaemon(context, managed, projectDir, outputChannel, controlPanel);
+          }
+        }, 2000);
+        // Stop polling after 5 minutes
+        setTimeout(() => clearInterval(poll), 300000);
+      });
+    }),
+
     vscode.commands.registerCommand('activate-framework.changeTier', async () => {
+      if (!requireClient()) return;
       try {
         const state = await client.getState();
         if (state.installDir) installDir = state.installDir;
@@ -175,6 +163,7 @@ async function activate(context) {
     }),
 
     vscode.commands.registerCommand('activate-framework.changeManifest', async () => {
+      if (!requireClient()) return;
       try {
         const state = await client.getState();
         const currentManifest = state?.config?.manifest || '';
@@ -209,6 +198,7 @@ async function activate(context) {
     }),
 
     vscode.commands.registerCommand('activate-framework.showStatus', async () => {
+      if (!requireClient()) return;
       try {
         const state = await client.getState();
         outputChannel.clear();
@@ -227,6 +217,7 @@ async function activate(context) {
     }),
 
     vscode.commands.registerCommand('activate-framework.remove', async () => {
+      if (!requireClient()) return;
       try {
         await client.repoRemove();
         vscode.window.showInformationMessage('Peregrine Activate files removed from workspace.');
@@ -241,6 +232,7 @@ async function activate(context) {
     }),
 
     vscode.commands.registerCommand('activate-framework.addToWorkspace', async () => {
+      if (!requireClient()) return;
       const answer = await vscode.window.showWarningMessage(
         'Inject Peregrine Activate files into this workspace? Files will be hidden from git.',
         { modal: true },
@@ -258,6 +250,7 @@ async function activate(context) {
     }),
 
     vscode.commands.registerCommand('activate-framework.removeFromWorkspace', async () => {
+      if (!requireClient()) return;
       const answer = await vscode.window.showWarningMessage(
         'Remove all Peregrine Activate files from this workspace?',
         { modal: true },
@@ -275,6 +268,7 @@ async function activate(context) {
     }),
 
     vscode.commands.registerCommand('activate-framework.updateAll', async () => {
+      if (!requireClient()) return;
       try {
         const result = await client.update();
         const count = result.updated ? result.updated.length : 0;
@@ -286,6 +280,7 @@ async function activate(context) {
     }),
 
     vscode.commands.registerCommand('activate-framework.installFile', async (fileOrItem) => {
+      if (!requireClient()) return;
       const file = fileOrItem?.fileData || fileOrItem;
       if (!file?.dest) {
         vscode.window.showWarningMessage('No file selected.');
@@ -301,6 +296,7 @@ async function activate(context) {
     }),
 
     vscode.commands.registerCommand('activate-framework.uninstallFile', async (arg) => {
+      if (!requireClient()) return;
       const file = arg?.fileData || arg;
       if (!file?.dest) {
         vscode.window.showWarningMessage('No file selected.');
@@ -316,6 +312,7 @@ async function activate(context) {
     }),
 
     vscode.commands.registerCommand('activate-framework.openFile', async (file) => {
+      if (!requireClient()) return;
       if (!file?.dest) return;
       const wsRoot = vscode.workspace.workspaceFolders?.[0]?.uri;
       if (!wsRoot) return;
@@ -328,6 +325,7 @@ async function activate(context) {
     }),
 
     vscode.commands.registerCommand('activate-framework.diffFile', async (file) => {
+      if (!requireClient()) return;
       if (!file?.dest) return;
       try {
         const result = await client.diffFile(file.dest);
@@ -359,6 +357,7 @@ async function activate(context) {
     }),
 
     vscode.commands.registerCommand('activate-framework.skipFileUpdate', async (file) => {
+      if (!requireClient()) return;
       if (!file?.dest) return;
       try {
         await client.skipFileUpdate(file.dest);
@@ -370,6 +369,7 @@ async function activate(context) {
     }),
 
     vscode.commands.registerCommand('activate-framework.telemetryRunNow', async () => {
+      if (!requireClient()) return;
       try {
         const session = await vscode.authentication.getSession('github', ['user:email'], {
           createIfNone: false,
@@ -382,6 +382,45 @@ async function activate(context) {
       }
     }),
   );
+
+  // ── Resolve CLI and start daemon ──────────────────────────
+
+  const binPath = await resolveBinPath(context);
+  if (!binPath) return;
+
+  await startDaemon(context, binPath, projectDir, outputChannel, controlPanel);
+}
+
+async function startDaemon(context, binPath, projectDir, outputChannel, controlPanel) {
+  client = new ActivateClient({
+    binPath,
+    projectDir,
+    log: {
+      debug: (msg) => outputChannel.appendLine(`[debug] ${msg}`),
+      error: (msg) => outputChannel.appendLine(`[error] ${msg}`),
+    },
+  });
+
+  await client.start();
+
+  controlPanel.setClient(client);
+  controlPanel.refresh();
+
+  // Refresh UI when daemon notifies of state changes
+  client.on('notification', (method) => {
+    if (method === Method.NotifyStateChanged) {
+      controlPanel.refresh();
+    }
+  });
+
+  // Auto-restart daemon on unexpected exit
+  client.on('exit', () => {
+    if (!client._disposed) {
+      client.start().catch((err) => {
+        outputChannel.appendLine(`[error] Daemon restart failed: ${err.message}`);
+      });
+    }
+  });
 
   // Auto-setup: sync on activation
   await autoSetup(controlPanel, context);

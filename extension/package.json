@@ -108,6 +108,10 @@
       {
         "command": "activate-framework.telemetryRunNow",
         "title": "Peregrine Activate: Run Copilot Telemetry Log Now"
+      },
+      {
+        "command": "activate-framework.installCLI",
+        "title": "Peregrine Activate: Install CLI"
       }
     ],
     "configuration": {
