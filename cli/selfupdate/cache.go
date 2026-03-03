@@ -69,14 +69,14 @@ func WriteCache(entry *CacheEntry) error {
 // currentExtVersion is the VS Code extension version (pass "" from CLI).
 // Errors during the live check are silently swallowed and nil is returned,
 // so callers can safely use this for non-critical notifications.
-func CheckCached(currentVersion, currentExtVersion string) *CacheEntry {
+func CheckCached(currentVersion, currentExtVersion, token string) *CacheEntry {
 	if cached, err := ReadCache(); err == nil {
 		if time.Since(cached.CheckedAt) < CheckInterval && cached.CurrentVersion == currentVersion {
 			return cached
 		}
 	}
 
-	result, err := CheckUpdate(currentVersion)
+	result, err := CheckUpdate(currentVersion, token)
 	if err != nil {
 		return nil
 	}
@@ -96,8 +96,8 @@ func CheckCached(currentVersion, currentExtVersion string) *CacheEntry {
 
 // CheckLive always performs a live check against GitHub, ignoring the cache TTL.
 // The result is still written to cache for subsequent cached checks.
-func CheckLive(currentVersion, currentExtVersion string) *CacheEntry {
-	result, err := CheckUpdate(currentVersion)
+func CheckLive(currentVersion, currentExtVersion, token string) *CacheEntry {
+	result, err := CheckUpdate(currentVersion, token)
 	if err != nil {
 		return nil
 	}

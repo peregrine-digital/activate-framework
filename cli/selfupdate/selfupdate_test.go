@@ -5,7 +5,7 @@ import "testing"
 func TestCheckUpdateInvalidVersion(t *testing.T) {
 	// A nonsensical version should still produce a result (not panic).
 	// This exercises the wiring without requiring network access.
-	result, err := CheckUpdate("0.0.0-test")
+	result, err := CheckUpdate("0.0.0-test", "")
 	if err != nil {
 		// Network errors are expected in CI/offline environments; skip gracefully.
 		t.Skipf("skipping: network error: %v", err)

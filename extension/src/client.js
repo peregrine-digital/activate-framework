@@ -310,12 +310,12 @@ class ActivateClient extends EventEmitter {
     return this.request(Method.TelemetryLog);
   }
 
-  checkUpdate(extensionVersion, force) {
-    return this.request(Method.CheckUpdate, { extensionVersion: extensionVersion || '', force: !!force });
+  checkUpdate(extensionVersion, force, token) {
+    return this.request(Method.CheckUpdate, { extensionVersion: extensionVersion || '', force: !!force, token: token || '' });
   }
 
-  selfUpdate() {
-    return this.request(Method.SelfUpdate);
+  selfUpdate(token) {
+    return this.request(Method.SelfUpdate, { token: token || '' });
   }
 
   // ── Internal ───────────────────────────────────────────────────

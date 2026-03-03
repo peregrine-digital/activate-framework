@@ -32,8 +32,10 @@ type Result struct {
 }
 
 // CheckUpdate checks whether a newer release is available without applying it.
-func CheckUpdate(currentVersion string) (*Result, error) {
-	source, err := selfupdate.NewGitHubSource(selfupdate.GitHubConfig{})
+func CheckUpdate(currentVersion, token string) (*Result, error) {
+	source, err := selfupdate.NewGitHubSource(selfupdate.GitHubConfig{
+		APIToken: token,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("creating update source: %w", err)
 	}
@@ -77,8 +79,10 @@ func CheckUpdate(currentVersion string) (*Result, error) {
 }
 
 // Run checks for the latest release and applies the update to the running binary.
-func Run(currentVersion string) (*Result, error) {
-	source, err := selfupdate.NewGitHubSource(selfupdate.GitHubConfig{})
+func Run(currentVersion, token string) (*Result, error) {
+	source, err := selfupdate.NewGitHubSource(selfupdate.GitHubConfig{
+		APIToken: token,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("creating update source: %w", err)
 	}

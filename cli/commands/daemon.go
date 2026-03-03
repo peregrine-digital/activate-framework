@@ -316,9 +316,9 @@ func (d *Daemon) handleCheckUpdate(req *transport.Request) *transport.Response {
 	}
 	var entry *selfupdate.CacheEntry
 	if params.Force {
-		entry = selfupdate.CheckLive(d.version, params.ExtensionVersion)
+		entry = selfupdate.CheckLive(d.version, params.ExtensionVersion, params.Token)
 	} else {
-		entry = selfupdate.CheckCached(d.version, params.ExtensionVersion)
+		entry = selfupdate.CheckCached(d.version, params.ExtensionVersion, params.Token)
 	}
 	if entry == nil {
 		return transport.SuccessResponse(req.ID, selfupdate.CacheEntry{})
@@ -327,7 +327,11 @@ func (d *Daemon) handleCheckUpdate(req *transport.Request) *transport.Response {
 }
 
 func (d *Daemon) handleSelfUpdate(req *transport.Request) *transport.Response {
-	result, err := selfupdate.Run(d.version)
+	var params transport.CheckUpdateParams
+	if req.Params != nil {
+		_ = json.Unmarshal(req.Params, &params)
+	}
+	result, err := selfupdate.Run(d.version, params.Token)
 	if err != nil {
 		return transport.ErrorResponse(req.ID, transport.ErrCodeInternal, err.Error())
 	}

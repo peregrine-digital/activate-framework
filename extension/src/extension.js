@@ -500,8 +500,19 @@ async function autoSetup(controlPanel, context) {
 
 async function checkForUpdates(context, force = false) {
   try {
+    // Get GitHub token for private repo API access
+    let token = '';
+    try {
+      const session = await vscode.authentication.getSession('github', ['repo'], {
+        createIfNone: false,
+      });
+      token = session?.accessToken || '';
+    } catch {
+      // No auth available
+    }
+
     const extVersion = context.extension?.packageJSON?.version || '';
-    const update = await client.checkUpdate(extVersion, force);
+    const update = await client.checkUpdate(extVersion, force, token);
     if (!update) {
       vscode.window.showInformationMessage('Activate is up to date.');
       return;
@@ -520,7 +531,7 @@ async function checkForUpdates(context, force = false) {
       if (action === 'Update Now') {
         await vscode.window.withProgress(
           { location: vscode.ProgressLocation.Notification, title: 'Updating Activate CLI…' },
-          async () => { await client.selfUpdate(); },
+          async () => { await client.selfUpdate(token); },
         );
         await client.stop();
         await client.start();

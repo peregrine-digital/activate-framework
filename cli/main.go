@@ -215,7 +215,7 @@ func main() {
 	// ── Self-update (no manifests needed) ──────────────────────
 	if args.command == "self-update" {
 		fmt.Printf("Checking for updates (current: v%s)...\n", version)
-		result, err := selfupdate.Run(version)
+		result, err := selfupdate.Run(version, "")
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 			os.Exit(1)
@@ -226,7 +226,7 @@ func main() {
 
 	// ── Passive update hint (non-blocking, cached) ─────────────
 	if args.command != "serve" {
-		if cached := selfupdate.CheckCached(version, ""); cached != nil && cached.UpdateAvail {
+		if cached := selfupdate.CheckCached(version, "", ""); cached != nil && cached.UpdateAvail {
 			fmt.Fprintf(os.Stderr, "Update available: v%s → v%s (run 'activate self-update')\n\n", cached.CurrentVersion, cached.LatestVersion)
 		}
 	}
