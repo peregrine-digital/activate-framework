@@ -73,7 +73,10 @@ async function autoInstallCLI() {
   return vscode.window.withProgress(
     { location: vscode.ProgressLocation.Notification, title: 'Installing Activate CLI…' },
     () => new Promise((resolve) => {
-      const installUrl = `https://raw.githubusercontent.com/${GITHUB_OWNER}/${GITHUB_REPO}/main/install.sh`;
+      // Use the extension's own version tag so the script exists at that ref
+      const extVersion = require('../../package.json').version;
+      const ref = `v${extVersion}`;
+      const installUrl = `https://raw.githubusercontent.com/${GITHUB_OWNER}/${GITHUB_REPO}/${ref}/install.sh`;
       const { exec } = require('child_process');
       exec(`curl -fsSL ${installUrl} | sh`, (err, stdout, stderr) => {
         if (err) {
