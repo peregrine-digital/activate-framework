@@ -78,6 +78,36 @@ download() {
   fi
 }
 
+# Resolve the API download URL for a release asset by name.
+# For private repos, assets must be downloaded via the API endpoint.
+resolve_asset_url() {
+  asset_name="$1"
+  release_tag="$2"
+
+  if [ -n "$GITHUB_TOKEN" ]; then
+    # Use API to get the asset ID, then download via API endpoint
+    if command -v curl >/dev/null 2>&1; then
+      asset_url=$(curl -fsSL -H "Authorization: token $GITHUB_TOKEN" \
+        "https://api.github.com/repos/${REPO}/releases/tags/${release_tag}" \
+        | grep -B3 "\"name\": \"${asset_name}\"" | grep '"url"' | head -1 \
+        | sed 's/.*"url": *"//;s/".*//')
+    elif command -v wget >/dev/null 2>&1; then
+      asset_url=$(wget --header="Authorization: token $GITHUB_TOKEN" -qO- \
+        "https://api.github.com/repos/${REPO}/releases/tags/${release_tag}" \
+        | grep -B3 "\"name\": \"${asset_name}\"" | grep '"url"' | head -1 \
+        | sed 's/.*"url": *"//;s/".*//')
+    fi
+
+    if [ -n "$asset_url" ]; then
+      echo "$asset_url"
+      return
+    fi
+  fi
+
+  # Fallback to direct URL (works for public repos)
+  echo "https://github.com/${REPO}/releases/download/${release_tag}/${asset_name}"
+}
+
 # --- Resolve version ---
 
 resolve_version() {
@@ -86,18 +116,18 @@ resolve_version() {
     return
   fi
 
-  # Query GitHub API for latest release tag
+  # Query GitHub API for latest release tag (uses /releases[0] to include pre-releases)
   if command -v curl >/dev/null 2>&1; then
     if [ -n "$GITHUB_TOKEN" ]; then
-      TAG=$(curl -fsSL -H "Authorization: token $GITHUB_TOKEN" "https://api.github.com/repos/${REPO}/releases/latest" | grep '"tag_name"' | head -1 | sed 's/.*"tag_name": *"//;s/".*//')
+      TAG=$(curl -fsSL -H "Authorization: token $GITHUB_TOKEN" "https://api.github.com/repos/${REPO}/releases?per_page=1" | grep '"tag_name"' | head -1 | sed 's/.*"tag_name": *"//;s/".*//')
     else
-      TAG=$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest" | grep '"tag_name"' | head -1 | sed 's/.*"tag_name": *"//;s/".*//')
+      TAG=$(curl -fsSL "https://api.github.com/repos/${REPO}/releases?per_page=1" | grep '"tag_name"' | head -1 | sed 's/.*"tag_name": *"//;s/".*//')
     fi
   elif command -v wget >/dev/null 2>&1; then
     if [ -n "$GITHUB_TOKEN" ]; then
-      TAG=$(wget --header="Authorization: token $GITHUB_TOKEN" -qO- "https://api.github.com/repos/${REPO}/releases/latest" | grep '"tag_name"' | head -1 | sed 's/.*"tag_name": *"//;s/".*//')
+      TAG=$(wget --header="Authorization: token $GITHUB_TOKEN" -qO- "https://api.github.com/repos/${REPO}/releases?per_page=1" | grep '"tag_name"' | head -1 | sed 's/.*"tag_name": *"//;s/".*//')
     else
-      TAG=$(wget -qO- "https://api.github.com/repos/${REPO}/releases/latest" | grep '"tag_name"' | head -1 | sed 's/.*"tag_name": *"//;s/".*//')
+      TAG=$(wget -qO- "https://api.github.com/repos/${REPO}/releases?per_page=1" | grep '"tag_name"' | head -1 | sed 's/.*"tag_name": *"//;s/".*//')
     fi
   fi
 
@@ -161,13 +191,13 @@ main() {
   TMPDIR=$(mktemp -d)
   trap 'rm -rf "$TMPDIR"' EXIT
 
-  DOWNLOAD_BASE="https://github.com/${REPO}/releases/download/${TAG}"
-
   echo "Downloading ${ASSET_NAME}..."
-  download "${DOWNLOAD_BASE}/${ASSET_NAME}" "${TMPDIR}/${ASSET_NAME}"
+  ASSET_URL=$(resolve_asset_url "$ASSET_NAME" "$TAG")
+  download "$ASSET_URL" "${TMPDIR}/${ASSET_NAME}"
 
   # Try to download checksums
-  download "${DOWNLOAD_BASE}/checksums.txt" "${TMPDIR}/checksums.txt" 2>/dev/null || true
+  CHECKSUMS_URL=$(resolve_asset_url "checksums.txt" "$TAG")
+  download "$CHECKSUMS_URL" "${TMPDIR}/checksums.txt" 2>/dev/null || true
 
   verify_checksum "${TMPDIR}/${ASSET_NAME}" "$ASSET_NAME" "${TMPDIR}/checksums.txt"
 

@@ -75,18 +75,15 @@ async function autoInstallCLI() {
     let token = '';
     try {
       const session = await vscode.authentication.getSession('github', ['repo'], {
-        createIfNone: false,
+        createIfNone: true,
       });
       token = session?.accessToken || '';
     } catch {
-      // No auth available — will work for public repos
+      // No auth available — will work for public repos only
     }
 
     // Bundle the install script path (shipped with the extension)
     const scriptPath = path.join(__dirname, '..', 'install.sh');
-
-    const env = { ...process.env };
-    if (token) env.GITHUB_TOKEN = token;
 
     const terminal = vscode.window.createTerminal({
       name: 'Activate CLI Install',
