@@ -213,27 +213,39 @@ main() {
   mkdir -p "$INSTALL_DIR"
   mv "${TMPDIR}/${BINARY_NAME}" "${INSTALL_DIR}/${BINARY_NAME}"
 
-  # Verify it's in PATH
+  # Add to PATH if not already there
   if ! echo "$PATH" | tr ':' '\n' | grep -qx "$INSTALL_DIR"; then
-    echo ""
-    echo "Add Activate to your PATH by adding this to your shell profile:"
-    echo ""
-
     SHELL_NAME=$(basename "${SHELL:-/bin/sh}")
     case "$SHELL_NAME" in
       zsh)  RC="$HOME/.zshrc" ;;
       bash) RC="$HOME/.bashrc" ;;
       fish) RC="$HOME/.config/fish/config.fish" ;;
-      *)    RC="your shell profile" ;;
+      *)    RC="" ;;
     esac
 
-    if [ "$SHELL_NAME" = "fish" ]; then
-      echo "  fish_add_path $INSTALL_DIR"
+    if [ -n "$RC" ]; then
+      MARKER="# Added by Activate CLI installer"
+      if [ -f "$RC" ] && grep -qF "$MARKER" "$RC"; then
+        echo "PATH entry already in $RC"
+      else
+        echo "" >> "$RC"
+        if [ "$SHELL_NAME" = "fish" ]; then
+          echo "$MARKER" >> "$RC"
+          echo "fish_add_path $INSTALL_DIR" >> "$RC"
+        else
+          echo "$MARKER" >> "$RC"
+          echo "export PATH=\"$INSTALL_DIR:\$PATH\"" >> "$RC"
+        fi
+        echo "✓ Added $INSTALL_DIR to PATH in $RC"
+        echo "  Restart your terminal or run: source $RC"
+      fi
     else
+      echo ""
+      echo "Add Activate to your PATH manually:"
       echo "  export PATH=\"$INSTALL_DIR:\$PATH\""
     fi
-    echo ""
-    echo "Then restart your terminal or run:  source $RC"
+    # Also export for the current script session
+    export PATH="$INSTALL_DIR:$PATH"
   fi
 
   echo ""
