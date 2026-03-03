@@ -237,6 +237,9 @@ class ControlPanelProvider {
           () => this._render(),
         );
         break;
+      case 'checkForUpdates':
+        vscode.commands.executeCommand('activate-framework.checkForUpdates');
+        break;
       case 'openLogFile': {
         const logPath = this._telemetryLogPath;
         if (!logPath) {
@@ -1259,6 +1262,13 @@ class ControlPanelProvider {
     <span class="setting-value">${Object.keys(project.skippedVersions).length} file(s)</span>
   </div>
   ` : ''}
+
+  <hr>
+
+  <div class="section-label">Updates</div>
+  <div style="padding: 4px 0;">
+    <button class="primary" onclick="send('checkForUpdates')">🔄 Check for Updates</button>
+  </div>
 
   <script>
     const vscode = acquireVsCodeApi();
