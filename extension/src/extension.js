@@ -498,6 +498,37 @@ async function autoSetup(controlPanel, context) {
   checkForUpdates(context);
 }
 
+/**
+ * Build HTTP headers for a VSIX download request.
+ * Auth + Accept are sent on the initial API request only, not on S3 redirects.
+ * Exported for testability.
+ */
+function buildDownloadHeaders(token, isRedirect = false) {
+  const headers = { 'User-Agent': 'activate-extension' };
+  if (!isRedirect) {
+    headers['Accept'] = 'application/octet-stream';
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+  }
+  return headers;
+}
+
+/**
+ * Perform a CLI binary self-update: set _updating flag, call selfUpdate RPC,
+ * restart the daemon, and clear the flag. The flag prevents the auto-restart
+ * exit handler from racing with the intentional restart.
+ * Exported for testability.
+ */
+async function performCliUpdate(targetClient, token) {
+  targetClient._updating = true;
+  try {
+    await targetClient.selfUpdate(token);
+    await targetClient.stop();
+    await targetClient.start();
+  } finally {
+    targetClient._updating = false;
+  }
+}
+
 async function checkForUpdates(context, force = false) {
   try {
     // Get GitHub token for private repo API access
@@ -529,21 +560,13 @@ async function checkForUpdates(context, force = false) {
         'Dismiss',
       );
       if (action === 'Update Now') {
-        // Suppress auto-restart while we intentionally restart
-        client._updating = true;
-        try {
-          await vscode.window.withProgress(
-            { location: vscode.ProgressLocation.Notification, title: 'Updating Activate CLI…' },
-            async () => { await client.selfUpdate(token); },
-          );
-          await client.stop();
-          await client.start();
-          vscode.window.showInformationMessage(
-            `Activate CLI updated to v${update.latestVersion}. Daemon restarted.`,
-          );
-        } finally {
-          client._updating = false;
-        }
+        await vscode.window.withProgress(
+          { location: vscode.ProgressLocation.Notification, title: 'Updating Activate CLI…' },
+          () => performCliUpdate(client, token),
+        );
+        vscode.window.showInformationMessage(
+          `Activate CLI updated to v${update.latestVersion}. Daemon restarted.`,
+        );
       }
     }
 
@@ -580,12 +603,7 @@ function downloadAndInstallVsix(url, filename, expectedSha256, token) {
     const file = fs.createWriteStream(dest);
 
     const get = (reqUrl, isRedirect = false) => {
-      const headers = { 'User-Agent': 'activate-extension' };
-      // Only send auth + accept on the initial API request, not on S3 redirects
-      if (!isRedirect) {
-        headers['Accept'] = 'application/octet-stream';
-        if (token) headers['Authorization'] = `Bearer ${token}`;
-      }
+      const headers = buildDownloadHeaders(token, isRedirect);
       https.get(reqUrl, { headers }, (resp) => {
         // Follow redirects (GitHub API asset endpoint redirects to S3)
         if (resp.statusCode >= 300 && resp.statusCode < 400 && resp.headers.location) {
@@ -654,4 +672,4 @@ async function deactivate() {
   tempDirs.length = 0;
 }
 
-module.exports = { activate, deactivate };
+module.exports = { activate, deactivate, buildDownloadHeaders, performCliUpdate };

@@ -1,103 +1,58 @@
 'use strict';
 
-const { describe, it, beforeEach, afterEach } = require('node:test');
+const { describe, it, beforeEach } = require('node:test');
 const assert = require('node:assert/strict');
 const Module = require('module');
 const EventEmitter = require('events');
 
-// ── Mock infrastructure ─────────────────────────────────────────
+// ── Module interception (vscode mock) ───────────────────────────
 
 const origResolve = Module._resolveFilename;
 const origLoad = Module._load;
 
-let shownMessages = [];
-let installedExtensions = [];
-let executedCommands = [];
-let httpsRequests = [];
-let mockHttpsResponse = null;
-
-function resetMocks() {
-  shownMessages = [];
-  installedExtensions = [];
-  executedCommands = [];
-  httpsRequests = [];
-  mockHttpsResponse = null;
-}
-
-// Minimal VS Code mock
+// Minimal VS Code mock — only needed so extension.js can be required
 const vscodeMock = {
-  workspace: {
-    workspaceFolders: [{ uri: { fsPath: '/test/project' } }],
-  },
+  workspace: { workspaceFolders: [{ uri: { fsPath: '/test' } }] },
   window: {
-    showInformationMessage: async (msg, ...buttons) => {
-      shownMessages.push({ msg, buttons });
-      return buttons[0]; // auto-accept first button
-    },
-    withProgress: async (_opts, fn) => fn(),
+    showInformationMessage: async () => {},
+    withProgress: async (_o, fn) => fn(),
     createOutputChannel: () => ({
-      appendLine: () => {},
-      clear: () => {},
-      show: () => {},
-      dispose: () => {},
+      appendLine: () => {}, clear: () => {}, show: () => {}, dispose: () => {},
     }),
     registerWebviewViewProvider: () => ({ dispose: () => {} }),
   },
-  commands: {
-    registerCommand: () => ({ dispose: () => {} }),
-    executeCommand: async (cmd, ...args) => {
-      executedCommands.push({ cmd, args });
-    },
-  },
-  authentication: {
-    getSession: async () => ({ accessToken: 'test-gh-token' }),
-  },
-  Uri: {
-    file: (p) => ({ fsPath: p, scheme: 'file' }),
-  },
+  commands: { registerCommand: () => ({ dispose: () => {} }), executeCommand: async () => {} },
+  authentication: { getSession: async () => null },
+  Uri: { file: (p) => ({ fsPath: p, scheme: 'file' }), joinPath: (b, ...s) => ({ fsPath: [b.fsPath, ...s].join('/') }) },
   ProgressLocation: { Notification: 15 },
 };
 
-// Mock https module that captures requests
-const httpsMock = {
-  get: (url, options, callback) => {
-    const reqInfo = { url, options };
-    httpsRequests.push(reqInfo);
+let installed = false;
+function installVscodeMock() {
+  if (installed) return;
+  installed = true;
+  Module._resolveFilename = function (request, parent, isMain, options) {
+    if (request === 'vscode') return 'vscode';
+    return origResolve.call(this, request, parent, isMain, options);
+  };
+  Module._load = function (request, parent, isMain) {
+    if (request === 'vscode') return vscodeMock;
+    return origLoad.call(this, request, parent, isMain);
+  };
+}
 
-    const resp = new EventEmitter();
-    if (mockHttpsResponse) {
-      resp.statusCode = mockHttpsResponse.statusCode || 200;
-      resp.headers = mockHttpsResponse.headers || {};
-    } else {
-      resp.statusCode = 200;
-      resp.headers = {};
-    }
+// Install mock before requiring extension.js
+installVscodeMock();
+const { buildDownloadHeaders, performCliUpdate } = require('../extension');
 
-    // Simulate redirect if configured
-    if (resp.statusCode >= 300 && resp.statusCode < 400 && resp.headers.location) {
-      setImmediate(() => callback(resp));
-    } else {
-      resp.pipe = (dest) => {
-        dest.emit('finish');
-        return dest;
-      };
-      setImmediate(() => callback(resp));
-    }
+// ── Mock Client ─────────────────────────────────────────────────
 
-    return { on: () => {} };
-  },
-};
-
-// ── Mock Client for update flow tests ───────────────────────────
-
-class MockUpdateClient extends EventEmitter {
+class MockClient extends EventEmitter {
   constructor() {
     super();
     this._disposed = false;
     this._updating = false;
     this.calls = [];
-    this._serverVersion = '0.1.0';
-    this._checkUpdateResult = null;
   }
 
   async start() {
@@ -107,267 +62,157 @@ class MockUpdateClient extends EventEmitter {
 
   async stop() {
     this.calls.push('stop');
-    // Simulate daemon exit event (like real client does)
-    setImmediate(() => this.emit('exit', 0, null));
-  }
-
-  async checkUpdate(extVersion, force, token) {
-    this.calls.push({ method: 'checkUpdate', extVersion, force, token });
-    return this._checkUpdateResult;
+    this._disposed = true;
   }
 
   async selfUpdate(token) {
     this.calls.push({ method: 'selfUpdate', token });
+    // Simulate daemon crash during binary replacement —
+    // the real daemon process dies when go-selfupdate replaces the binary
+    this.emit('exit', 0, null);
     return { updated: true, latestVersion: '0.2.0' };
   }
-
-  get serverVersion() { return this._serverVersion; }
 }
 
-// ── Tests ────────────────────────────────────────────────────────
+// ── buildDownloadHeaders tests ──────────────────────────────────
+// These test the REAL exported function from extension.js.
 
-describe('Update flow', () => {
-  let mockClient;
-
-  beforeEach(() => {
-    resetMocks();
-    mockClient = new MockUpdateClient();
+describe('buildDownloadHeaders (real function)', () => {
+  it('initial request includes auth and accept headers', () => {
+    const h = buildDownloadHeaders('ghp_mytoken', false);
+    assert.strictEqual(h['Authorization'], 'Bearer ghp_mytoken');
+    assert.strictEqual(h['Accept'], 'application/octet-stream');
+    assert.strictEqual(h['User-Agent'], 'activate-extension');
   });
 
-  describe('_updating flag prevents auto-restart race', () => {
-    it('auto-restart fires when _updating is false', async () => {
-      let restartCalled = false;
-
-      // Simulate the exit handler from extension.js
-      mockClient.on('exit', () => {
-        if (!mockClient._disposed && !mockClient._updating) {
-          restartCalled = true;
-        }
-      });
-
-      // Simulate unexpected daemon death
-      mockClient.emit('exit', 1, null);
-      assert.ok(restartCalled, 'auto-restart should fire on unexpected exit');
-    });
-
-    it('auto-restart is suppressed when _updating is true', async () => {
-      let restartCalled = false;
-
-      mockClient.on('exit', () => {
-        if (!mockClient._disposed && !mockClient._updating) {
-          restartCalled = true;
-        }
-      });
-
-      // Simulate intentional update
-      mockClient._updating = true;
-      mockClient.emit('exit', 0, null);
-      assert.ok(!restartCalled, 'auto-restart should NOT fire during intentional update');
-    });
-
-    it('auto-restart is suppressed when _disposed is true', async () => {
-      let restartCalled = false;
-
-      mockClient.on('exit', () => {
-        if (!mockClient._disposed && !mockClient._updating) {
-          restartCalled = true;
-        }
-      });
-
-      mockClient._disposed = true;
-      mockClient.emit('exit', 0, null);
-      assert.ok(!restartCalled, 'auto-restart should NOT fire when disposed');
-    });
+  it('redirect request omits auth and accept', () => {
+    const h = buildDownloadHeaders('ghp_mytoken', true);
+    assert.strictEqual(h['Authorization'], undefined,
+      'auth must not be sent on redirects — S3 pre-signed URLs reject extra auth');
+    assert.strictEqual(h['Accept'], undefined);
+    assert.strictEqual(h['User-Agent'], 'activate-extension');
   });
 
-  describe('CLI update stop/start sequence', () => {
-    it('sets _updating before stop/start and clears after', async () => {
-      const flagStates = [];
-
-      // Wire up exit handler to record flag state
-      mockClient.on('exit', () => {
-        flagStates.push({ event: 'exit', updating: mockClient._updating });
-      });
-
-      // Simulate the update flow from extension.js checkForUpdates
-      mockClient._updating = true;
-      try {
-        await mockClient.selfUpdate('token');
-        await mockClient.stop();
-        // Allow the exit event to fire (emitted via setImmediate in stop())
-        await new Promise((r) => setTimeout(r, 10));
-        await mockClient.start();
-      } finally {
-        mockClient._updating = false;
-      }
-
-      // Verify the flag was true when exit fired
-      assert.ok(flagStates.length > 0, 'exit event should have fired');
-      assert.ok(flagStates[0].updating, '_updating should be true when exit fires during update');
-
-      // Verify calls happened in correct order
-      const methodCalls = mockClient.calls.filter((c) => typeof c === 'string' || c.method);
-      const callNames = methodCalls.map((c) => typeof c === 'string' ? c : c.method);
-      assert.deepStrictEqual(callNames, ['selfUpdate', 'stop', 'start']);
-    });
-
-    it('clears _updating even if stop() throws', async () => {
-      const origStop = mockClient.stop.bind(mockClient);
-      mockClient.stop = async () => {
-        origStop();
-        throw new Error('stop failed');
-      };
-
-      mockClient._updating = true;
-      try {
-        await mockClient.selfUpdate('token');
-        await mockClient.stop();
-        await mockClient.start();
-      } catch {
-        // Expected
-      } finally {
-        mockClient._updating = false;
-      }
-
-      assert.strictEqual(mockClient._updating, false, '_updating must be cleared even on error');
-    });
+  it('no token means no auth header', () => {
+    const h = buildDownloadHeaders('', false);
+    assert.strictEqual(h['Authorization'], undefined);
+    assert.strictEqual(h['Accept'], 'application/octet-stream');
   });
 
-  describe('checkUpdate token passthrough', () => {
-    it('passes token from auth session to checkUpdate RPC', async () => {
-      mockClient._checkUpdateResult = { updateAvailable: false };
+  it('null/undefined token treated as no token', () => {
+    assert.strictEqual(buildDownloadHeaders(null, false)['Authorization'], undefined);
+    assert.strictEqual(buildDownloadHeaders(undefined, false)['Authorization'], undefined);
+  });
 
-      await mockClient.checkUpdate('1.0.0', true, 'test-gh-token');
-
-      const call = mockClient.calls.find((c) => c.method === 'checkUpdate');
-      assert.ok(call, 'checkUpdate should have been called');
-      assert.strictEqual(call.token, 'test-gh-token');
-      assert.strictEqual(call.force, true);
-    });
-
-    it('passes token to selfUpdate RPC', async () => {
-      await mockClient.selfUpdate('test-gh-token');
-
-      const call = mockClient.calls.find((c) => c.method === 'selfUpdate');
-      assert.ok(call, 'selfUpdate should have been called');
-      assert.strictEqual(call.token, 'test-gh-token');
-    });
+  it('isRedirect defaults to false', () => {
+    const h = buildDownloadHeaders('tok');
+    assert.strictEqual(h['Authorization'], 'Bearer tok');
+    assert.strictEqual(h['Accept'], 'application/octet-stream');
   });
 });
 
-describe('downloadAndInstallVsix auth headers', () => {
-  // These tests verify the header construction logic by testing
-  // the actual download function behavior with a mocked https module.
+// ── performCliUpdate tests ──────────────────────────────────────
+// These test the REAL exported function from extension.js.
 
-  let downloadAndInstallVsix;
+describe('performCliUpdate (real function)', () => {
+  it('_updating is true when daemon crashes during selfUpdate', async () => {
+    const client = new MockClient();
+    const flagDuringExit = [];
 
-  beforeEach(() => {
-    resetMocks();
+    client.on('exit', () => {
+      flagDuringExit.push(client._updating);
+    });
 
-    // Clear cached modules
-    for (const key of Object.keys(require.cache)) {
-      if (key.includes('extension/src/extension.js')) {
-        delete require.cache[key];
-      }
-    }
+    await performCliUpdate(client, 'test-token');
 
-    // We can't easily import the private function, so we test the
-    // header construction logic directly.
+    // _updating should have been true when the exit event fired during selfUpdate
+    assert.ok(flagDuringExit.length > 0, 'exit event should have fired during selfUpdate()');
+    assert.strictEqual(flagDuringExit[0], true,
+      '_updating must be true when exit fires — prevents auto-restart race');
+
+    // After performCliUpdate returns, flag must be cleared
+    assert.strictEqual(client._updating, false);
   });
 
-  it('initial request should include auth and octet-stream accept', () => {
-    // Replicate the header construction from downloadAndInstallVsix
-    const token = 'ghp_testtoken';
-    const isRedirect = false;
+  it('calls selfUpdate → stop → start in order', async () => {
+    const client = new MockClient();
+    await performCliUpdate(client, 'tok');
 
-    const headers = { 'User-Agent': 'activate-extension' };
-    if (!isRedirect) {
-      headers['Accept'] = 'application/octet-stream';
-      if (token) headers['Authorization'] = `Bearer ${token}`;
-    }
-
-    assert.strictEqual(headers['Authorization'], 'Bearer ghp_testtoken');
-    assert.strictEqual(headers['Accept'], 'application/octet-stream');
+    const ops = client.calls.map((c) => typeof c === 'string' ? c : c.method);
+    assert.deepStrictEqual(ops, ['selfUpdate', 'stop', 'start']);
   });
 
-  it('redirect request should NOT include auth or accept headers', () => {
-    const token = 'ghp_testtoken';
-    const isRedirect = true;
+  it('passes token to selfUpdate', async () => {
+    const client = new MockClient();
+    await performCliUpdate(client, 'ghp_secret');
 
-    const headers = { 'User-Agent': 'activate-extension' };
-    if (!isRedirect) {
-      headers['Accept'] = 'application/octet-stream';
-      if (token) headers['Authorization'] = `Bearer ${token}`;
-    }
-
-    assert.strictEqual(headers['Authorization'], undefined,
-      'auth header must not be sent on redirects (S3 pre-signed URLs reject extra auth)');
-    assert.strictEqual(headers['Accept'], undefined,
-      'accept header must not be sent on redirects');
-    assert.strictEqual(headers['User-Agent'], 'activate-extension');
+    const call = client.calls.find((c) => c.method === 'selfUpdate');
+    assert.strictEqual(call.token, 'ghp_secret');
   });
 
-  it('initial request without token should not include auth header', () => {
-    const token = '';
-    const isRedirect = false;
+  it('clears _updating even if stop() throws', async () => {
+    const client = new MockClient();
+    client.stop = async () => { throw new Error('stop failed'); };
 
-    const headers = { 'User-Agent': 'activate-extension' };
-    if (!isRedirect) {
-      headers['Accept'] = 'application/octet-stream';
-      if (token) headers['Authorization'] = `Bearer ${token}`;
-    }
+    await assert.rejects(() => performCliUpdate(client, 'tok'));
+    assert.strictEqual(client._updating, false,
+      '_updating must be cleared on error — otherwise auto-restart is permanently suppressed');
+  });
 
-    assert.strictEqual(headers['Authorization'], undefined,
-      'no auth header when token is empty');
-    assert.strictEqual(headers['Accept'], 'application/octet-stream');
+  it('clears _updating even if start() throws', async () => {
+    const client = new MockClient();
+    client.start = async () => { throw new Error('start failed'); };
+
+    await assert.rejects(() => performCliUpdate(client, 'tok'));
+    assert.strictEqual(client._updating, false);
+  });
+
+  it('clears _updating even if selfUpdate() throws', async () => {
+    const client = new MockClient();
+    client.selfUpdate = async () => { throw new Error('rpc failed'); };
+
+    await assert.rejects(() => performCliUpdate(client, 'tok'));
+    assert.strictEqual(client._updating, false);
   });
 });
 
-describe('Update flow integration', () => {
-  it('full update sequence: check → update → stop → start → notify', async () => {
-    const client = new MockUpdateClient();
-    const events = [];
+// ── Auto-restart suppression integration ────────────────────────
 
-    // Wire up the exit handler (mirrors extension.js)
+describe('auto-restart suppression (real function)', () => {
+  it('exit during selfUpdate does NOT trigger auto-restart', async () => {
+    const client = new MockClient();
+    let autoRestartFired = false;
+
+    // Wire up the same handler as extension.js
     client.on('exit', () => {
       if (!client._disposed && !client._updating) {
-        events.push('auto-restart-triggered');
-      } else {
-        events.push('auto-restart-suppressed');
+        autoRestartFired = true;
       }
     });
 
-    // Simulate the full checkForUpdates flow
-    client._checkUpdateResult = {
-      updateAvailable: true,
-      currentVersion: '0.1.0',
-      latestVersion: '0.2.0',
-      extension: { available: false },
-    };
+    await performCliUpdate(client, 'tok');
 
-    const update = await client.checkUpdate('1.0.0', true, 'token');
+    assert.strictEqual(autoRestartFired, false,
+      'auto-restart must not fire during performCliUpdate');
+  });
 
-    if (update.updateAvailable) {
-      client._updating = true;
-      try {
-        await client.selfUpdate('token');
-        await client.stop();
-        // Allow the exit event to fire
-        await new Promise((r) => setTimeout(r, 10));
-        await client.start();
-      } finally {
-        client._updating = false;
+  it('exit AFTER performCliUpdate completes DOES trigger auto-restart', async () => {
+    const client = new MockClient();
+    let autoRestartFired = false;
+
+    client.on('exit', () => {
+      if (!client._disposed && !client._updating) {
+        autoRestartFired = true;
       }
-    }
+    });
 
-    // Verify auto-restart was suppressed
-    assert.ok(events.includes('auto-restart-suppressed'),
-      'auto-restart should be suppressed during update');
-    assert.ok(!events.includes('auto-restart-triggered'),
-      'auto-restart should NOT have been triggered');
+    await performCliUpdate(client, 'tok');
 
-    // Verify the correct sequence of operations
-    const ops = client.calls.map((c) => typeof c === 'string' ? c : c.method);
-    assert.deepStrictEqual(ops, ['checkUpdate', 'selfUpdate', 'stop', 'start']);
+    // Reset state — simulate a new daemon that crashes unexpectedly
+    client._disposed = false;
+    autoRestartFired = false;
+    client.emit('exit', 1, null);
+    assert.strictEqual(autoRestartFired, true,
+      'auto-restart should work normally after update completes');
   });
 });
