@@ -19,11 +19,14 @@ const tempDirs = [];
 
 // ── Binary resolution ─────────────────────────────────────────
 
+const GITHUB_OWNER = 'peregrine-digital';
+const GITHUB_REPO = 'activate-framework';
+
 /**
- * Resolve the `activate` binary: bundled first, then PATH.
- * @returns {string|null}
+ * Resolve the `activate` binary: bundled → dev → ~/.activate/bin → PATH → auto-install.
+ * @returns {Promise<string|null>}
  */
-function resolveBinPath(context) {
+async function resolveBinPath(context) {
   // 1. Bundled in extension package (production)
   const bundled = path.join(context.extensionUri.fsPath, 'bin', 'activate');
   if (fs.existsSync(bundled)) return bundled;
@@ -32,17 +35,57 @@ function resolveBinPath(context) {
   const dev = path.join(context.extensionUri.fsPath, '..', 'cli', 'activate');
   if (fs.existsSync(dev)) return dev;
 
-  // 3. On system PATH
+  // 3. ~/.activate/bin/activate (installed by install.sh)
+  const home = os.homedir();
+  const managed = path.join(home, '.activate', 'bin', 'activate');
+  if (fs.existsSync(managed)) return managed;
+
+  // 4. On system PATH
   try {
-    return execFileSync('which', ['activate'], { encoding: 'utf8' }).trim();
+    const which = process.platform === 'win32' ? 'where' : 'which';
+    return execFileSync(which, ['activate'], { encoding: 'utf8' }).trim().split('\n')[0];
   } catch {
     // not on PATH
   }
 
+  // 5. Auto-install from GitHub release
+  const installed = await autoInstallCLI();
+  if (installed) return managed;
+
   vscode.window.showErrorMessage(
-    'Activate CLI binary not found. Run "make build" in cli/ or install the CLI.',
+    'Activate CLI binary not found. Install it with: curl -fsSL https://raw.githubusercontent.com/peregrine-digital/activate-framework/main/install.sh | sh',
   );
   return null;
+}
+
+/**
+ * Prompt user and run the install script to download the CLI binary.
+ * @returns {Promise<boolean>} true if install succeeded
+ */
+async function autoInstallCLI() {
+  const action = await vscode.window.showInformationMessage(
+    'Activate CLI not found. Download it automatically?',
+    'Install',
+    'Cancel',
+  );
+  if (action !== 'Install') return false;
+
+  return vscode.window.withProgress(
+    { location: vscode.ProgressLocation.Notification, title: 'Installing Activate CLI…' },
+    () => new Promise((resolve) => {
+      const installUrl = `https://raw.githubusercontent.com/${GITHUB_OWNER}/${GITHUB_REPO}/main/install.sh`;
+      const { exec } = require('child_process');
+      exec(`curl -fsSL ${installUrl} | sh`, (err, stdout, stderr) => {
+        if (err) {
+          vscode.window.showErrorMessage(`CLI install failed: ${stderr || err.message}`);
+          resolve(false);
+        } else {
+          vscode.window.showInformationMessage('Activate CLI installed successfully.');
+          resolve(true);
+        }
+      });
+    }),
+  );
 }
 
 // ── Activation ────────────────────────────────────────────────
@@ -52,7 +95,7 @@ async function activate(context) {
   if (!workspaceFolder) return;
 
   const projectDir = workspaceFolder.uri.fsPath;
-  const binPath = resolveBinPath(context);
+  const binPath = await resolveBinPath(context);
   if (!binPath) return;
 
   const outputChannel = vscode.window.createOutputChannel('Activate Framework');
