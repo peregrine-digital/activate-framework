@@ -70,15 +70,19 @@ async function autoInstallCLI() {
   );
   if (action !== 'Install') return false;
 
-  const extVersion = require('../../package.json').version;
-  const ref = `v${extVersion}`;
-  const installUrl = `https://raw.githubusercontent.com/${GITHUB_OWNER}/${GITHUB_REPO}/${ref}/install.sh`;
+  try {
+    const extVersion = require('../package.json').version;
+    const ref = `v${extVersion}`;
+    const installUrl = `https://raw.githubusercontent.com/${GITHUB_OWNER}/${GITHUB_REPO}/${ref}/install.sh`;
 
-  const terminal = vscode.window.createTerminal({ name: 'Activate CLI Install' });
-  terminal.show();
-  terminal.sendText(`curl -fsSL ${installUrl} | sh`);
-
-  return true;
+    const terminal = vscode.window.createTerminal({ name: 'Activate CLI Install' });
+    terminal.show();
+    terminal.sendText(`curl -fsSL ${installUrl} | sh`);
+    return true;
+  } catch (err) {
+    vscode.window.showErrorMessage(`CLI install failed: ${err.message}`);
+    return false;
+  }
 }
 
 // ── Activation ────────────────────────────────────────────────
