@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"runtime"
+	"strings"
 
 	"github.com/creativeprojects/go-selfupdate"
 )
@@ -16,6 +17,11 @@ const (
 	// GitHubRepo is the repository name for release lookups.
 	GitHubRepo = "activate-framework"
 )
+
+// isPrerelease returns true if the version string contains a pre-release suffix.
+func isPrerelease(version string) bool {
+	return strings.ContainsAny(version, "-+")
+}
 
 // Result describes what happened during a self-update attempt.
 type Result struct {
@@ -33,9 +39,10 @@ func CheckUpdate(currentVersion string) (*Result, error) {
 	}
 
 	updater, err := selfupdate.NewUpdater(selfupdate.Config{
-		Source:    source,
-		OS:       runtime.GOOS,
-		Arch:     runtime.GOARCH,
+		Source:      source,
+		OS:         runtime.GOOS,
+		Arch:       runtime.GOARCH,
+		Prerelease: isPrerelease(currentVersion),
 		OldSavePath: "",
 	})
 	if err != nil {
@@ -77,9 +84,10 @@ func Run(currentVersion string) (*Result, error) {
 	}
 
 	updater, err := selfupdate.NewUpdater(selfupdate.Config{
-		Source: source,
-		OS:     runtime.GOOS,
-		Arch:   runtime.GOARCH,
+		Source:     source,
+		OS:         runtime.GOOS,
+		Arch:       runtime.GOARCH,
+		Prerelease: isPrerelease(currentVersion),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("creating updater: %w", err)
