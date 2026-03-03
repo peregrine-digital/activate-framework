@@ -34,22 +34,32 @@ type Result struct {
 	Message        string `json:"message"`
 }
 
-// CheckUpdate checks whether a newer release is available without applying it.
-func CheckUpdate(currentVersion, token string) (*Result, error) {
+// updaterConfig builds the go-selfupdate Config for a given version and token.
+// Extracted for testability — callers can verify that the Prerelease flag
+// and token are set correctly without hitting the network.
+func updaterConfig(currentVersion, token string) (selfupdate.Config, error) {
 	source, err := selfupdate.NewGitHubSource(selfupdate.GitHubConfig{
 		APIToken: token,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("creating update source: %w", err)
+		return selfupdate.Config{}, fmt.Errorf("creating update source: %w", err)
+	}
+	return selfupdate.Config{
+		Source:     source,
+		OS:        runtime.GOOS,
+		Arch:      runtime.GOARCH,
+		Prerelease: isPrerelease(currentVersion),
+	}, nil
+}
+
+// CheckUpdate checks whether a newer release is available without applying it.
+func CheckUpdate(currentVersion, token string) (*Result, error) {
+	cfg, err := updaterConfig(currentVersion, token)
+	if err != nil {
+		return nil, err
 	}
 
-	updater, err := selfupdate.NewUpdater(selfupdate.Config{
-		Source:      source,
-		OS:         runtime.GOOS,
-		Arch:       runtime.GOARCH,
-		Prerelease: isPrerelease(currentVersion),
-		OldSavePath: "",
-	})
+	updater, err := selfupdate.NewUpdater(cfg)
 	if err != nil {
 		return nil, fmt.Errorf("creating updater: %w", err)
 	}
@@ -83,19 +93,12 @@ func CheckUpdate(currentVersion, token string) (*Result, error) {
 
 // Run checks for the latest release and applies the update to the running binary.
 func Run(currentVersion, token string) (*Result, error) {
-	source, err := selfupdate.NewGitHubSource(selfupdate.GitHubConfig{
-		APIToken: token,
-	})
+	cfg, err := updaterConfig(currentVersion, token)
 	if err != nil {
-		return nil, fmt.Errorf("creating update source: %w", err)
+		return nil, err
 	}
 
-	updater, err := selfupdate.NewUpdater(selfupdate.Config{
-		Source:     source,
-		OS:         runtime.GOOS,
-		Arch:       runtime.GOARCH,
-		Prerelease: isPrerelease(currentVersion),
-	})
+	updater, err := selfupdate.NewUpdater(cfg)
 	if err != nil {
 		return nil, fmt.Errorf("creating updater: %w", err)
 	}

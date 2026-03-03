@@ -376,4 +376,74 @@ describe('ActivateClient', () => {
       /Daemon not running/,
     );
   });
+
+  // ── Update RPC wire format tests ─────────────────────────────
+
+  it('checkUpdate sends token, force, and extensionVersion in params', async () => {
+    const { client, nextRequest, sendResponse } = createMockClient();
+
+    const resultPromise = client.checkUpdate('1.2.3', true, 'ghp_mytoken');
+    const req = await nextRequest();
+
+    assert.strictEqual(req.method, Method.CheckUpdate);
+    assert.strictEqual(req.params.extensionVersion, '1.2.3');
+    assert.strictEqual(req.params.force, true);
+    assert.strictEqual(req.params.token, 'ghp_mytoken');
+
+    sendResponse(req.id, { updateAvailable: false });
+    await resultPromise;
+  });
+
+  it('checkUpdate defaults force to false and token to empty', async () => {
+    const { client, nextRequest, sendResponse } = createMockClient();
+
+    const resultPromise = client.checkUpdate('1.0.0', false, '');
+    const req = await nextRequest();
+
+    assert.strictEqual(req.params.force, false);
+    assert.strictEqual(req.params.token, '');
+
+    sendResponse(req.id, { updateAvailable: false });
+    await resultPromise;
+  });
+
+  it('checkUpdate coerces falsy values correctly', async () => {
+    const { client, nextRequest, sendResponse } = createMockClient();
+
+    // Pass undefined/null — should coerce to false/empty
+    const resultPromise = client.checkUpdate(undefined, undefined, null);
+    const req = await nextRequest();
+
+    assert.strictEqual(req.params.extensionVersion, '');
+    assert.strictEqual(req.params.force, false);
+    assert.strictEqual(req.params.token, '');
+
+    sendResponse(req.id, { updateAvailable: false });
+    await resultPromise;
+  });
+
+  it('selfUpdate sends token in params', async () => {
+    const { client, nextRequest, sendResponse } = createMockClient();
+
+    const resultPromise = client.selfUpdate('ghp_updatetoken');
+    const req = await nextRequest();
+
+    assert.strictEqual(req.method, Method.SelfUpdate);
+    assert.strictEqual(req.params.token, 'ghp_updatetoken');
+
+    sendResponse(req.id, { updated: true, latestVersion: '0.2.0' });
+    await resultPromise;
+  });
+
+  it('selfUpdate sends empty token when none provided', async () => {
+    const { client, nextRequest, sendResponse } = createMockClient();
+
+    const resultPromise = client.selfUpdate();
+    const req = await nextRequest();
+
+    assert.strictEqual(req.params.token, '');
+
+    sendResponse(req.id, { updated: false });
+    await resultPromise;
+  });
 });
