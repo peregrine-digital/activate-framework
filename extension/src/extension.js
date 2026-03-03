@@ -17,6 +17,15 @@ let installDir = '.github';
 /** Temp directories created for diff views; cleaned up on deactivate. */
 const tempDirs = [];
 
+// ── Polling constants ─────────────────────────────────────────
+
+/** How often to check for the CLI binary after install (ms). */
+const POLL_INTERVAL_MS = 2000;
+/** Delay after binary detected before verifying (ms). */
+const POST_DETECT_DELAY_MS = 2000;
+/** Stop polling after this duration (ms). */
+const POLL_TIMEOUT_MS = 300000;
+
 // ── Binary resolution ─────────────────────────────────────────
 
 const GITHUB_OWNER = 'peregrine-digital';
@@ -148,7 +157,7 @@ async function activate(context) {
           if (fs.existsSync(managed)) {
             clearInterval(poll);
             // Brief delay — let the install script finish fully
-            await new Promise((r) => setTimeout(r, 2000));
+            await new Promise((r) => setTimeout(r, POST_DETECT_DELAY_MS));
             // Verify binary is executable
             const verifyErr = verifyBinary(managed);
             if (verifyErr) {
@@ -164,9 +173,9 @@ async function activate(context) {
               vscode.window.showErrorMessage(`Activate CLI installed but failed to start: ${err.message}`);
             }
           }
-        }, 2000);
+        }, POLL_INTERVAL_MS);
         // Stop polling after 5 minutes
-        setTimeout(() => clearInterval(poll), 300000);
+        setTimeout(() => clearInterval(poll), POLL_TIMEOUT_MS);
       });
     }),
 
@@ -608,63 +617,77 @@ async function checkForUpdates(context, force = false) {
   }
 }
 
-function downloadAndInstallVsix(url, filename, expectedSha256, token) {
-  return new Promise((resolve, reject) => {
-    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'activate-vsix-'));
-    tempDirs.push(tmpDir);
-    const dest = path.join(tmpDir, filename);
-    const file = fs.createWriteStream(dest);
+/**
+ * Verify SHA-256 checksum of a downloaded file.
+ * Throws on mismatch, no-ops if expectedSha256 is falsy.
+ * Exported for testability.
+ */
+function verifyChecksum(filePath, expectedSha256) {
+  if (!expectedSha256) return;
+  const data = fs.readFileSync(filePath);
+  const actual = createHash('sha256').update(data).digest('hex');
+  if (actual !== expectedSha256) {
+    throw new Error(
+      `Checksum mismatch: expected ${expectedSha256}, got ${actual}. ` +
+      'Download may be corrupted or tampered with.',
+    );
+  }
+}
 
+/**
+ * Download a file, following redirects with correct auth headers.
+ * Uses http or https based on URL protocol (enables testing with http.createServer).
+ * Exported for testability.
+ */
+function downloadFile(url, destPath, token) {
+  return new Promise((resolve, reject) => {
+    const file = fs.createWriteStream(destPath);
     const get = (reqUrl, isRedirect = false) => {
       const headers = buildDownloadHeaders(token, isRedirect);
-      https.get(reqUrl, { headers }, (resp) => {
-        // Follow redirects (GitHub API asset endpoint redirects to S3)
+      const mod = reqUrl.startsWith('https') ? https : require('http');
+      mod.get(reqUrl, { headers }, (resp) => {
         if (resp.statusCode >= 300 && resp.statusCode < 400 && resp.headers.location) {
           get(resp.headers.location, true);
           return;
         }
         if (resp.statusCode !== 200) {
+          file.close();
           reject(new Error(`Download failed: ${resp.statusCode}`));
           return;
         }
         resp.pipe(file);
-        file.on('finish', async () => {
+        file.on('finish', () => {
           file.close();
-          try {
-            // Verify SHA-256 checksum if provided
-            if (expectedSha256) {
-              const data = fs.readFileSync(dest);
-              const actual = createHash('sha256').update(data).digest('hex');
-              if (actual !== expectedSha256) {
-                reject(new Error(
-                  `Checksum mismatch: expected ${expectedSha256}, got ${actual}. ` +
-                  'Download may be corrupted or tampered with.',
-                ));
-                return;
-              }
-            }
-
-            await vscode.commands.executeCommand(
-              'workbench.extensions.installExtension',
-              vscode.Uri.file(dest),
-            );
-            const action = await vscode.window.showInformationMessage(
-              'Activate extension updated. Reload to apply changes.',
-              'Reload',
-            );
-            if (action === 'Reload') {
-              await vscode.commands.executeCommand('workbench.action.reloadWindow');
-            }
-            resolve();
-          } catch (err) {
-            reject(err);
-          }
+          resolve();
         });
-      }).on('error', reject);
+      }).on('error', (err) => {
+        file.close();
+        reject(err);
+      });
     };
-
     get(url);
   });
+}
+
+async function downloadAndInstallVsix(url, filename, expectedSha256, token) {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'activate-vsix-'));
+  tempDirs.push(tmpDir);
+  const dest = path.join(tmpDir, filename);
+
+  await downloadFile(url, dest, token);
+  verifyChecksum(dest, expectedSha256);
+
+  await vscode.commands.executeCommand(
+    'workbench.extensions.installExtension',
+    vscode.Uri.file(dest),
+  );
+  const action = await vscode.window.showInformationMessage(
+    'Activate extension updated. Reload to apply changes.',
+    'Reload',
+  );
+  if (action === 'Reload') {
+    await vscode.commands.executeCommand('workbench.action.reloadWindow');
+  }
 }
 
 // ── Deactivation ──────────────────────────────────────────────
@@ -685,4 +708,8 @@ async function deactivate() {
   tempDirs.length = 0;
 }
 
-module.exports = { activate, deactivate, buildDownloadHeaders, performCliUpdate, verifyBinary, resolveBinPath };
+module.exports = {
+  activate, deactivate, buildDownloadHeaders, performCliUpdate,
+  verifyBinary, resolveBinPath, verifyChecksum, downloadFile,
+  POLL_INTERVAL_MS, POST_DETECT_DELAY_MS, POLL_TIMEOUT_MS,
+};
