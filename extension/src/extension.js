@@ -411,6 +411,14 @@ async function activate(context) {
         vscode.window.showErrorMessage(`Telemetry run failed: ${err.message}`);
       }
     }),
+
+    vscode.commands.registerCommand('activate-framework.checkForUpdates', async () => {
+      if (!requireClient()) return;
+      await vscode.window.withProgress(
+        { location: vscode.ProgressLocation.Notification, title: 'Checking for updates…' },
+        () => checkForUpdates(context),
+      );
+    }),
   );
 
   // ── Resolve CLI and start daemon ──────────────────────────
@@ -494,10 +502,16 @@ async function checkForUpdates(context) {
   try {
     const extVersion = context.extension?.packageJSON?.version || '';
     const update = await client.checkUpdate(extVersion);
-    if (!update) return;
+    if (!update) {
+      vscode.window.showInformationMessage('Activate is up to date.');
+      return;
+    }
+
+    let foundUpdate = false;
 
     // CLI binary update
     if (update.updateAvailable) {
+      foundUpdate = true;
       const action = await vscode.window.showInformationMessage(
         `Activate CLI update available: v${update.currentVersion} → v${update.latestVersion}`,
         'Update Now',
@@ -519,6 +533,7 @@ async function checkForUpdates(context) {
     // Extension VSIX update
     const ext = update.extension;
     if (ext && ext.available && ext.downloadUrl) {
+      foundUpdate = true;
       const action = await vscode.window.showInformationMessage(
         `Activate extension update available: v${extVersion} → v${ext.version}`,
         'Update Now',
@@ -531,8 +546,12 @@ async function checkForUpdates(context) {
         );
       }
     }
+
+    if (!foundUpdate) {
+      vscode.window.showInformationMessage('Activate is up to date.');
+    }
   } catch {
-    // Silently ignore update check failures
+    // Silently ignore update check failures on auto-check
   }
 }
 

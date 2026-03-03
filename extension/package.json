@@ -113,6 +113,10 @@
       {
         "command": "activate-framework.installCLI",
         "title": "Peregrine Activate: Install CLI"
+      },
+      {
+        "command": "activate-framework.checkForUpdates",
+        "title": "Peregrine Activate: Check for Updates"
       }
     ],
     "configuration": {
