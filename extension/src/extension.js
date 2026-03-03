@@ -133,8 +133,19 @@ async function activate(context) {
         const poll = setInterval(async () => {
           if (fs.existsSync(managed)) {
             clearInterval(poll);
+            // Brief delay — let the install script finish fully
+            await new Promise((r) => setTimeout(r, 2000));
+            // Verify binary is executable
+            try {
+              execFileSync(managed, ['version'], { encoding: 'utf8', timeout: 5000 });
+            } catch (verifyErr) {
+              outputChannel.appendLine(`[error] Binary exists but not runnable: ${verifyErr.message}`);
+              vscode.window.showErrorMessage('Activate CLI was installed but cannot run. Check the Output panel for details.');
+              return;
+            }
             try {
               await startDaemon(context, managed, projectDir, outputChannel, controlPanel);
+              vscode.window.showInformationMessage('Activate CLI installed and running!');
             } catch (err) {
               outputChannel.appendLine(`[error] Failed to start daemon after install: ${err.message}`);
               vscode.window.showErrorMessage(`Activate CLI installed but failed to start: ${err.message}`);

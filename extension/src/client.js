@@ -132,6 +132,7 @@ class ActivateClient extends EventEmitter {
 
     this._process = spawn(this._binPath, ['serve', '--stdio'], {
       stdio: ['pipe', 'pipe', 'pipe'],
+      cwd: this._projectDir,
     });
 
     this._process.on('exit', (code, signal) => {
