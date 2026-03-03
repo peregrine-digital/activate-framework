@@ -651,6 +651,147 @@ func TestDaemonTelemetryLog(t *testing.T) {
 	}
 }
 
+// newEmptyHarness creates a daemon with NO manifests, simulating what happens
+// when `serve --stdio` starts before manifest discovery (the real main.go path).
+// This catches regressions where the daemon crashes or blocks without manifests.
+func newEmptyHarness(t *testing.T) *harness {
+	t.Helper()
+
+	homeDir := t.TempDir()
+	old := storage.ActivateBaseDir
+	storage.ActivateBaseDir = homeDir
+	t.Cleanup(func() { storage.ActivateBaseDir = old })
+
+	projectDir := t.TempDir()
+
+	// No config, no manifests, no bundle — bare minimum
+	svc := NewService("", nil, model.Config{}, false, "", "")
+
+	clientRead, serverWrite := io.Pipe()
+	serverRead, clientWrite := io.Pipe()
+
+	serverTransport := transport.NewTransport(serverRead, serverWrite)
+	clientReader := bufio.NewReader(clientRead)
+
+	daemon := NewDaemon(svc, serverTransport, "1.0.0-test")
+
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- daemon.Serve()
+	}()
+
+	cleanup := func() {
+		clientWrite.Close()
+		clientRead.Close()
+		<-errCh
+	}
+
+	return &harness{
+		clientWriter: clientWrite,
+		clientReader: clientReader,
+		projectDir:   projectDir,
+		cleanup:      cleanup,
+	}
+}
+
+// TestDaemonServeWithoutManifests verifies that the daemon starts and responds
+// to initialize even when no manifests are available. This mirrors main.go where
+// `serve` is dispatched BEFORE manifest discovery — manifests are loaded lazily
+// during initialize when a projectDir is provided.
+func TestDaemonServeWithoutManifests(t *testing.T) {
+	h := newEmptyHarness(t)
+	defer h.cleanup()
+
+	// Initialize with no projectDir — daemon should still respond
+	resp := sendRequest(t, h.clientWriter, h.clientReader, transport.MethodInitialize, 1, nil)
+	m := resultMap(t, resp)
+
+	// Version should come through
+	if m["version"] != "1.0.0-test" {
+		t.Errorf("version = %v, want 1.0.0-test", m["version"])
+	}
+	// Capabilities should be present
+	caps, ok := m["capabilities"].([]interface{})
+	if !ok || len(caps) == 0 {
+		t.Error("expected non-empty capabilities even without manifests")
+	}
+}
+
+// TestDaemonNoManifestsStateGet verifies that stateGet works without manifests,
+// returning an empty/default state rather than crashing.
+func TestDaemonNoManifestsStateGet(t *testing.T) {
+	h := newEmptyHarness(t)
+	defer h.cleanup()
+
+	sendRequest(t, h.clientWriter, h.clientReader, transport.MethodInitialize, 1, nil)
+
+	resp := sendRequest(t, h.clientWriter, h.clientReader, transport.MethodStateGet, 2, nil)
+	// Should succeed (not crash) even without manifests
+	if resp.Error != nil {
+		t.Fatalf("stateGet should not error without manifests: %v", resp.Error)
+	}
+}
+
+// TestDaemonNoManifestsManifestList verifies that listing manifests returns
+// an empty list (not an error or crash) when no manifests are available.
+func TestDaemonNoManifestsManifestList(t *testing.T) {
+	h := newEmptyHarness(t)
+	defer h.cleanup()
+
+	sendRequest(t, h.clientWriter, h.clientReader, transport.MethodInitialize, 1, nil)
+
+	resp := sendRequest(t, h.clientWriter, h.clientReader, transport.MethodManifestList, 2, nil)
+	if resp.Error != nil {
+		t.Fatalf("manifestList should not error without manifests: %v", resp.Error)
+	}
+
+	data, _ := json.Marshal(resp.Result)
+	var manifests []interface{}
+	if err := json.Unmarshal(data, &manifests); err != nil {
+		// null is acceptable
+		if string(data) != "null" {
+			t.Fatalf("unexpected result: %s", string(data))
+		}
+		return
+	}
+	if len(manifests) != 0 {
+		t.Errorf("expected 0 manifests, got %d", len(manifests))
+	}
+}
+
+// TestDaemonServeBeforeDiscoveryOrder verifies the contract that main.go relies on:
+// the daemon can accept requests, then initialize with a projectDir later.
+func TestDaemonServeBeforeDiscoveryOrder(t *testing.T) {
+	h := newEmptyHarness(t)
+	defer h.cleanup()
+
+	// 1. Initialize with no projectDir (daemon starts before manifests are known)
+	resp1 := sendRequest(t, h.clientWriter, h.clientReader, transport.MethodInitialize, 1, nil)
+	if resp1.Error != nil {
+		t.Fatalf("empty initialize failed: %v", resp1.Error)
+	}
+
+	// 2. stateGet should work (empty state)
+	resp2 := sendRequest(t, h.clientWriter, h.clientReader, transport.MethodStateGet, 2, nil)
+	if resp2.Error != nil {
+		t.Fatalf("stateGet after empty init failed: %v", resp2.Error)
+	}
+
+	// 3. Re-initialize with a projectDir (simulates extension sending initialize)
+	resp3 := sendRequest(t, h.clientWriter, h.clientReader, transport.MethodInitialize, 3,
+		transport.InitializeParams{ProjectDir: h.projectDir})
+	if resp3.Error != nil {
+		t.Fatalf("re-initialize with projectDir failed: %v", resp3.Error)
+	}
+
+	// 4. stateGet should now reflect the projectDir
+	resp4 := sendRequest(t, h.clientWriter, h.clientReader, transport.MethodStateGet, 4, nil)
+	m := resultMap(t, resp4)
+	if m["projectDir"] != h.projectDir {
+		t.Errorf("projectDir = %v, want %v", m["projectDir"], h.projectDir)
+	}
+}
+
 func TestDaemonTelemetryRunDisabled(t *testing.T) {
 	h := newHarness(t)
 	defer h.cleanup()

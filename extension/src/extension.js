@@ -95,6 +95,20 @@ async function autoInstallCLI() {
   }
 }
 
+/**
+ * Verify a binary is executable by running `<binary> version`.
+ * Returns null on success, or an Error on failure.
+ * Exported for testability.
+ */
+function verifyBinary(binaryPath) {
+  try {
+    execFileSync(binaryPath, ['version'], { encoding: 'utf8', timeout: 5000 });
+    return null;
+  } catch (err) {
+    return err;
+  }
+}
+
 // ── Activation ────────────────────────────────────────────────
 
 async function activate(context) {
@@ -136,9 +150,8 @@ async function activate(context) {
             // Brief delay — let the install script finish fully
             await new Promise((r) => setTimeout(r, 2000));
             // Verify binary is executable
-            try {
-              execFileSync(managed, ['version'], { encoding: 'utf8', timeout: 5000 });
-            } catch (verifyErr) {
+            const verifyErr = verifyBinary(managed);
+            if (verifyErr) {
               outputChannel.appendLine(`[error] Binary exists but not runnable: ${verifyErr.message}`);
               vscode.window.showErrorMessage('Activate CLI was installed but cannot run. Check the Output panel for details.');
               return;
@@ -672,4 +685,4 @@ async function deactivate() {
   tempDirs.length = 0;
 }
 
-module.exports = { activate, deactivate, buildDownloadHeaders, performCliUpdate };
+module.exports = { activate, deactivate, buildDownloadHeaders, performCliUpdate, verifyBinary, resolveBinPath };
