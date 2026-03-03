@@ -231,6 +231,22 @@ func main() {
 		}
 	}
 
+	// ── Serve daemon (no manifests needed — discovered during initialize) ──
+	if args.command == "serve" {
+		if !args.stdio {
+			fmt.Fprintln(os.Stderr, "Error: serve requires --stdio")
+			os.Exit(1)
+		}
+		svc := commands.NewService("", nil, model.Config{}, args.remote, args.repo, args.branch)
+		t := transport.NewTransport(os.Stdin, os.Stdout)
+		daemon := commands.NewDaemon(svc, t, version)
+		if err := daemon.Serve(); err != nil {
+			fmt.Fprintf(os.Stderr, "daemon error: %s\n", err)
+			os.Exit(1)
+		}
+		return
+	}
+
 	// ── Discover manifests ──────────────────────────────────────
 	var manifests []model.Manifest
 	var err error
@@ -310,18 +326,6 @@ func main() {
 	case "sync":
 		if err := commands.RunSyncCommand(svc, args.json, printJSON); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %s\n", err)
-			os.Exit(1)
-		}
-
-	case "serve":
-		if !args.stdio {
-			fmt.Fprintln(os.Stderr, "Error: serve requires --stdio")
-			os.Exit(1)
-		}
-		t := transport.NewTransport(os.Stdin, os.Stdout)
-		daemon := commands.NewDaemon(svc, t, version)
-		if err := daemon.Serve(); err != nil {
-			fmt.Fprintf(os.Stderr, "daemon error: %s\n", err)
 			os.Exit(1)
 		}
 

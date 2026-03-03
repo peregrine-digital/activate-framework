@@ -2,6 +2,7 @@ package commands
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 
 	"github.com/peregrine-digital/activate-framework/cli/engine"
@@ -71,6 +72,38 @@ func (s *ActivateService) Initialize(projectDir string) {
 		s.ProjectDir = projectDir
 		s.refreshConfig()
 	}
+
+	// Discover manifests if not already loaded
+	if len(s.Manifests) == 0 {
+		s.discoverManifests()
+	}
+}
+
+// discoverManifests tries to find manifests from the executable dir or project dir.
+func (s *ActivateService) discoverManifests() {
+	if s.UseRemote {
+		m, err := engine.DiscoverRemoteManifests(s.Repo, s.Branch)
+		if err == nil {
+			s.Manifests = m
+		}
+		return
+	}
+
+	// Try executable directory first, then project directory
+	for _, base := range []string{resolveExeDir(), s.ProjectDir} {
+		if base == "" {
+			continue
+		}
+		bundleDir, err := engine.ResolveBundleDir(base)
+		if err != nil {
+			continue
+		}
+		m, err := engine.DiscoverManifests(bundleDir)
+		if err == nil && len(m) > 0 {
+			s.Manifests = m
+			return
+		}
+	}
 }
 
 func (s *ActivateService) RefreshConfig()                { s.refreshConfig() }
@@ -80,6 +113,15 @@ func (s *ActivateService) CurrentProjectDir() string     { return s.ProjectDir }
 func (s *ActivateService) IsRemoteMode() bool            { return s.UseRemote }
 func (s *ActivateService) RemoteRepo() string            { return s.Repo }
 func (s *ActivateService) RemoteBranch() string          { return s.Branch }
+
+// resolveExeDir returns the directory containing the current executable.
+func resolveExeDir() string {
+	exe, err := os.Executable()
+	if err != nil {
+		return ""
+	}
+	return filepath.Dir(exe)
+}
 
 // ── Result types ───────────────────────────────────────────────
 
