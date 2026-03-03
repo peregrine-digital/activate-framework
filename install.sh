@@ -176,6 +176,82 @@ verify_checksum() {
   echo "✓ Checksum verified."
 }
 
+# --- PATH management ---
+# Writes PATH entry to shell profile files, similar to rustup/nvm.
+# Idempotent: uses a marker comment to avoid duplicate entries.
+
+ACTIVATE_MARKER="# Added by Activate CLI installer"
+
+# Append a PATH entry to a single profile file (idempotent).
+_add_line() {
+  profile="$1"
+  line="$2"
+  [ -z "$profile" ] && return
+
+  # Already present
+  if [ -f "$profile" ] && grep -qF "$ACTIVATE_MARKER" "$profile"; then
+    return
+  fi
+
+  # Create parent dirs if needed (e.g. fish config)
+  mkdir -p "$(dirname "$profile")"
+
+  printf '\n%s\n%s\n' "$ACTIVATE_MARKER" "$line" >> "$profile"
+  echo "  ✓ Updated $profile"
+}
+
+add_to_path() {
+  dir="$1"
+
+  # If already in PATH, nothing to do
+  if echo "$PATH" | tr ':' '\n' | grep -qx "$dir"; then
+    return
+  fi
+
+  SHELL_NAME=$(basename "${SHELL:-/bin/sh}")
+  EXPORT_LINE="export PATH=\"${dir}:\$PATH\""
+  modified=false
+
+  case "$SHELL_NAME" in
+    zsh)
+      # .zshenv is sourced by ALL zsh sessions (login, interactive, scripts)
+      _add_line "$HOME/.zshenv" "$EXPORT_LINE"
+      modified=true
+      ;;
+    bash)
+      # .bashrc for interactive shells
+      _add_line "$HOME/.bashrc" "$EXPORT_LINE"
+      # .bash_profile for login shells (macOS Terminal.app uses login shells)
+      if [ -f "$HOME/.bash_profile" ]; then
+        _add_line "$HOME/.bash_profile" "$EXPORT_LINE"
+      fi
+      modified=true
+      ;;
+    fish)
+      _add_line "$HOME/.config/fish/config.fish" "fish_add_path $dir"
+      modified=true
+      ;;
+  esac
+
+  # POSIX fallback — .profile is sourced by sh, dash, and bash login shells
+  # when .bash_profile doesn't exist. Always write it for portability.
+  if [ "$SHELL_NAME" != "fish" ]; then
+    _add_line "$HOME/.profile" "$EXPORT_LINE"
+    modified=true
+  fi
+
+  if [ "$modified" = true ]; then
+    echo "✓ PATH updated. Restart your terminal to apply."
+  else
+    echo ""
+    echo "Add Activate to your PATH manually:"
+    echo "  $EXPORT_LINE"
+  fi
+
+  # Make available for rest of this script
+  export PATH="$dir:$PATH"
+}
+
 # --- Main ---
 
 main() {
@@ -214,39 +290,7 @@ main() {
   mv "${TMPDIR}/${BINARY_NAME}" "${INSTALL_DIR}/${BINARY_NAME}"
 
   # Add to PATH if not already there
-  if ! echo "$PATH" | tr ':' '\n' | grep -qx "$INSTALL_DIR"; then
-    SHELL_NAME=$(basename "${SHELL:-/bin/sh}")
-    case "$SHELL_NAME" in
-      zsh)  RC="$HOME/.zshrc" ;;
-      bash) RC="$HOME/.bashrc" ;;
-      fish) RC="$HOME/.config/fish/config.fish" ;;
-      *)    RC="" ;;
-    esac
-
-    if [ -n "$RC" ]; then
-      MARKER="# Added by Activate CLI installer"
-      if [ -f "$RC" ] && grep -qF "$MARKER" "$RC"; then
-        echo "PATH entry already in $RC"
-      else
-        echo "" >> "$RC"
-        if [ "$SHELL_NAME" = "fish" ]; then
-          echo "$MARKER" >> "$RC"
-          echo "fish_add_path $INSTALL_DIR" >> "$RC"
-        else
-          echo "$MARKER" >> "$RC"
-          echo "export PATH=\"$INSTALL_DIR:\$PATH\"" >> "$RC"
-        fi
-        echo "✓ Added $INSTALL_DIR to PATH in $RC"
-        echo "  Restart your terminal or run: source $RC"
-      fi
-    else
-      echo ""
-      echo "Add Activate to your PATH manually:"
-      echo "  export PATH=\"$INSTALL_DIR:\$PATH\""
-    fi
-    # Also export for the current script session
-    export PATH="$INSTALL_DIR:$PATH"
-  fi
+  add_to_path "$INSTALL_DIR"
 
   echo ""
   echo "✓ Activate CLI v${VER} installed to ${INSTALL_DIR}/${BINARY_NAME}"
