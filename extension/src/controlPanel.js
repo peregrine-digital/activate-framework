@@ -454,7 +454,7 @@ class ControlPanelProvider {
     .status-bar .gear-btn {
       cursor: pointer;
       opacity: 0.6;
-      font-size: 14px;
+      font-size: 20px;
       padding: 2px 4px;
       border-radius: 3px;
       transition: opacity 0.15s, background 0.15s;
