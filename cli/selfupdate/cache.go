@@ -94,6 +94,27 @@ func CheckCached(currentVersion, currentExtVersion string) *CacheEntry {
 	return entry
 }
 
+// CheckLive always performs a live check against GitHub, ignoring the cache TTL.
+// The result is still written to cache for subsequent cached checks.
+func CheckLive(currentVersion, currentExtVersion string) *CacheEntry {
+	result, err := CheckUpdate(currentVersion)
+	if err != nil {
+		return nil
+	}
+
+	vsix := CheckVsix(currentExtVersion)
+
+	entry := &CacheEntry{
+		CheckedAt:      time.Now(),
+		LatestVersion:  result.LatestVersion,
+		CurrentVersion: currentVersion,
+		UpdateAvail:    result.LatestVersion != "" && result.LatestVersion != currentVersion && !isUpToDate(result),
+		Extension:      vsix,
+	}
+	_ = WriteCache(entry)
+	return entry
+}
+
 func isUpToDate(r *Result) bool {
 	return r.LatestVersion == "" || r.LatestVersion == r.CurrentVersion
 }

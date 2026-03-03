@@ -416,7 +416,7 @@ async function activate(context) {
       if (!requireClient()) return;
       await vscode.window.withProgress(
         { location: vscode.ProgressLocation.Notification, title: 'Checking for updates…' },
-        () => checkForUpdates(context),
+        () => checkForUpdates(context, true),
       );
     }),
   );
@@ -498,10 +498,10 @@ async function autoSetup(controlPanel, context) {
   checkForUpdates(context);
 }
 
-async function checkForUpdates(context) {
+async function checkForUpdates(context, force = false) {
   try {
     const extVersion = context.extension?.packageJSON?.version || '';
-    const update = await client.checkUpdate(extVersion);
+    const update = await client.checkUpdate(extVersion, force);
     if (!update) {
       vscode.window.showInformationMessage('Activate is up to date.');
       return;

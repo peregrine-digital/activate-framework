@@ -314,7 +314,12 @@ func (d *Daemon) handleCheckUpdate(req *transport.Request) *transport.Response {
 	if req.Params != nil {
 		_ = json.Unmarshal(req.Params, &params)
 	}
-	entry := selfupdate.CheckCached(d.version, params.ExtensionVersion)
+	var entry *selfupdate.CacheEntry
+	if params.Force {
+		entry = selfupdate.CheckLive(d.version, params.ExtensionVersion)
+	} else {
+		entry = selfupdate.CheckCached(d.version, params.ExtensionVersion)
+	}
 	if entry == nil {
 		return transport.SuccessResponse(req.ID, selfupdate.CacheEntry{})
 	}

@@ -86,6 +86,7 @@ type TelemetryRunParams struct {
 // CheckUpdateParams optionally provides the current extension version.
 type CheckUpdateParams struct {
 	ExtensionVersion string `json:"extensionVersion,omitempty"`
+	Force            bool   `json:"force,omitempty"`
 }
 
 // StateChangedNotification creates a state-changed notification.
