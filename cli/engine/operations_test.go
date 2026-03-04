@@ -2,6 +2,8 @@ package engine
 
 import (
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -21,17 +23,52 @@ func setupTestStore(t *testing.T) string {
 	return dir
 }
 
+// serveRemoteFiles creates an httptest server that serves files from the given map.
+// Keys are relative paths (e.g. "plugins/test/instructions/general.md").
+// Returns the server (caller must defer Close) and the test repo/branch to use.
+func serveRemoteFiles(t *testing.T, files map[string]string) (*httptest.Server, string, string) {
+	t.Helper()
+	repo := "test/repo"
+	branch := "main"
+	raw := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// URL path format: /<repo>/<branch>/<filePath>
+		prefix := "/" + repo + "/" + branch + "/"
+		if strings.HasPrefix(r.URL.Path, prefix) {
+			key := strings.TrimPrefix(r.URL.Path, prefix)
+			if content, ok := files[key]; ok {
+				w.Write([]byte(content))
+				return
+			}
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+
+	origRaw := storage.RawBase
+	origToken := os.Getenv("GITHUB_TOKEN")
+	storage.RawBase = raw.URL
+	os.Unsetenv("GITHUB_TOKEN")
+	t.Cleanup(func() {
+		storage.RawBase = origRaw
+		if origToken != "" {
+			os.Setenv("GITHUB_TOKEN", origToken)
+		}
+		raw.Close()
+	})
+
+	return raw, repo, branch
+}
+
 // ── UpdateFiles tests ───────────────────────────────────────────
 
 func TestUpdateFilesReinstallsTrackedFiles(t *testing.T) {
 	setupTestStore(t)
 	projectDir := t.TempDir()
-	bundleDir := t.TempDir()
+	basePath := "plugins/test"
 
-	// Create bundled source (newer)
-	srcPath := filepath.Join(bundleDir, "instructions", "general.md")
-	os.MkdirAll(filepath.Dir(srcPath), 0755)
-	os.WriteFile(srcPath, []byte("---\nversion: '0.5.0'\n---\n# Updated"), 0644)
+	// Serve bundled source (newer) from remote
+	_, repo, branch := serveRemoteFiles(t, map[string]string{
+		basePath + "/instructions/general.md": "---\nversion: '0.5.0'\n---\n# Updated",
+	})
 
 	// Create installed file (older)
 	installedPath := filepath.Join(projectDir, ".github", "instructions", "general.md")
@@ -53,7 +90,7 @@ func TestUpdateFilesReinstallsTrackedFiles(t *testing.T) {
 	os.WriteFile(filepath.Join(excludeDir, "exclude"), []byte(""), 0644)
 
 	manifest := model.Manifest{
-		ID: "test", Version: "0.5.0", BasePath: bundleDir,
+		ID: "test", Version: "0.5.0", BasePath: basePath,
 		Files: []model.ManifestFile{
 			{Src: "instructions/general.md", Dest: "instructions/general.md", Tier: "core"},
 			{Src: "skills/test.md", Dest: "skills/test.md", Tier: "ad-hoc"}, // not tracked
@@ -63,8 +100,9 @@ func TestUpdateFilesReinstallsTrackedFiles(t *testing.T) {
 		Manifest: "test", Version: "0.4.0", Tier: "minimal",
 		Files: []string{".github/instructions/general.md"},
 	}
+	cfg := model.Config{Repo: repo, Branch: branch}
 
-	updated, skipped, err := UpdateFiles(manifest, sidecar, model.Config{}, projectDir, false, "", "")
+	updated, skipped, err := UpdateFiles(manifest, sidecar, cfg, projectDir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -86,10 +124,11 @@ func TestUpdateFilesReinstallsTrackedFiles(t *testing.T) {
 func TestUpdateFilesRespectsSkippedVersions(t *testing.T) {
 	setupTestStore(t)
 	projectDir := t.TempDir()
-	bundleDir := t.TempDir()
+	basePath := "plugins/test"
 
-	srcPath := filepath.Join(bundleDir, "a.md")
-	os.WriteFile(srcPath, []byte("---\nversion: '0.5.0'\n---\n# New"), 0644)
+	_, repo, branch := serveRemoteFiles(t, map[string]string{
+		basePath + "/a.md": "---\nversion: '0.5.0'\n---\n# New",
+	})
 
 	installedPath := filepath.Join(projectDir, ".github", "a.md")
 	os.MkdirAll(filepath.Dir(installedPath), 0755)
@@ -108,16 +147,19 @@ func TestUpdateFilesRespectsSkippedVersions(t *testing.T) {
 	os.WriteFile(scPath, scData, 0644)
 
 	manifest := model.Manifest{
-		ID: "test", Version: "0.5.0", BasePath: bundleDir,
+		ID: "test", Version: "0.5.0", BasePath: basePath,
 		Files: []model.ManifestFile{{Src: "a.md", Dest: "a.md", Tier: "core"}},
 	}
 	sidecar := &model.RepoSidecar{
 		Manifest: "test", Version: "0.4.0", Tier: "minimal",
 		Files: []string{".github/a.md"},
 	}
-	cfg := model.Config{SkippedVersions: map[string]string{"a.md": "0.5.0"}}
+	cfg := model.Config{
+		Repo: repo, Branch: branch,
+		SkippedVersions: map[string]string{"a.md": "0.5.0"},
+	}
 
-	updated, skipped, err := UpdateFiles(manifest, sidecar, cfg, projectDir, false, "", "")
+	updated, skipped, err := UpdateFiles(manifest, sidecar, cfg, projectDir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -137,7 +179,7 @@ func TestUpdateFilesRespectsSkippedVersions(t *testing.T) {
 }
 
 func TestUpdateFilesNilSidecar(t *testing.T) {
-	_, _, err := UpdateFiles(model.Manifest{}, nil, model.Config{}, t.TempDir(), false, "", "")
+	_, _, err := UpdateFiles(model.Manifest{}, nil, model.Config{}, t.TempDir())
 	if err == nil {
 		t.Fatal("expected error for nil sidecar")
 	}
@@ -147,20 +189,21 @@ func TestUpdateFilesNilSidecar(t *testing.T) {
 
 func TestInstallSingleFile(t *testing.T) {
 	projectDir := t.TempDir()
-	bundleDir := t.TempDir()
+	basePath := "plugins/test"
+
+	_, repo, branch := serveRemoteFiles(t, map[string]string{
+		basePath + "/skills/test.md": "# Test Skill",
+	})
 
 	excludeDir := filepath.Join(projectDir, ".git", "info")
 	os.MkdirAll(excludeDir, 0755)
 	os.WriteFile(filepath.Join(excludeDir, "exclude"), []byte(""), 0644)
 
-	srcPath := filepath.Join(bundleDir, "skills", "test.md")
-	os.MkdirAll(filepath.Dir(srcPath), 0755)
-	os.WriteFile(srcPath, []byte("# Test Skill"), 0644)
-
-	manifest := model.Manifest{ID: "m1", Version: "1.0.0", BasePath: bundleDir}
+	manifest := model.Manifest{ID: "m1", Version: "1.0.0", BasePath: basePath}
 	file := model.ManifestFile{Src: "skills/test.md", Dest: "skills/test.md", Tier: "core"}
+	cfg := model.Config{Repo: repo, Branch: branch}
 
-	if err := InstallSingleFile(file, manifest, projectDir, false, "", ""); err != nil {
+	if err := InstallSingleFile(file, manifest, projectDir, cfg); err != nil {
 		t.Fatal(err)
 	}
 
@@ -185,21 +228,23 @@ func TestInstallSingleFile(t *testing.T) {
 
 func TestInstallSingleFileIdempotent(t *testing.T) {
 	projectDir := t.TempDir()
-	bundleDir := t.TempDir()
+	basePath := "plugins/test"
+
+	_, repo, branch := serveRemoteFiles(t, map[string]string{
+		basePath + "/a.md": "content",
+	})
 
 	excludeDir := filepath.Join(projectDir, ".git", "info")
 	os.MkdirAll(excludeDir, 0755)
 	os.WriteFile(filepath.Join(excludeDir, "exclude"), []byte(""), 0644)
 
-	srcPath := filepath.Join(bundleDir, "a.md")
-	os.WriteFile(srcPath, []byte("content"), 0644)
-
-	manifest := model.Manifest{ID: "m1", Version: "1.0.0", BasePath: bundleDir}
+	manifest := model.Manifest{ID: "m1", Version: "1.0.0", BasePath: basePath}
 	file := model.ManifestFile{Src: "a.md", Dest: "a.md", Tier: "core"}
+	cfg := model.Config{Repo: repo, Branch: branch}
 
 	// Install twice
-	InstallSingleFile(file, manifest, projectDir, false, "", "")
-	InstallSingleFile(file, manifest, projectDir, false, "", "")
+	InstallSingleFile(file, manifest, projectDir, cfg)
+	InstallSingleFile(file, manifest, projectDir, cfg)
 
 	sc, _ := storage.ReadRepoSidecar(projectDir)
 	count := 0
@@ -267,20 +312,22 @@ func TestUninstallSingleFileNoSidecar(t *testing.T) {
 
 func TestDiffFileIdentical(t *testing.T) {
 	projectDir := t.TempDir()
-	bundleDir := t.TempDir()
+	basePath := "plugins/test"
 
 	content := "---\nversion: '1.0.0'\n---\n# Same"
-	srcPath := filepath.Join(bundleDir, "a.md")
-	os.WriteFile(srcPath, []byte(content), 0644)
+	_, repo, branch := serveRemoteFiles(t, map[string]string{
+		basePath + "/a.md": content,
+	})
 
 	installedPath := filepath.Join(projectDir, ".github", "a.md")
 	os.MkdirAll(filepath.Dir(installedPath), 0755)
 	os.WriteFile(installedPath, []byte(content), 0644)
 
 	file := model.ManifestFile{Src: "a.md", Dest: "a.md"}
-	manifest := model.Manifest{BasePath: bundleDir}
+	manifest := model.Manifest{BasePath: basePath}
+	cfg := model.Config{Repo: repo, Branch: branch}
 
-	diff, err := DiffFile(file, manifest, projectDir)
+	diff, err := DiffFile(file, manifest, projectDir, cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -291,19 +338,21 @@ func TestDiffFileIdentical(t *testing.T) {
 
 func TestDiffFileDifferent(t *testing.T) {
 	projectDir := t.TempDir()
-	bundleDir := t.TempDir()
+	basePath := "plugins/test"
 
-	srcPath := filepath.Join(bundleDir, "a.md")
-	os.WriteFile(srcPath, []byte("line1\nline2\nline3\n"), 0644)
+	_, repo, branch := serveRemoteFiles(t, map[string]string{
+		basePath + "/a.md": "line1\nline2\nline3\n",
+	})
 
 	installedPath := filepath.Join(projectDir, ".github", "a.md")
 	os.MkdirAll(filepath.Dir(installedPath), 0755)
 	os.WriteFile(installedPath, []byte("line1\nchanged\nline3\n"), 0644)
 
 	file := model.ManifestFile{Src: "a.md", Dest: "a.md"}
-	manifest := model.Manifest{BasePath: bundleDir}
+	manifest := model.Manifest{BasePath: basePath}
+	cfg := model.Config{Repo: repo, Branch: branch}
 
-	diff, err := DiffFile(file, manifest, projectDir)
+	diff, err := DiffFile(file, manifest, projectDir, cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -316,14 +365,17 @@ func TestDiffFileDifferent(t *testing.T) {
 }
 
 func TestDiffFileMissingInstalled(t *testing.T) {
-	bundleDir := t.TempDir()
-	srcPath := filepath.Join(bundleDir, "a.md")
-	os.WriteFile(srcPath, []byte("content"), 0644)
+	basePath := "plugins/test"
+
+	_, repo, branch := serveRemoteFiles(t, map[string]string{
+		basePath + "/a.md": "content",
+	})
 
 	file := model.ManifestFile{Src: "a.md", Dest: "a.md"}
-	manifest := model.Manifest{BasePath: bundleDir}
+	manifest := model.Manifest{BasePath: basePath}
+	cfg := model.Config{Repo: repo, Branch: branch}
 
-	_, err := DiffFile(file, manifest, t.TempDir())
+	_, err := DiffFile(file, manifest, t.TempDir(), cfg)
 	if err == nil {
 		t.Fatal("expected error for missing installed file")
 	}
@@ -384,12 +436,11 @@ func TestFindManifestFile(t *testing.T) {
 func TestUpdateFilesMcpAware(t *testing.T) {
 	setupTestStore(t)
 	projectDir := t.TempDir()
-	bundleDir := t.TempDir()
+	basePath := "plugins/test"
 
-	// Create bundled non-MCP source
-	srcPath := filepath.Join(bundleDir, "instructions", "general.md")
-	os.MkdirAll(filepath.Dir(srcPath), 0755)
-	os.WriteFile(srcPath, []byte("---\nversion: '0.5.0'\n---\n# Updated"), 0644)
+	_, repo, branch := serveRemoteFiles(t, map[string]string{
+		basePath + "/instructions/general.md": "---\nversion: '0.5.0'\n---\n# Updated",
+	})
 
 	// Create installed non-MCP file
 	installedPath := filepath.Join(projectDir, ".github", "instructions", "general.md")
@@ -411,7 +462,7 @@ func TestUpdateFilesMcpAware(t *testing.T) {
 	os.WriteFile(scPath, scData, 0644)
 
 	manifest := model.Manifest{
-		ID: "test", Version: "0.5.0", BasePath: bundleDir,
+		ID: "test", Version: "0.5.0", BasePath: basePath,
 		Files: []model.ManifestFile{
 			{Src: "instructions/general.md", Dest: "instructions/general.md", Tier: "core"},
 			{Src: "mcp-servers/server.json", Dest: "mcp-servers/server.json", Tier: "core", Category: "mcp-servers"},
@@ -421,8 +472,9 @@ func TestUpdateFilesMcpAware(t *testing.T) {
 		Manifest: "test", Version: "0.4.0", Tier: "minimal",
 		Files: []string{".github/instructions/general.md"},
 	}
+	cfg := model.Config{Repo: repo, Branch: branch}
 
-	updated, _, err := UpdateFiles(manifest, sidecar, model.Config{}, projectDir, false, "", "")
+	updated, _, err := UpdateFiles(manifest, sidecar, cfg, projectDir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -443,22 +495,25 @@ func TestUpdateFilesMcpAware(t *testing.T) {
 
 func TestDiffFileMissingBundled(t *testing.T) {
 	projectDir := t.TempDir()
-	bundleDir := t.TempDir()
 
-	// Create installed file but NOT the bundled source
+	// Serve nothing — so the fetch will 404
+	_, repo, branch := serveRemoteFiles(t, map[string]string{})
+
+	// Create installed file but NOT the remote source
 	installedPath := filepath.Join(projectDir, ".github", "a.md")
 	os.MkdirAll(filepath.Dir(installedPath), 0755)
 	os.WriteFile(installedPath, []byte("content"), 0644)
 
 	file := model.ManifestFile{Src: "a.md", Dest: "a.md"}
-	manifest := model.Manifest{BasePath: bundleDir}
+	manifest := model.Manifest{BasePath: "plugins/test"}
+	cfg := model.Config{Repo: repo, Branch: branch}
 
-	_, err := DiffFile(file, manifest, projectDir)
+	_, err := DiffFile(file, manifest, projectDir, cfg)
 	if err == nil {
 		t.Fatal("expected error when bundled source is missing")
 	}
-	if !strings.Contains(err.Error(), "read bundled") {
-		t.Fatalf("expected 'read bundled' in error, got: %s", err)
+	if !strings.Contains(err.Error(), "fetch") {
+		t.Fatalf("expected 'fetch' in error, got: %s", err)
 	}
 }
 

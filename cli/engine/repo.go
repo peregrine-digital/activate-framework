@@ -10,10 +10,19 @@ import (
 )
 
 // RepoAdd installs manifest files into a project and creates the sidecar.
-func RepoAdd(manifests []model.Manifest, cfg model.Config, projectDir string, useRemote bool, repo, branch string) error {
+func RepoAdd(manifests []model.Manifest, cfg model.Config, projectDir string) error {
 	chosen := model.FindManifestByID(manifests, cfg.Manifest)
 	if chosen == nil {
 		return fmt.Errorf("unknown manifest: %s", cfg.Manifest)
+	}
+
+	repo := cfg.Repo
+	branch := cfg.Branch
+	if repo == "" {
+		repo = storage.DefaultRepo
+	}
+	if branch == "" {
+		branch = storage.DefaultBranch
 	}
 
 	files := model.SelectFiles(chosen.Files, *chosen, cfg.Tier)
@@ -43,7 +52,7 @@ func RepoAdd(manifests []model.Manifest, cfg model.Config, projectDir string, us
 		destRel := filepath.ToSlash(filepath.Join(".github", f.Dest))
 		destPath := filepath.Join(projectDir, destRel)
 
-		if err := storage.WriteManifestFile(f, chosen.BasePath, destPath, useRemote, repo, branch); err != nil {
+		if err := storage.WriteManifestFile(f, chosen.BasePath, destPath, repo, branch); err != nil {
 			fmt.Fprintf(os.Stderr, "  ✗  %s: %s\n", f.Dest, err)
 			continue
 		}
@@ -54,7 +63,7 @@ func RepoAdd(manifests []model.Manifest, cfg model.Config, projectDir string, us
 
 	var mcpServerNames []string
 	if len(mcpFiles) > 0 || len(previousMcpNames) > 0 {
-		names, err := storage.InjectMcpFromManifest(mcpFiles, chosen.BasePath, projectDir, previousMcpNames)
+		names, err := storage.InjectMcpFromManifest(mcpFiles, chosen.BasePath, projectDir, previousMcpNames, repo, branch)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "  ✗  MCP config: %s\n", err)
 		} else {
@@ -65,20 +74,19 @@ func RepoAdd(manifests []model.Manifest, cfg model.Config, projectDir string, us
 		}
 	}
 
-	source := "bundled"
-	if useRemote {
-		source = "remote"
-	}
 	if err := storage.WriteRepoSidecar(projectDir, model.RepoSidecar{
 		Manifest:   chosen.ID,
 		Version:    chosen.Version,
 		Tier:       cfg.Tier,
 		Files:      installed,
 		McpServers: mcpServerNames,
-		Source:     source,
+		Source:     repo + "@" + branch,
 	}); err != nil {
 		return err
 	}
+
+	// Cache the manifest for offline fallback
+	_ = storage.WriteManifestCache(projectDir, manifests)
 
 	_ = storage.WriteProjectConfig(projectDir, &model.Config{Manifest: chosen.ID, Tier: cfg.Tier})
 

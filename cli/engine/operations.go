@@ -11,9 +11,18 @@ import (
 )
 
 // UpdateFiles re-installs only currently-tracked files, respecting skipped versions.
-func UpdateFiles(m model.Manifest, sidecar *model.RepoSidecar, cfg model.Config, projectDir string, useRemote bool, repo, branch string) (updated []string, skipped []string, err error) {
+func UpdateFiles(m model.Manifest, sidecar *model.RepoSidecar, cfg model.Config, projectDir string) (updated []string, skipped []string, err error) {
 	if sidecar == nil {
 		return nil, nil, fmt.Errorf("no sidecar found; nothing to update")
+	}
+
+	repo := cfg.Repo
+	branch := cfg.Branch
+	if repo == "" {
+		repo = storage.DefaultRepo
+	}
+	if branch == "" {
+		branch = storage.DefaultBranch
 	}
 
 	installedSet := make(map[string]bool)
@@ -39,10 +48,11 @@ func UpdateFiles(m model.Manifest, sidecar *model.RepoSidecar, cfg model.Config,
 		}
 
 		if sv, ok := cfg.SkippedVersions[f.Dest]; ok {
-			bv := ""
+			srcPath := f.Src
 			if m.BasePath != "" {
-				bv, _ = storage.ReadFileVersion(filepath.Join(m.BasePath, f.Src))
+				srcPath = m.BasePath + "/" + f.Src
 			}
+			bv, _ := storage.ReadFileVersionRemote(srcPath, repo, branch)
 			if sv == bv {
 				skipped = append(skipped, f.Dest)
 				continue
@@ -50,7 +60,7 @@ func UpdateFiles(m model.Manifest, sidecar *model.RepoSidecar, cfg model.Config,
 		}
 
 		destPath := filepath.Join(projectDir, destRel)
-		if writeErr := storage.WriteManifestFile(f, m.BasePath, destPath, useRemote, repo, branch); writeErr != nil {
+		if writeErr := storage.WriteManifestFile(f, m.BasePath, destPath, repo, branch); writeErr != nil {
 			fmt.Fprintf(os.Stderr, "  ✗  %s: %s\n", f.Dest, writeErr)
 			continue
 		}
@@ -59,7 +69,7 @@ func UpdateFiles(m model.Manifest, sidecar *model.RepoSidecar, cfg model.Config,
 	}
 
 	if len(mcpFiles) > 0 || len(sidecar.McpServers) > 0 {
-		names, mcpErr := storage.InjectMcpFromManifest(mcpFiles, m.BasePath, projectDir, sidecar.McpServers)
+		names, mcpErr := storage.InjectMcpFromManifest(mcpFiles, m.BasePath, projectDir, sidecar.McpServers, repo, branch)
 		if mcpErr != nil {
 			fmt.Fprintf(os.Stderr, "  ✗  MCP config: %s\n", mcpErr)
 		} else {
@@ -76,11 +86,20 @@ func UpdateFiles(m model.Manifest, sidecar *model.RepoSidecar, cfg model.Config,
 }
 
 // InstallSingleFile installs one manifest file and updates the sidecar.
-func InstallSingleFile(f model.ManifestFile, m model.Manifest, projectDir string, useRemote bool, repo, branch string) error {
+func InstallSingleFile(f model.ManifestFile, m model.Manifest, projectDir string, cfg model.Config) error {
+	repo := cfg.Repo
+	branch := cfg.Branch
+	if repo == "" {
+		repo = storage.DefaultRepo
+	}
+	if branch == "" {
+		branch = storage.DefaultBranch
+	}
+
 	destRel := ".github/" + f.Dest
 	destPath := filepath.Join(projectDir, destRel)
 
-	if err := storage.WriteManifestFile(f, m.BasePath, destPath, useRemote, repo, branch); err != nil {
+	if err := storage.WriteManifestFile(f, m.BasePath, destPath, repo, branch); err != nil {
 		return err
 	}
 
@@ -116,12 +135,24 @@ func UninstallSingleFile(dest string, projectDir string) error {
 	return storage.WriteRepoSidecar(projectDir, *sidecar)
 }
 
-// DiffFile produces a unified diff between bundled and installed versions.
-func DiffFile(f model.ManifestFile, m model.Manifest, projectDir string) (string, error) {
-	srcPath := filepath.Join(m.BasePath, f.Src)
-	bundled, err := os.ReadFile(srcPath)
+// DiffFile produces a unified diff between remote source and installed versions.
+func DiffFile(f model.ManifestFile, m model.Manifest, projectDir string, cfg model.Config) (string, error) {
+	repo := cfg.Repo
+	branch := cfg.Branch
+	if repo == "" {
+		repo = storage.DefaultRepo
+	}
+	if branch == "" {
+		branch = storage.DefaultBranch
+	}
+
+	srcPath := f.Src
+	if m.BasePath != "" {
+		srcPath = m.BasePath + "/" + f.Src
+	}
+	bundled, err := storage.FetchFile(srcPath, repo, branch)
 	if err != nil {
-		return "", fmt.Errorf("read bundled %s: %w", f.Src, err)
+		return "", fmt.Errorf("fetch %s: %w", f.Src, err)
 	}
 
 	destRel := ".github/" + f.Dest
@@ -131,7 +162,7 @@ func DiffFile(f model.ManifestFile, m model.Manifest, projectDir string) (string
 		return "", fmt.Errorf("read installed %s: %w", destRel, err)
 	}
 
-	return unifiedDiff(string(bundled), string(installed), "bundled/"+f.Src, "installed/"+destRel), nil
+	return unifiedDiff(string(bundled), string(installed), "remote/"+f.Src, "installed/"+destRel), nil
 }
 
 // SyncNeeded checks if the installed state differs from the desired state.

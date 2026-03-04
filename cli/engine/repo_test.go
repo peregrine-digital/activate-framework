@@ -23,28 +23,24 @@ func TestRepoAddLocalCopiesManagedFiles(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	bundleDir := t.TempDir()
-	srcRel := filepath.Join("instructions", "test.instructions.md")
-	srcPath := filepath.Join(bundleDir, srcRel)
-	if err := os.MkdirAll(filepath.Dir(srcPath), 0755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(srcPath, []byte("hello"), 0644); err != nil {
-		t.Fatal(err)
-	}
+	basePath := "plugins/test"
+	srcRel := "instructions/test.instructions.md"
+	_, repo, branch := serveRemoteFiles(t, map[string]string{
+		basePath + "/" + srcRel: "hello",
+	})
 
 	manifest := model.Manifest{
 		ID:       "m1",
 		Name:     "Manifest One",
 		Version:  "1.0.0",
-		BasePath: bundleDir,
+		BasePath: basePath,
 		Files: []model.ManifestFile{
 			{Src: srcRel, Dest: srcRel, Tier: "core"},
 		},
 	}
 
-	cfg := model.Config{Manifest: "m1", Tier: "minimal"}
-	if err := RepoAdd([]model.Manifest{manifest}, cfg, projectDir, false, "", ""); err != nil {
+	cfg := model.Config{Manifest: "m1", Tier: "minimal", Repo: repo, Branch: branch}
+	if err := RepoAdd([]model.Manifest{manifest}, cfg, projectDir); err != nil {
 		t.Fatal(err)
 	}
 
@@ -228,39 +224,27 @@ func TestRepoAddFiltersMcpFiles(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Create bundle directory with a regular file and an MCP server file
-	bundleDir := t.TempDir()
-
-	regularSrc := filepath.Join(bundleDir, "instructions", "setup.instructions.md")
-	if err := os.MkdirAll(filepath.Dir(regularSrc), 0755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(regularSrc, []byte("instructions content"), 0644); err != nil {
-		t.Fatal(err)
-	}
-
-	mcpSrc := filepath.Join(bundleDir, "mcp-servers", "my-server.json")
-	if err := os.MkdirAll(filepath.Dir(mcpSrc), 0755); err != nil {
-		t.Fatal(err)
-	}
+	basePath := "plugins/test"
 	mcpServerJSON := `{"test-mcp-server": {"command": "npx", "args": ["server"]}}`
-	if err := os.WriteFile(mcpSrc, []byte(mcpServerJSON), 0644); err != nil {
-		t.Fatal(err)
-	}
+
+	_, repo, branch := serveRemoteFiles(t, map[string]string{
+		basePath + "/instructions/setup.instructions.md": "instructions content",
+		basePath + "/mcp-servers/my-server.json":         mcpServerJSON,
+	})
 
 	manifest := model.Manifest{
 		ID:       "m1",
 		Name:     "Test Manifest",
 		Version:  "1.0.0",
-		BasePath: bundleDir,
+		BasePath: basePath,
 		Files: []model.ManifestFile{
 			{Src: "instructions/setup.instructions.md", Dest: "instructions/setup.instructions.md", Tier: "core"},
 			{Src: "mcp-servers/my-server.json", Dest: "mcp-servers/my-server.json", Tier: "core"},
 		},
 	}
 
-	cfg := model.Config{Manifest: "m1", Tier: "minimal"}
-	if err := RepoAdd([]model.Manifest{manifest}, cfg, projectDir, false, "", ""); err != nil {
+	cfg := model.Config{Manifest: "m1", Tier: "minimal", Repo: repo, Branch: branch}
+	if err := RepoAdd([]model.Manifest{manifest}, cfg, projectDir); err != nil {
 		t.Fatal(err)
 	}
 
