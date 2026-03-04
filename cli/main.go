@@ -21,7 +21,7 @@ import (
 	"github.com/peregrine-digital/activate-framework/cli/tui"
 )
 
-const version = "0.1.29-rc.1"
+const version = "0.1.30-2"
 
 type cliArgs struct {
 	command      string
