@@ -139,31 +139,36 @@ async function refreshWorkspace(kind, fileDest) {
   const wsRoot = vscode.workspace.workspaceFolders?.[0]?.uri;
   if (!wsRoot) return;
 
+  // WorkspaceEdit.createFile / deleteFile fires onDidCreateFiles /
+  // onDidDeleteFiles — the workspace-level events that Copilot and other
+  // extensions listen to.  workspace.fs.writeFile does NOT fire these.
   try {
     if (kind === 'remove' && fileDest) {
-      // File already deleted on disk — fire a delete event via VS Code API.
       const uri = vscode.Uri.joinPath(wsRoot, installDir, fileDest);
-      try { await vscode.workspace.fs.delete(uri); } catch { /* already gone */ }
+      const edit = new vscode.WorkspaceEdit();
+      edit.deleteFile(uri, { ignoreIfNotExists: true });
+      await vscode.workspace.applyEdit(edit);
     } else if (kind === 'add' && fileDest) {
-      // File was written on disk — read it back and re-write via VS Code API
-      // to fire the create/change event.
       const uri = vscode.Uri.joinPath(wsRoot, installDir, fileDest);
       const data = await vscode.workspace.fs.readFile(uri);
-      await vscode.workspace.fs.writeFile(uri, data);
+      const edit = new vscode.WorkspaceEdit();
+      edit.createFile(uri, { overwrite: true, contents: data });
+      await vscode.workspace.applyEdit(edit);
     } else {
-      // Bulk operation — touch every file tracked in the sidecar.
-      // Read the sidecar to get the authoritative list.
+      // Bulk — re-create every file tracked in the sidecar.
       const sidecarUri = vscode.Uri.joinPath(wsRoot, installDir, '.activate-installed.json');
       try {
         const raw = await vscode.workspace.fs.readFile(sidecarUri);
         const sidecar = JSON.parse(Buffer.from(raw).toString('utf8'));
+        const edit = new vscode.WorkspaceEdit();
         for (const rel of (sidecar.files || [])) {
           const uri = vscode.Uri.joinPath(wsRoot, rel);
           try {
             const data = await vscode.workspace.fs.readFile(uri);
-            await vscode.workspace.fs.writeFile(uri, data);
+            edit.createFile(uri, { overwrite: true, contents: data });
           } catch { /* file may not exist yet */ }
         }
+        await vscode.workspace.applyEdit(edit);
       } catch { /* sidecar may not exist */ }
     }
   } catch {

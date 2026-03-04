@@ -16,6 +16,7 @@ let warningMessages = [];
 let errorMessages = [];
 let webviewProviders = {};
 let outputLines = [];
+let appliedEdits = [];
 
 function resetVscodeMock() {
   registeredCommands.clear();
@@ -27,11 +28,19 @@ function resetVscodeMock() {
   errorMessages = [];
   webviewProviders = {};
   outputLines = [];
+  appliedEdits = [];
 }
 
 const vscodeMock = {
   workspace: {
     workspaceFolders: [{ uri: { fsPath: '/test/project' } }],
+    fs: {
+      readFile: async () => Buffer.from('mock-content'),
+      writeFile: async () => {},
+      readDirectory: async () => [],
+      delete: async () => {},
+    },
+    applyEdit: async (edit) => { appliedEdits.push(edit); return true; },
   },
   window: {
     showQuickPick: async (items, _opts) => {
@@ -71,6 +80,11 @@ const vscodeMock = {
       fsPath: [base.fsPath, ...segments].join('/'),
       scheme: 'file',
     }),
+  },
+  WorkspaceEdit: class WorkspaceEdit {
+    constructor() { this._ops = []; }
+    createFile(uri, opts) { this._ops.push({ type: 'create', uri, opts }); }
+    deleteFile(uri, opts) { this._ops.push({ type: 'delete', uri, opts }); }
   },
 };
 
@@ -431,5 +445,71 @@ describe('extension.js', () => {
     await ext.activate(context);
 
     assert.strictEqual(mockClient.constructorOpts.token, '');
+  });
+
+  it('installFile command fires WorkspaceEdit createFile for Copilot detection', async () => {
+    mockClient._mockResults.getState = {
+      state: 'installed',
+      config: { tier: 'standard', manifest: 'activate-framework' },
+      files: [],
+    };
+    mockClient._mockResults.sync = { action: 'none' };
+
+    const ext = require('../extension');
+    const context = {
+      extensionUri: { fsPath: '/ext' },
+      extension: { packageJSON: { version: '1.0.0' } },
+      subscriptions: subscriptions,
+    };
+    await ext.activate(context);
+
+    appliedEdits = [];
+    const handler = registeredCommands.get('activate-framework.installFile');
+    assert.ok(handler, 'installFile command should be registered');
+
+    await handler({ dest: 'copilot/agents/test.agent.md' });
+
+    // Wait for async refreshWorkspace to complete
+    await new Promise((r) => setTimeout(r, 50));
+
+    // Should have called workspace.applyEdit with a WorkspaceEdit containing a createFile
+    assert.ok(appliedEdits.length > 0, 'workspace.applyEdit should have been called');
+    const edit = appliedEdits[appliedEdits.length - 1];
+    assert.ok(edit._ops, 'should be a WorkspaceEdit with ops');
+    assert.equal(edit._ops[0].type, 'create');
+    assert.ok(edit._ops[0].uri.fsPath.includes('copilot/agents/test.agent.md'));
+    assert.ok(edit._ops[0].opts.overwrite);
+  });
+
+  it('uninstallFile command fires WorkspaceEdit deleteFile for Copilot detection', async () => {
+    mockClient._mockResults.getState = {
+      state: 'installed',
+      config: { tier: 'standard', manifest: 'activate-framework' },
+      files: [],
+    };
+    mockClient._mockResults.sync = { action: 'none' };
+
+    const ext = require('../extension');
+    const context = {
+      extensionUri: { fsPath: '/ext' },
+      extension: { packageJSON: { version: '1.0.0' } },
+      subscriptions: subscriptions,
+    };
+    await ext.activate(context);
+
+    appliedEdits = [];
+    const handler = registeredCommands.get('activate-framework.uninstallFile');
+    assert.ok(handler, 'uninstallFile command should be registered');
+
+    await handler({ dest: 'copilot/agents/test.agent.md' });
+
+    await new Promise((r) => setTimeout(r, 50));
+
+    assert.ok(appliedEdits.length > 0, 'workspace.applyEdit should have been called');
+    const edit = appliedEdits[appliedEdits.length - 1];
+    assert.ok(edit._ops, 'should be a WorkspaceEdit with ops');
+    assert.equal(edit._ops[0].type, 'delete');
+    assert.ok(edit._ops[0].uri.fsPath.includes('copilot/agents/test.agent.md'));
+    assert.ok(edit._ops[0].opts.ignoreIfNotExists);
   });
 });
