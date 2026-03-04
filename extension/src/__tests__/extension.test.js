@@ -448,6 +448,19 @@ describe('extension.js', () => {
   });
 
   it('installFile command fires WorkspaceEdit createFile for Copilot detection', async () => {
+    // Mock fs.existsSync so resolveBinPath finds the CLI binary
+    Module._load = function (request, parent, isMain) {
+      if (request === 'fs') {
+        const realFs = origLoad.call(this, 'fs', parent, isMain);
+        return { ...realFs, existsSync: (p) => p.includes('bin/activate') ? true : realFs.existsSync(p) };
+      }
+      if (request === 'vscode') return vscodeMock;
+      if (request === './client' || request.endsWith('/client')) {
+        return { ActivateClient: function (opts) { mockClient.constructorOpts = opts; mockClient._token = opts?.token || ''; return mockClient; } };
+      }
+      return origLoad.call(this, request, parent, isMain);
+    };
+
     mockClient._mockResults.getState = {
       state: 'installed',
       config: { tier: 'standard', manifest: 'activate-framework' },
@@ -470,7 +483,7 @@ describe('extension.js', () => {
     await handler({ dest: 'copilot/agents/test.agent.md' });
 
     // Wait for async refreshWorkspace to complete
-    await new Promise((r) => setTimeout(r, 50));
+    await new Promise((r) => setTimeout(r, 100));
 
     // Should have called workspace.applyEdit with a WorkspaceEdit containing a createFile
     assert.ok(appliedEdits.length > 0, 'workspace.applyEdit should have been called');
@@ -482,6 +495,19 @@ describe('extension.js', () => {
   });
 
   it('uninstallFile command fires WorkspaceEdit deleteFile for Copilot detection', async () => {
+    // Mock fs.existsSync so resolveBinPath finds the CLI binary
+    Module._load = function (request, parent, isMain) {
+      if (request === 'fs') {
+        const realFs = origLoad.call(this, 'fs', parent, isMain);
+        return { ...realFs, existsSync: (p) => p.includes('bin/activate') ? true : realFs.existsSync(p) };
+      }
+      if (request === 'vscode') return vscodeMock;
+      if (request === './client' || request.endsWith('/client')) {
+        return { ActivateClient: function (opts) { mockClient.constructorOpts = opts; mockClient._token = opts?.token || ''; return mockClient; } };
+      }
+      return origLoad.call(this, request, parent, isMain);
+    };
+
     mockClient._mockResults.getState = {
       state: 'installed',
       config: { tier: 'standard', manifest: 'activate-framework' },
@@ -503,7 +529,7 @@ describe('extension.js', () => {
 
     await handler({ dest: 'copilot/agents/test.agent.md' });
 
-    await new Promise((r) => setTimeout(r, 50));
+    await new Promise((r) => setTimeout(r, 100));
 
     assert.ok(appliedEdits.length > 0, 'workspace.applyEdit should have been called');
     const edit = appliedEdits[appliedEdits.length - 1];
