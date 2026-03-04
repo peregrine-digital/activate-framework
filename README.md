@@ -1,70 +1,122 @@
 # Activate Framework
 
-A cross-functional agentic framework for government delivery teams. Activate provides a plugin-based system for distributing AI agent guidance—instructions, prompts, skills, and agent definitions—to development teams working on government technology projects.
+Activate is a plugin-based system for distributing AI coding agent configuration to development teams. It packages instructions, prompts, skills, and agent definitions into installable plugins that are injected into your workspace's `.github/` directory — where tools like GitHub Copilot, Claude Code, and Cursor automatically pick them up.
 
-## Key Features
+The framework has three delivery surfaces: a **compiled Go CLI** with an interactive TUI, a **VS Code extension** with a sidebar control panel, and a **JSON-RPC daemon** that bridges the two. All three share the same service layer, manifest system, and config schema.
 
-- **Plugin Architecture** — Modular content packages that can be installed independently
-- **Four-Tier Guidance Hierarchy** — Clear structure for AI agent instructions (AGENTS.md → Instructions → Skills → Agents)
-- **VS Code Extension** — GUI for installing and managing plugins in workspaces
-- **CLI Installer** — Interactive script for non-extension installations
-- **Validation Tooling** — Automated checks for plugin structure compliance
+## What It Does
+
+1. **Discovers plugins** — Manifests define what files a plugin contains, organized into selectable tiers (core, standard, advanced)
+2. **Installs agent configuration** — Copies `.instructions.md`, `.prompt.md`, `.agent.md`, `SKILL.md`, and `AGENTS.md` files into your workspace's `.github/` directory
+3. **Hides from git** — Installed files are auto-excluded via `.git/info/exclude` so they never get committed
+4. **Tracks state** — A sidecar file (`.github/.activate-installed.json`) tracks what's installed, versions, and checksums
+5. **Keeps you current** — Both CLI and extension self-update from GitHub Releases, with passive update hints and one-click upgrades
 
 ## Quick Start
 
-### Install the VS Code Extension
+### VS Code Extension (recommended)
 
 1. Download the latest `.vsix` from [Releases](https://github.com/peregrine-digital/activate-framework/releases)
 2. In VS Code: **Extensions** → **⋯** → **Install from VSIX…** → select the downloaded file
 3. Reload VS Code — the extension auto-installs the CLI and sets up your workspace
 
-### Install the CLI Only
+The extension provides a sidebar control panel for switching manifests, changing tiers, browsing installed files, and checking for updates.
+
+### CLI Only
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/peregrine-digital/activate-framework/main/install.sh | GITHUB_TOKEN="$GITHUB_TOKEN" sh
 ```
 
-> **Private repo:** Set `GITHUB_TOKEN` to a personal access token with `repo` scope.
+Then run the interactive installer:
+
+```bash
+activate install
+```
+
+> **Private repo:** `GITHUB_TOKEN` must be a personal access token with `repo` scope.
+
+## Architecture
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│                        User Interfaces                           │
+│                                                                  │
+│   ┌──────────────┐   ┌──────────────┐   ┌──────────────────┐   │
+│   │   CLI        │   │   TUI        │   │   VS Code        │   │
+│   │   Commands   │   │   (Charm)    │   │   Extension      │   │
+│   └──────┬───────┘   └──────┬───────┘   └────────┬─────────┘   │
+│          │                  │                     │              │
+│          │   Direct call    │   Direct call       │  JSON-RPC    │
+│          │                  │                     │  over stdio  │
+│          ▼                  ▼                     ▼              │
+│   ┌─────────────────────────────────────────────────────────┐   │
+│   │                  ActivateService (Go)                    │   │
+│   │                                                          │   │
+│   │   State · Config · Manifests · Files · Tiers · MCP      │   │
+│   └──────────────────────────┬──────────────────────────────┘   │
+│                              │                                   │
+│          ┌───────────┬───────┼───────┬────────────┐             │
+│          ▼           ▼       ▼       ▼            ▼             │
+│       Config      Manifest  Installer  Fetcher   Repo          │
+│       (2-layer)   Discovery  (local)   (GitHub)  Sidecar       │
+│                                                  + gitexclude  │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+The CLI and TUI call the service directly (same process). The extension spawns a daemon (`activate serve --stdio`) and communicates via JSON-RPC 2.0 over Content-Length framed stdio.
+
+### Config System
+
+Two-layer JSON config with merge semantics:
+
+| Layer | Path | Scope |
+|-------|------|-------|
+| Global | `~/.activate/config.json` | User-wide defaults |
+| Project | `.activate.json` (workspace root) | Per-project overrides |
+
+**Precedence:** built-in defaults < global < project < CLI flags
 
 ## Project Structure
 
 ```
 activate-framework/
-├── AGENTS.md                        # Project-wide agent guidance
-├── install.mjs                      # CLI entry point
-├── package.json                     # npm scripts (test, validate)
-├── mise.toml                        # Node 20 toolchain
+├── cli/                             # Go CLI (compiled binary)
+│   ├── main.go                      #   Entry point, arg parsing
+│   ├── model/                       #   Pure types + config schema
+│   ├── transport/                   #   JSON-RPC wire format
+│   ├── storage/                     #   Disk I/O (config, sidecar, git)
+│   ├── engine/                      #   Business logic (install, diff, update)
+│   ├── commands/                    #   CLI commands + JSON-RPC daemon
+│   ├── selfupdate/                  #   Self-update from GitHub Releases
+│   └── tui/                         #   Interactive Bubbletea UI
 │
-├── framework/                       # Shared CLI engine (plugin-agnostic)
-│   ├── install.mjs                  #   Interactive CLI installer
-│   ├── core.mjs                     #   Manifest discovery, tier maps
-│   ├── config.mjs                   #   Config read/write
-│   ├── validate-structure.mjs       #   ADR-001 structure validation
-│   └── __tests__/                   #   Framework tests
+├── extension/                       # VS Code extension
+│   ├── src/                         #   Extension source (activation, control panel, injector)
+│   │   ├── extension.js             #     Activation, install flow, update system
+│   │   ├── controlPanel.js          #     Sidebar WebviewView (settings, files, status)
+│   │   ├── config.js                #     Config read/write
+│   │   ├── injector.js              #     File injection + sidecar tracking
+│   │   └── __tests__/               #     Tests (97 tests across 3 suites)
+│   └── package.json                 #   Extension manifest + commands
 │
 ├── manifests/                       # Plugin registry (one JSON per plugin)
-│   ├── activate-framework.json
-│   └── ironarch.json
+│   ├── activate-framework.json      #   Core framework manifest
+│   └── ironarch.json                #   VA workflow manifest
 │
-├── plugins/                         # Content plugins
-│   ├── activate-framework/          #   Core plugin
-│   └── ironarch/                    #   VA-specific workflow plugin
+├── plugins/                         # Content plugins (deliverable assets)
+│   ├── activate-framework/          #   Core: instructions, prompts, skills, agents
+│   └── ironarch/                    #   VA: specialized workflow agents
 │
 ├── skills/                          # Shared skills (cross-plugin)
 ├── mcp-servers/                     # Shared MCP server configs
-│
-├── extension/                       # VS Code extension
-│   ├── src/                         #   Extension source code
-│   └── package.json                 #   Extension manifest
-│
+├── install.sh                       # CLI installer script (curl | sh)
 └── docs/                            # Documentation
-    ├── plugin-file-hierarchy.md     #   Plugin structure requirements
-    └── EXAMPLE-USAGE.md             #   Usage examples
 ```
 
-## Plugin File Hierarchy
+## Plugin System
 
-All plugins must follow the four-tier guidance hierarchy. See [docs/plugin-file-hierarchy.md](docs/plugin-file-hierarchy.md) for full details.
+Plugins follow a four-tier guidance hierarchy:
 
 ```
 plugins/{plugin-name}/
@@ -75,96 +127,61 @@ plugins/{plugin-name}/
 └── agents/*.agent.md                      # Tier 4: Specialized personas
 ```
 
-### Creating a New Plugin
+Each manifest defines **tiers** (e.g., core, standard, advanced) that let teams choose how much guidance to install. Files are tagged by category (instruction, prompt, skill, agent, mcp-server, other) and selected based on the active tier.
+
+### Available Plugins
+
+| Plugin | Description | Tiers |
+|--------|-------------|-------|
+| **activate-framework** | Core AI dev framework — general instructions, prompts, skills, agents | core, ad-hoc, ad-hoc-advanced |
+| **ironarch** | VA-oriented workflow — planning, implementing, testing, reviewing, documenting | core, skills, workflow |
+
+### Creating a Plugin
 
 1. Create a directory under `plugins/`
 2. Add `AGENTS.md` at the root (required)
-3. Add directories for instructions, prompts, skills, and agents as needed
+3. Add instructions, prompts, skills, and agents as needed
 4. Create a manifest in `manifests/{plugin-name}.json`
 5. Run validation: `npm run validate:plugins`
 
-### Manifest Structure
+## CI/CD
 
-```json
-{
-  "name": "Plugin Name",
-  "description": "What this plugin provides",
-  "version": "0.1.0",
-  "basePath": "plugins/your-plugin",
-  "tiers": [
-    { "id": "core", "label": "Core" },
-    { "id": "standard", "label": "Standard" }
-  ],
-  "files": [
-    {
-      "src": "AGENTS.md",
-      "dest": "AGENTS.md",
-      "tier": "core",
-      "category": "other",
-      "description": "Project-wide agent guidance"
-    }
-  ]
-}
-```
+Two GitHub Actions workflows run on every push and PR:
 
-## Validation
+- **CLI** (`cli.yml`) — Builds the Go binary, runs tests, cross-compiles for 5 platforms on release (darwin-arm64/amd64, linux-arm64/amd64, windows-amd64), attaches archives + SHA256 checksums to the GitHub Release
+- **Extension** (`extension.yml`) — Installs dependencies, runs tests, packages the VSIX, attaches it to the GitHub Release
 
-Validate plugin structure compliance:
-
-```bash
-# Validate all plugins
-npm run validate:plugins
-
-# Validate a specific plugin
-node framework/validate-structure.mjs ironarch
-
-# Run all tests
-npm run test
-
-# Run validation + tests
-npm run validate
-```
-
-Validation checks:
-- `AGENTS.md` exists at plugin root
-- Instructions have `applyTo` frontmatter
-- Skills have `SKILL.md` with `name` and `description`
-- Agents have `name` and `description` frontmatter
-
-## Available Plugins
-
-| Plugin | Description |
-|--------|-------------|
-| **activate-framework** | Core framework with general instructions, prompts, skills, and agents |
-| **ironarch** | VA-oriented workflow with specialized agents for planning, implementing, testing, reviewing, and PR creation |
+Releases are cut with `mise run release`, which bumps versions, tags, and creates a GitHub Release. CI builds and attaches all artifacts automatically.
 
 ## Development
 
 ### Prerequisites
 
-- Node.js 20+ (see `mise.toml`)
+- Go 1.24+ and Node.js 20+ (see `mise.toml`)
 
 ### Running Tests
 
 ```bash
-npm test
+# Go CLI tests
+cd cli && go test ./...
+
+# Extension tests
+cd extension && npm test
+
+# Plugin structure validation
+npm run validate:plugins
 ```
 
 ### Contributing
 
-See [AGENTS.md](AGENTS.md) for development workflow guidance:
-- Trunk-based development
-- Atomic commits with conventional commit format
-- TDD approach
-- All tests green before PR
+See [AGENTS.md](AGENTS.md) for development workflow, code map, and conventions. Key practices: trunk-based development, conventional commits, TDD, and all tests green before PR.
 
 ## Documentation
 
-- [Architecture](docs/architecture.md) — System design: CLI, extension, TUI, daemon protocol
+- [Architecture](docs/architecture.md) — Full system design: CLI, extension, TUI, daemon protocol
 - [Plugin File Hierarchy](docs/plugin-file-hierarchy.md) — Structure requirements for plugins
-- [Creating Customization Files](docs/creating-customization-files.md) — How to create instructions, prompts, skills, and agents
+- [Creating Customization Files](docs/creating-customization-files.md) — How to author instructions, prompts, skills, and agents
 - [Example Usage](docs/EXAMPLE-USAGE.md) — Installation and usage examples
-- [AGENTS.md](AGENTS.md) — Development workflow and code map
 
 ## License
 
