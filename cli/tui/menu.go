@@ -269,7 +269,7 @@ func RunInteractiveMenu(svc commands.ActivateAPI) error {
 				return err
 			}
 			if confirm {
-				if err := InstallWithResolvedConfig(svc.CurrentManifests(), cfg, resolveTargetPath(target), svc.IsRemoteMode(), svc.RemoteRepo(), svc.RemoteBranch()); err != nil {
+				if err := InstallWithResolvedConfig(svc.CurrentManifests(), cfg, resolveTargetPath(target)); err != nil {
 					_ = runFullscreenText("Action Failed", "Quick install", err.Error())
 				}
 			}

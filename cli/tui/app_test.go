@@ -697,7 +697,7 @@ func TestRunList_JSONOverview(t *testing.T) {
 
 	manifests := testManifests()
 	cfg := testConfig()
-	svc := commands.NewService(t.TempDir(), manifests, cfg, false, "", "")
+	svc := commands.NewService(t.TempDir(), manifests, cfg)
 
 	var buf bytes.Buffer
 	printJSON := func(v interface{}) error {
@@ -728,7 +728,7 @@ func TestRunList_JSONDetail(t *testing.T) {
 
 	manifests := testManifests()
 	cfg := testConfig()
-	svc := commands.NewService(t.TempDir(), manifests, cfg, false, "", "")
+	svc := commands.NewService(t.TempDir(), manifests, cfg)
 
 	var buf bytes.Buffer
 	printJSON := func(v interface{}) error {
@@ -755,7 +755,7 @@ func TestRunList_HumanOverview(t *testing.T) {
 
 	manifests := testManifests()
 	cfg := testConfig()
-	svc := commands.NewService(t.TempDir(), manifests, cfg, false, "", "")
+	svc := commands.NewService(t.TempDir(), manifests, cfg)
 
 	r, w, _ := os.Pipe()
 	origStdout := os.Stdout
@@ -787,7 +787,7 @@ func TestRunList_UnknownManifest(t *testing.T) {
 
 	manifests := testManifests()
 	cfg := testConfig()
-	svc := commands.NewService(t.TempDir(), manifests, cfg, false, "", "")
+	svc := commands.NewService(t.TempDir(), manifests, cfg)
 
 	err := RunList(svc, "nonexistent", "", "", true, nil)
 	if err == nil {

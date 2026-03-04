@@ -416,14 +416,8 @@ func RunInteractiveInstall(svc commands.ActivateAPI) error {
 	fmt.Println(style.SummaryBox.Render(summary))
 	fmt.Println()
 
-	if svc.IsRemoteMode() {
-		if err := engine.InstallFilesFromRemote(files, result.chosen.BasePath, target, result.chosen.Version, result.chosen.ID, svc.RemoteRepo(), svc.RemoteBranch()); err != nil {
-			return err
-		}
-	} else {
-		if err := engine.InstallFiles(files, result.chosen.BasePath, target, result.chosen.Version, result.chosen.ID); err != nil {
-			return err
-		}
+	if err := engine.InstallFilesFromRemote(files, result.chosen.BasePath, target, result.chosen.Version, result.chosen.ID, svc.CurrentConfig().Repo, svc.CurrentConfig().Branch); err != nil {
+		return err
 	}
 
 	_, _ = svc.SetConfig("project", &model.Config{Manifest: result.chosen.ID, Tier: result.vals.tierID})
@@ -541,15 +535,21 @@ func formatGroups(groups []model.CategoryGroup) string {
 }
 
 // InstallWithResolvedConfig performs installation using pre-resolved settings.
-func InstallWithResolvedConfig(manifests []model.Manifest, cfg model.Config, target string, useRemote bool, repo, branch string) error {
+func InstallWithResolvedConfig(manifests []model.Manifest, cfg model.Config, target string) error {
 	chosen := model.FindManifestByID(manifests, cfg.Manifest)
 	if chosen == nil {
 		return fmt.Errorf("unknown manifest: %s", cfg.Manifest)
 	}
 
-	files := model.SelectFiles(chosen.Files, *chosen, cfg.Tier)
-	if useRemote {
-		return engine.InstallFilesFromRemote(files, chosen.BasePath, target, chosen.Version, chosen.ID, repo, branch)
+	repo := cfg.Repo
+	branch := cfg.Branch
+	if repo == "" {
+		repo = "peregrine-digital/activate-framework"
 	}
-	return engine.InstallFiles(files, chosen.BasePath, target, chosen.Version, chosen.ID)
+	if branch == "" {
+		branch = "main"
+	}
+
+	files := model.SelectFiles(chosen.Files, *chosen, cfg.Tier)
+	return engine.InstallFilesFromRemote(files, chosen.BasePath, target, chosen.Version, chosen.ID, repo, branch)
 }

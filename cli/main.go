@@ -10,7 +10,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/peregrine-digital/activate-framework/cli/commands"
@@ -35,7 +34,6 @@ type cliArgs struct {
 	scope        string
 	projectDir   string
 	file         string
-	remote       bool
 	stdio        bool
 	repo         string
 	branch       string
@@ -117,8 +115,6 @@ func parseArgs(args []string) cliArgs {
 				i++
 				a.branch = args[i]
 			}
-		case "--remote":
-			a.remote = true
 		case "--stdio":
 			a.stdio = true
 		case "--file":
@@ -176,7 +172,6 @@ Flags:
   --category <cat>    Filter by category (list command)
 	--scope <scope>     Config scope: project|global|resolved
 	--project-dir <dir> Resolve config/state against this project dir
-  --remote            Fetch files from GitHub instead of local bundle
   --repo <owner/repo> GitHub repository (default: %s)
   --branch <name>     Branch or tag (default: %s)
   --json              Machine-readable JSON output (list command)
@@ -189,14 +184,6 @@ func printJSON(v interface{}) error {
 	enc := json.NewEncoder(os.Stdout)
 	enc.SetIndent("", "  ")
 	return enc.Encode(v)
-}
-
-func resolveExeDir() string {
-	exe, err := os.Executable()
-	if err != nil {
-		return "."
-	}
-	return filepath.Dir(exe)
 }
 
 func main() {
@@ -237,7 +224,8 @@ func main() {
 			fmt.Fprintln(os.Stderr, "Error: serve requires --stdio")
 			os.Exit(1)
 		}
-		svc := commands.NewService("", nil, model.Config{}, args.remote, args.repo, args.branch)
+		cfg := model.Config{Repo: args.repo, Branch: args.branch}
+		svc := commands.NewService("", nil, cfg)
 		t := transport.NewTransport(os.Stdin, os.Stdout)
 		daemon := commands.NewDaemon(svc, t, version)
 		if err := daemon.Serve(); err != nil {
@@ -245,34 +233,6 @@ func main() {
 			os.Exit(1)
 		}
 		return
-	}
-
-	// ── Discover manifests ──────────────────────────────────────
-	var manifests []model.Manifest
-	var err error
-
-	if args.remote {
-		fmt.Printf("Fetching manifests from %s@%s...\n\n", args.repo, args.branch)
-		manifests, err = engine.DiscoverRemoteManifests(args.repo, args.branch)
-	} else {
-		var bundleDir string
-		bundleDir, err = engine.ResolveBundleDir(resolveExeDir())
-		if err != nil {
-			cwd, _ := os.Getwd()
-			bundleDir, err = engine.ResolveBundleDir(cwd)
-		}
-		if err == nil {
-			manifests, err = engine.DiscoverManifests(bundleDir)
-		}
-	}
-
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
-		os.Exit(1)
-	}
-	if len(manifests) == 0 {
-		fmt.Fprintln(os.Stderr, "No manifests found.")
-		os.Exit(1)
 	}
 
 	// ── Resolve config ──────────────────────────────────────────
@@ -292,10 +252,42 @@ func main() {
 	if args.tier != "" {
 		overrides.Tier = args.tier
 	}
+	if args.repo != storage.DefaultRepo {
+		overrides.Repo = args.repo
+	}
+	if args.branch != storage.DefaultBranch {
+		overrides.Branch = args.branch
+	}
 	cfg := storage.ResolveConfig(projectDir, overrides)
 
+	// ── Discover manifests ──────────────────────────────────────
+	repo := cfg.Repo
+	branch := cfg.Branch
+	if repo == "" {
+		repo = storage.DefaultRepo
+	}
+	if branch == "" {
+		branch = storage.DefaultBranch
+	}
+
+	manifests, err := engine.DiscoverRemoteManifests(repo, branch)
+	if err != nil {
+		// Fall back to cached manifests
+		cached, cacheErr := storage.ReadManifestCache(projectDir)
+		if cacheErr != nil || len(cached) == 0 {
+			fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+			os.Exit(1)
+		}
+		manifests = cached
+		fmt.Fprintln(os.Stderr, "Warning: using cached manifests (remote unavailable)")
+	}
+	if len(manifests) == 0 {
+		fmt.Fprintln(os.Stderr, "No manifests found.")
+		os.Exit(1)
+	}
+
 	// ── Create service ─────────────────────────────────────────
-	svc := commands.NewService(projectDir, manifests, cfg, args.remote, args.repo, args.branch)
+	svc := commands.NewService(projectDir, manifests, cfg)
 
 	// ── Dispatch command ────────────────────────────────────────
 	switch args.command {
@@ -385,13 +377,19 @@ func runNonInteractive(manifests []model.Manifest, cfg model.Config, args cliArg
 		return fmt.Errorf("unknown manifest: %s", cfg.Manifest)
 	}
 
+	repo := cfg.Repo
+	branch := cfg.Branch
+	if repo == "" {
+		repo = storage.DefaultRepo
+	}
+	if branch == "" {
+		branch = storage.DefaultBranch
+	}
+
 	files := model.SelectFiles(chosen.Files, *chosen, cfg.Tier)
 	fmt.Printf("\nInstalling %d files to %s:\n\n", len(files), target)
 
-	if args.remote {
-		return engine.InstallFilesFromRemote(files, chosen.BasePath, target, chosen.Version, chosen.ID, args.repo, args.branch)
-	}
-	if err := engine.InstallFiles(files, chosen.BasePath, target, chosen.Version, chosen.ID); err != nil {
+	if err := engine.InstallFilesFromRemote(files, chosen.BasePath, target, chosen.Version, chosen.ID, repo, branch); err != nil {
 		return err
 	}
 

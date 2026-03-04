@@ -43,14 +43,14 @@ func TestParseArgsConfigSet(t *testing.T) {
 }
 
 func TestParseArgsRepoRemove(t *testing.T) {
-	args := parseArgs([]string{"repo", "remove", "--remote", "--repo", "x/y", "--branch", "dev"})
+	args := parseArgs([]string{"repo", "remove", "--repo", "x/y", "--branch", "dev"})
 	if args.command != "repo" {
 		t.Fatalf("expected command repo, got %q", args.command)
 	}
 	if args.repoAction != "remove" {
 		t.Fatalf("expected repo action remove, got %q", args.repoAction)
 	}
-	if !args.remote || args.repo != "x/y" || args.branch != "dev" {
+	if args.repo != "x/y" || args.branch != "dev" {
 		t.Fatalf("unexpected parsed repo args: %+v", args)
 	}
 }
