@@ -11,6 +11,9 @@ const { ControlPanelProvider } = require('./controlPanel');
 /** @type {ActivateClient|null} */
 let client = null;
 
+/** @type {vscode.OutputChannel|null} */
+let outputChannel = null;
+
 /** Cached install directory from daemon (e.g. ".github"). */
 let installDir = '.github';
 
@@ -125,7 +128,7 @@ async function activate(context) {
   if (!workspaceFolder) return;
 
   const projectDir = workspaceFolder.uri.fsPath;
-  const outputChannel = vscode.window.createOutputChannel('Activate Framework');
+  outputChannel = vscode.window.createOutputChannel('Activate Framework');
 
   // Register the control panel immediately (shows "CLI not found" state if needed)
   const extVersion = context.extension?.packageJSON?.version || '';
@@ -553,7 +556,13 @@ async function performCliUpdate(targetClient, token) {
 }
 
 async function checkForUpdates(context, controlPanel, force = false) {
+  const log = (msg) => outputChannel?.appendLine(`[update] ${msg}`);
   try {
+    if (force && outputChannel) {
+      outputChannel.show(true);
+    }
+    log('Checking for updates...');
+
     // Get GitHub token for private repo API access
     let token = '';
     try {
@@ -561,11 +570,13 @@ async function checkForUpdates(context, controlPanel, force = false) {
         createIfNone: false,
       });
       token = session?.accessToken || '';
+      log(token ? 'GitHub auth token acquired' : 'No GitHub auth token');
     } catch {
-      // No auth available
+      log('GitHub auth unavailable');
     }
 
     const extVersion = context.extension?.packageJSON?.version || '';
+    log(`Current CLI: ${client?.serverVersion || '?'}, Extension: ${extVersion}`);
     const update = await client.checkUpdate(extVersion, force, token);
 
     // Store the check timestamp for display in Settings
@@ -574,8 +585,14 @@ async function checkForUpdates(context, controlPanel, force = false) {
     }
 
     if (!update) {
+      log('No update info returned from daemon');
       if (force) vscode.window.showInformationMessage('Activate is up to date.');
       return;
+    }
+
+    log(`Latest CLI: ${update.latestVersion || '(none)'}, updateAvailable: ${update.updateAvailable}`);
+    if (update.extension) {
+      log(`Extension update: available=${update.extension.available}, version=${update.extension.version || '?'}, downloadUrl=${update.extension.downloadUrl ? 'yes' : 'no'}`);
     }
 
     let foundUpdate = false;
@@ -589,13 +606,20 @@ async function checkForUpdates(context, controlPanel, force = false) {
         'Dismiss',
       );
       if (action === 'Update Now') {
-        await vscode.window.withProgress(
-          { location: vscode.ProgressLocation.Notification, title: 'Updating Activate CLI…' },
-          () => performCliUpdate(client, token),
-        );
-        vscode.window.showInformationMessage(
-          `Activate CLI updated to v${update.latestVersion}. Daemon restarted.`,
-        );
+        log('User accepted CLI update');
+        try {
+          await vscode.window.withProgress(
+            { location: vscode.ProgressLocation.Notification, title: 'Updating Activate CLI…' },
+            () => performCliUpdate(client, token),
+          );
+          log('CLI update completed successfully');
+          vscode.window.showInformationMessage(
+            `Activate CLI updated to v${update.latestVersion}. Daemon restarted.`,
+          );
+        } catch (err) {
+          log(`CLI update FAILED: ${err.message}`);
+          vscode.window.showErrorMessage(`CLI update failed: ${err.message}`);
+        }
       }
     }
 
@@ -609,21 +633,32 @@ async function checkForUpdates(context, controlPanel, force = false) {
         'Dismiss',
       );
       if (action === 'Update Now') {
-        await vscode.window.withProgress(
-          { location: vscode.ProgressLocation.Notification, title: 'Updating Activate extension…' },
-          () => downloadAndInstallVsix(ext.downloadUrl, ext.assetName, ext.sha256, token),
-        );
+        log(`Downloading VSIX: ${ext.assetName} from ${ext.downloadUrl}`);
+        try {
+          await vscode.window.withProgress(
+            { location: vscode.ProgressLocation.Notification, title: 'Updating Activate extension…' },
+            () => downloadAndInstallVsix(ext.downloadUrl, ext.assetName, ext.sha256, token),
+          );
+          log('VSIX install completed successfully');
+        } catch (err) {
+          log(`VSIX update FAILED: ${err.message}\n${err.stack || ''}`);
+          vscode.window.showErrorMessage(`Extension update failed: ${err.message}`);
+        }
       }
     }
 
     if (!foundUpdate) {
+      log('No updates available');
       if (force) vscode.window.showInformationMessage('Activate is up to date.');
     }
 
     // Refresh the panel to show updated timestamp
     if (controlPanel) controlPanel.refresh();
-  } catch {
-    // Silently ignore update check failures on auto-check
+  } catch (err) {
+    log(`Update check FAILED: ${err.message}\n${err.stack || ''}`);
+    if (force) {
+      vscode.window.showErrorMessage(`Update check failed: ${err.message}`);
+    }
   }
 }
 
@@ -680,17 +715,26 @@ function downloadFile(url, destPath, token) {
 }
 
 async function downloadAndInstallVsix(url, filename, expectedSha256, token) {
+  const log = (msg) => outputChannel?.appendLine(`[update] ${msg}`);
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'activate-vsix-'));
   tempDirs.push(tmpDir);
   const dest = path.join(tmpDir, filename);
 
+  log(`Downloading VSIX to ${dest}`);
   await downloadFile(url, dest, token);
-  verifyChecksum(dest, expectedSha256);
+  const stat = fs.statSync(dest);
+  log(`Downloaded ${stat.size} bytes`);
 
+  verifyChecksum(dest, expectedSha256);
+  log('Checksum verified (or skipped)');
+
+  log('Installing VSIX via workbench.extensions.installExtension...');
   await vscode.commands.executeCommand(
     'workbench.extensions.installExtension',
     vscode.Uri.file(dest),
   );
+  log('VSIX install command completed');
+
   const action = await vscode.window.showInformationMessage(
     'Activate extension updated. Reload to apply changes.',
     'Reload',
