@@ -13,6 +13,7 @@ import (
 	"github.com/peregrine-digital/activate-framework/cli/commands"
 	"github.com/peregrine-digital/activate-framework/cli/engine"
 	"github.com/peregrine-digital/activate-framework/cli/model"
+	"github.com/peregrine-digital/activate-framework/cli/storage"
 	"github.com/peregrine-digital/activate-framework/cli/tui/style"
 )
 
@@ -544,10 +545,10 @@ func InstallWithResolvedConfig(manifests []model.Manifest, cfg model.Config, tar
 	repo := cfg.Repo
 	branch := cfg.Branch
 	if repo == "" {
-		repo = "peregrine-digital/activate-framework"
+		repo = storage.DefaultRepo
 	}
 	if branch == "" {
-		branch = "main"
+		branch = storage.DefaultBranch
 	}
 
 	files := model.SelectFiles(chosen.Files, *chosen, cfg.Tier)
