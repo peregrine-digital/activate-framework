@@ -1,7 +1,0 @@
-{
-  "screenshot-viewer": {
-    "type": "stdio",
-    "command": "node",
-    "args": [".github/mcp-server/screenshot-viewer.js"]
-  }
-}

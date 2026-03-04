@@ -1,6 +1,5 @@
 ---
 description: 'Run a structured code review on the current file or selection using the project code review checklist.'
-version: '0.5.0'
 agent: 'agent'
 tools:
   - 'changes'

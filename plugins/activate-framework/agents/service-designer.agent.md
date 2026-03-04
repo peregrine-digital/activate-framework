@@ -1,7 +1,6 @@
 ---
 name: service-designer
 description: Specialized agent for creating service design artifacts including journey maps and service blueprints
-version: '0.5.0'
 ---
 
 ## Mission

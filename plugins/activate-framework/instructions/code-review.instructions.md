@@ -1,6 +1,5 @@
 ---
 description: 'Universal code review checklist for all project types'
-version: '0.5.0'
 applyTo: '**'
 excludeAgent: ["coding-agent"]
 ---

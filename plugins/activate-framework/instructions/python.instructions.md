@@ -1,6 +1,5 @@
 ---
 description: 'Python conventions and project-specific patterns'
-version: '0.5.0'
 applyTo: '**/*.py'
 excludeAgent: []
 ---
