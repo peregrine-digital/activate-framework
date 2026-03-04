@@ -62,16 +62,15 @@ read -rp "Continue? [y/N]: " CONFIRM
 sed -i.bak "s/const version = \"${CLI_VERSION}\"/const version = \"${NEW_VERSION}\"/" "$CLI_VERSION_FILE"
 rm -f "${CLI_VERSION_FILE}.bak"
 
-# Bump extension version (use non-prerelease for extension since VS Code doesn't support semver pre-release)
-EXT_NEW_VERSION="${NEW_VERSION%%-*}"
-cd extension && npm version "$EXT_NEW_VERSION" --no-git-tag-version --allow-same-version && npm install --package-lock-only && cd ..
+# Bump extension version (full version including any pre-release suffix)
+cd extension && npm version "$NEW_VERSION" --no-git-tag-version --allow-same-version && npm install --package-lock-only && cd ..
 
 # Store full release tag in extension package.json for install script URL resolution
 sed -i.bak "s/\"releaseTag\": \"[^\"]*\"/\"releaseTag\": \"v${NEW_VERSION}\"/" "$EXT_VERSION_FILE"
 rm -f "${EXT_VERSION_FILE}.bak"
 
 echo "✓ Bumped CLI to v${NEW_VERSION}"
-echo "✓ Bumped extension to v${EXT_NEW_VERSION}"
+echo "✓ Bumped extension to v${NEW_VERSION}"
 
 # Commit, tag, push
 git add "$CLI_VERSION_FILE" "$EXT_VERSION_FILE" extension/package-lock.json

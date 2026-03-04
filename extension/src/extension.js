@@ -502,10 +502,7 @@ async function activate(context) {
 
     vscode.commands.registerCommand('activate-framework.checkForUpdates', async () => {
       if (!requireClient()) return;
-      await vscode.window.withProgress(
-        { location: vscode.ProgressLocation.Notification, title: 'Checking for updates…' },
-        () => checkForUpdates(context, controlPanel, true),
-      );
+      await checkForUpdates(context, controlPanel, true);
     }),
   );
 
@@ -682,61 +679,52 @@ async function checkForUpdates(context, controlPanel, force = false) {
       log(`Extension update: available=${update.extension.available}, version=${update.extension.version || '?'}, downloadUrl=${update.extension.downloadUrl ? 'yes' : 'no'}`);
     }
 
-    let foundUpdate = false;
+    const hasCli = !!update.updateAvailable;
+    const ext = update.extension;
+    const hasExt = !!(ext && ext.available && ext.downloadUrl);
 
-    // CLI binary update
-    if (update.updateAvailable) {
-      foundUpdate = true;
-      const action = await vscode.window.showInformationMessage(
-        `Activate CLI update available: v${update.currentVersion} → v${update.latestVersion}`,
-        'Update Now',
-        'Dismiss',
-      );
-      if (action === 'Update Now') {
-        log('User accepted CLI update');
-        try {
-          await vscode.window.withProgress(
-            { location: vscode.ProgressLocation.Notification, title: 'Updating Activate CLI…' },
-            () => performCliUpdate(client, token),
-          );
-          log('CLI update completed successfully');
+    if (!hasCli && !hasExt) {
+      log('No updates available');
+      if (force) vscode.window.showInformationMessage('Activate is up to date.');
+      // Refresh the panel to show updated timestamp
+      if (controlPanel) controlPanel.refresh();
+      return;
+    }
+
+    // Build a combined update message
+    const parts = [];
+    if (hasCli) parts.push(`CLI v${update.currentVersion} → v${update.latestVersion}`);
+    if (hasExt) parts.push(`Extension v${extVersion} → v${ext.version}`);
+    const msg = `Activate update available: ${parts.join(', ')}`;
+
+    const action = await vscode.window.showInformationMessage(msg, 'Update Now', 'Dismiss');
+    if (action === 'Update Now') {
+      try {
+        await vscode.window.withProgress(
+          { location: vscode.ProgressLocation.Notification, title: 'Updating Activate…' },
+          async () => {
+            if (hasCli) {
+              log('Updating CLI…');
+              await performCliUpdate(client, token);
+              log('CLI update completed');
+            }
+            if (hasExt) {
+              log(`Downloading VSIX: ${ext.assetName} from ${ext.downloadUrl}`);
+              await downloadAndInstallVsix(ext.downloadUrl, ext.assetName, ext.sha256, token);
+              log('VSIX install completed');
+            }
+          },
+        );
+        if (hasCli && !hasExt) {
           vscode.window.showInformationMessage(
             `Activate CLI updated to v${update.latestVersion}. Daemon restarted.`,
           );
-        } catch (err) {
-          log(`CLI update FAILED: ${err.message}`);
-          vscode.window.showErrorMessage(`CLI update failed: ${err.message}`);
         }
+        // If extension was updated, downloadAndInstallVsix already prompts for reload
+      } catch (err) {
+        log(`Update FAILED: ${err.message}\n${err.stack || ''}`);
+        vscode.window.showErrorMessage(`Update failed: ${err.message}`);
       }
-    }
-
-    // Extension VSIX update
-    const ext = update.extension;
-    if (ext && ext.available && ext.downloadUrl) {
-      foundUpdate = true;
-      const action = await vscode.window.showInformationMessage(
-        `Activate extension update available: v${extVersion} → v${ext.version}`,
-        'Update Now',
-        'Dismiss',
-      );
-      if (action === 'Update Now') {
-        log(`Downloading VSIX: ${ext.assetName} from ${ext.downloadUrl}`);
-        try {
-          await vscode.window.withProgress(
-            { location: vscode.ProgressLocation.Notification, title: 'Updating Activate extension…' },
-            () => downloadAndInstallVsix(ext.downloadUrl, ext.assetName, ext.sha256, token),
-          );
-          log('VSIX install completed successfully');
-        } catch (err) {
-          log(`VSIX update FAILED: ${err.message}\n${err.stack || ''}`);
-          vscode.window.showErrorMessage(`Extension update failed: ${err.message}`);
-        }
-      }
-    }
-
-    if (!foundUpdate) {
-      log('No updates available');
-      if (force) vscode.window.showInformationMessage('Activate is up to date.');
     }
 
     // Refresh the panel to show updated timestamp
