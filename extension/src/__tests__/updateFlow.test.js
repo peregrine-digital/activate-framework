@@ -154,9 +154,10 @@ describe('performCliUpdate (real function)', () => {
     const client = new MockClient();
     client.stop = async () => { throw new Error('stop failed'); };
 
-    await assert.rejects(() => performCliUpdate(client, 'tok'));
+    // stop() errors are caught internally (daemon may already be dead)
+    await performCliUpdate(client, 'tok');
     assert.strictEqual(client._updating, false,
-      '_updating must be cleared on error — otherwise auto-restart is permanently suppressed');
+      '_updating must be cleared — otherwise auto-restart is permanently suppressed');
   });
 
   it('clears _updating even if start() throws', async () => {
@@ -171,7 +172,8 @@ describe('performCliUpdate (real function)', () => {
     const client = new MockClient();
     client.selfUpdate = async () => { throw new Error('rpc failed'); };
 
-    await assert.rejects(() => performCliUpdate(client, 'tok'));
+    // selfUpdate errors are caught internally (daemon may die during binary replacement)
+    await performCliUpdate(client, 'tok');
     assert.strictEqual(client._updating, false);
   });
 });

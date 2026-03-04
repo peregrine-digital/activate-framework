@@ -545,11 +545,23 @@ function buildDownloadHeaders(token, isRedirect = false) {
  * Exported for testability.
  */
 async function performCliUpdate(targetClient, token) {
+  const log = (msg) => outputChannel?.appendLine(`[update] ${msg}`);
   targetClient._updating = true;
   try {
-    await targetClient.selfUpdate(token);
-    await targetClient.stop();
+    try {
+      await targetClient.selfUpdate(token);
+      log('selfUpdate RPC completed normally');
+    } catch (err) {
+      // Expected: daemon may die when its binary is replaced (SIGTERM from macOS code signing).
+      // The binary was likely updated successfully — proceed with restart.
+      log(`selfUpdate RPC interrupted (expected): ${err.message}`);
+    }
+    // Ensure old daemon is stopped (may already be dead)
+    try { await targetClient.stop(); } catch { /* already dead */ }
+    // Brief pause to let filesystem settle
+    await new Promise((r) => setTimeout(r, 500));
     await targetClient.start();
+    log(`Daemon restarted, new version: ${targetClient.serverVersion || '?'}`);
   } finally {
     targetClient._updating = false;
   }
