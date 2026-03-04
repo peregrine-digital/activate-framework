@@ -12,17 +12,19 @@ A cross-functional agentic framework for government delivery teams. Activate pro
 
 ## Quick Start
 
-### Option 1: VS Code Extension
+### Install the VS Code Extension
 
-Install the Activate extension from the VS Code marketplace, then use the sidebar to select and install plugins.
+1. Download the latest `.vsix` from [Releases](https://github.com/peregrine-digital/activate-framework/releases)
+2. In VS Code: **Extensions** → **⋯** → **Install from VSIX…** → select the downloaded file
+3. Reload VS Code — the extension auto-installs the CLI and sets up your workspace
 
-### Option 2: CLI
+### Install the CLI Only
 
 ```bash
-node install.mjs
+curl -fsSL https://raw.githubusercontent.com/peregrine-digital/activate-framework/main/install.sh | GITHUB_TOKEN="$GITHUB_TOKEN" sh
 ```
 
-Follow the prompts to choose a plugin, tier level, and installation directory.
+> **Private repo:** Set `GITHUB_TOKEN` to a personal access token with `repo` scope.
 
 ## Project Structure
 
