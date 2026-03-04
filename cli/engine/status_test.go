@@ -88,7 +88,7 @@ func TestComputeFileStatusesBasic(t *testing.T) {
 	sidecar := &model.RepoSidecar{Files: []string{".github/instructions/general.md"}}
 	cfg := model.Config{Repo: repo, Branch: branch}
 
-	statuses := ComputeFileStatuses(manifest, sidecar, cfg, projectDir)
+	statuses := ComputeFileStatuses(manifest, sidecar, cfg, projectDir, nil)
 	if len(statuses) != 2 {
 		t.Fatalf("expected 2 statuses, got %d", len(statuses))
 	}
@@ -145,7 +145,7 @@ func TestComputeFileStatusesSkipped(t *testing.T) {
 		SkippedVersions: map[string]string{"instructions/sec.md": "0.5.0"},
 	}
 
-	statuses := ComputeFileStatuses(manifest, sidecar, cfg, projectDir)
+	statuses := ComputeFileStatuses(manifest, sidecar, cfg, projectDir, nil)
 	if len(statuses) != 1 {
 		t.Fatalf("expected 1 status, got %d", len(statuses))
 	}
@@ -179,7 +179,7 @@ func TestComputeFileStatusesOverrides(t *testing.T) {
 		},
 	}
 
-	statuses := ComputeFileStatuses(manifest, nil, cfg, projectDir)
+	statuses := ComputeFileStatuses(manifest, nil, cfg, projectDir, nil)
 	if statuses[0].Override != "pinned" {
 		t.Fatalf("expected pinned override, got %q", statuses[0].Override)
 	}
@@ -200,7 +200,7 @@ func TestComputeFileStatusesNilSidecar(t *testing.T) {
 		Files: []model.ManifestFile{{Src: "a.md", Dest: "a.md", Tier: "core"}},
 	}
 
-	statuses := ComputeFileStatuses(manifest, nil, model.Config{Repo: repo, Branch: branch}, projectDir)
+	statuses := ComputeFileStatuses(manifest, nil, model.Config{Repo: repo, Branch: branch}, projectDir, nil)
 	if len(statuses) != 1 {
 		t.Fatalf("expected 1, got %d", len(statuses))
 	}
@@ -228,8 +228,74 @@ func TestComputeFileStatusesSameVersion(t *testing.T) {
 	}
 	sidecar := &model.RepoSidecar{Files: []string{".github/a.md"}}
 
-	statuses := ComputeFileStatuses(manifest, sidecar, model.Config{Repo: repo, Branch: branch}, projectDir)
+	statuses := ComputeFileStatuses(manifest, sidecar, model.Config{Repo: repo, Branch: branch}, projectDir, nil)
 	if statuses[0].UpdateAvailable {
 		t.Fatal("expected no update when versions match")
+	}
+}
+
+func TestComputeFileStatusesCachedVersions(t *testing.T) {
+	projectDir := t.TempDir()
+	basePath := "plugins/test"
+
+	// No HTTP server needed – cached versions bypass remote fetch entirely.
+	oldResolver := storage.TokenResolver
+	storage.TokenResolver = func() string { return "" }
+	storage.ResetTokenCache()
+	defer func() {
+		storage.TokenResolver = oldResolver
+		storage.ResetTokenCache()
+	}()
+
+	installedPath := filepath.Join(projectDir, ".github", "instructions", "general.md")
+	os.MkdirAll(filepath.Dir(installedPath), 0755)
+	os.WriteFile(installedPath, []byte("---\nversion: '0.4.0'\n---\n# General"), 0644)
+
+	manifest := model.Manifest{
+		ID: "test", Version: "0.5.0", BasePath: basePath,
+		Files: []model.ManifestFile{
+			{Src: "instructions/general.md", Dest: "instructions/general.md", Tier: "core"},
+		},
+	}
+	sidecar := &model.RepoSidecar{Files: []string{".github/instructions/general.md"}}
+
+	cached := map[string]string{
+		basePath + "/instructions/general.md": "0.5.0",
+	}
+
+	statuses := ComputeFileStatuses(manifest, sidecar, model.Config{}, projectDir, cached)
+	if len(statuses) != 1 {
+		t.Fatalf("expected 1 status, got %d", len(statuses))
+	}
+	if statuses[0].BundledVersion != "0.5.0" {
+		t.Fatalf("expected bundled 0.5.0 from cache, got %q", statuses[0].BundledVersion)
+	}
+	if !statuses[0].UpdateAvailable {
+		t.Fatal("expected updateAvailable=true")
+	}
+}
+
+func TestFetchRemoteVersions(t *testing.T) {
+	basePath := "plugins/test"
+	repo, branch, cleanup := serveVersionFiles(t, map[string]string{
+		basePath + "/a.md": "---\nversion: '1.0.0'\n---\n",
+		basePath + "/b.md": "---\nversion: '2.0.0'\n---\n",
+	})
+	defer cleanup()
+
+	manifest := model.Manifest{
+		ID: "test", Version: "1.0.0", BasePath: basePath,
+		Files: []model.ManifestFile{
+			{Src: "a.md", Dest: "a.md", Tier: "core"},
+			{Src: "b.md", Dest: "b.md", Tier: "core"},
+		},
+	}
+
+	versions := FetchRemoteVersions(manifest, repo, branch)
+	if v := versions[basePath+"/a.md"]; v != "1.0.0" {
+		t.Fatalf("expected 1.0.0 for a.md, got %q", v)
+	}
+	if v := versions[basePath+"/b.md"]; v != "2.0.0" {
+		t.Fatalf("expected 2.0.0 for b.md, got %q", v)
 	}
 }

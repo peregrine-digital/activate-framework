@@ -299,4 +299,37 @@ describe('groupByCategory (via controlPanel module)', () => {
     assert.equal(state.availableFiles[0].dest, 'instructions/a.md');
     assert.equal(state.availableFiles[0].bundledVersion, '2.0.0');
   });
+
+  describe('refresh debouncing', () => {
+    it('collapses multiple rapid refresh calls into one render', async () => {
+      const mockClient = new MockClient();
+      const panel = new ControlPanelProvider(mockClient, '0.1.0');
+      const webview = { options: {}, onDidReceiveMessage: () => {}, html: '' };
+      panel.resolveWebviewView({ webview });
+
+      mockClient._mockResults.getState = {
+        state: {}, config: {}, tiers: [], categories: [], files: [],
+      };
+      mockClient._mockResults.listManifests = [];
+
+      let renderCount = 0;
+      const origRender = panel._render.bind(panel);
+      panel._render = async function () {
+        renderCount++;
+        return origRender();
+      };
+
+      // Fire 5 rapid refreshes
+      panel.refresh();
+      panel.refresh();
+      panel.refresh();
+      panel.refresh();
+      await panel.refresh();
+
+      // Wait for debounce to settle
+      await new Promise((r) => setTimeout(r, 200));
+
+      assert.ok(renderCount <= 2, `expected at most 2 renders, got ${renderCount}`);
+    });
+  });
 });

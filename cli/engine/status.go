@@ -7,8 +7,29 @@ import (
 	"github.com/peregrine-digital/activate-framework/cli/storage"
 )
 
+// FetchRemoteVersions fetches the frontmatter version of every file in a
+// manifest from the remote repo.  The returned map is keyed by the full
+// remote srcPath (basePath + "/" + file.Src).  Callers can pass the map to
+// ComputeFileStatuses to avoid per-file HTTP calls on every GetState.
+func FetchRemoteVersions(m model.Manifest, repo, branch string) map[string]string {
+	versions := make(map[string]string, len(m.Files))
+	for _, f := range m.Files {
+		srcPath := f.Src
+		if m.BasePath != "" {
+			srcPath = m.BasePath + "/" + f.Src
+		}
+		v, _ := storage.ReadFileVersionRemote(srcPath, repo, branch)
+		versions[srcPath] = v
+	}
+	return versions
+}
+
 // ComputeFileStatuses builds a status list for every file in the manifest.
-func ComputeFileStatuses(m model.Manifest, sidecar *model.RepoSidecar, cfg model.Config, projectDir string) []model.FileStatus {
+//
+// If remoteVersions is non-nil it is used as a cache – no HTTP calls are
+// made.  Pass nil to fetch each version from the remote (legacy behaviour,
+// useful in CLI one-shot commands where latency is acceptable).
+func ComputeFileStatuses(m model.Manifest, sidecar *model.RepoSidecar, cfg model.Config, projectDir string, remoteVersions map[string]string) []model.FileStatus {
 	allowedTiers := model.GetAllowedFileTiers(m, cfg.Tier)
 
 	installedSet := make(map[string]bool)
@@ -48,8 +69,14 @@ func ComputeFileStatuses(m model.Manifest, sidecar *model.RepoSidecar, cfg model
 		if m.BasePath != "" {
 			srcPath = m.BasePath + "/" + f.Src
 		}
-		bv, _ := storage.ReadFileVersionRemote(srcPath, cfg.Repo, cfg.Branch)
-		fs.BundledVersion = bv
+
+		// Use cached version if available, otherwise fetch from remote.
+		if remoteVersions != nil {
+			fs.BundledVersion = remoteVersions[srcPath]
+		} else {
+			bv, _ := storage.ReadFileVersionRemote(srcPath, cfg.Repo, cfg.Branch)
+			fs.BundledVersion = bv
+		}
 
 		if fs.Installed {
 			iv, _ := storage.ReadFileVersion(projectDir + "/" + destRel)

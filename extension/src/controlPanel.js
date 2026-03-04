@@ -27,6 +27,8 @@ class ControlPanelProvider {
     this._extensionVersion = extensionVersion || '';
     /** @type {string|null} ISO timestamp of last update check */
     this._lastUpdateCheck = null;
+    /** @type {ReturnType<typeof setTimeout>|null} */
+    this._refreshTimer = null;
   }
 
   /** Update the client after CLI is installed and daemon started. */
@@ -49,7 +51,17 @@ class ControlPanelProvider {
   }
 
   async refresh() {
-    await this._render();
+    // Debounce: if a refresh is already scheduled, skip this one.
+    // This prevents duplicate work when both the command handler and the
+    // stateChanged notification trigger a refresh within a short window.
+    if (this._refreshTimer) clearTimeout(this._refreshTimer);
+    return new Promise((resolve) => {
+      this._refreshTimer = setTimeout(async () => {
+        this._refreshTimer = null;
+        await this._render();
+        resolve();
+      }, 100);
+    });
   }
 
   // ── data helpers ──────────────────────────────────────
@@ -150,8 +162,11 @@ class ControlPanelProvider {
         const state = await this._gatherState();
         this._view.webview.html = this._getHtml(state);
       }
-    } catch {
-      // Daemon may not be ready yet
+    } catch (err) {
+      // Daemon may not be ready yet — log for diagnostics
+      if (typeof console !== 'undefined') {
+        console.warn('[ControlPanel] render failed:', err?.message || err);
+      }
     }
   }
 

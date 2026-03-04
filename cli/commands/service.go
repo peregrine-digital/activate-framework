@@ -38,9 +38,10 @@ var _ ActivateAPI = (*ActivateService)(nil)
 
 // ActivateService is the single API surface for all domain operations.
 type ActivateService struct {
-	ProjectDir string
-	Manifests  []model.Manifest
-	Config     model.Config
+	ProjectDir     string
+	Manifests      []model.Manifest
+	Config         model.Config
+	remoteVersions map[string]string // cached remote file versions (srcPath → version)
 }
 
 // NewService creates a fully initialized service instance.
@@ -86,6 +87,7 @@ func (s *ActivateService) discoverManifests() {
 		if s.ProjectDir != "" {
 			_ = storage.WriteManifestCache(s.ProjectDir, m)
 		}
+		s.refreshRemoteVersions(repo, branch)
 		return
 	}
 
@@ -95,6 +97,17 @@ func (s *ActivateService) discoverManifests() {
 			s.Manifests = cached
 		}
 	}
+}
+
+// refreshRemoteVersions fetches the remote frontmatter version for every file
+// in the active manifest and caches the results so that GetState does not need
+// to make per-file HTTP calls.
+func (s *ActivateService) refreshRemoteVersions(repo, branch string) {
+	chosen := model.FindManifestByID(s.Manifests, s.Config.Manifest)
+	if chosen == nil {
+		return
+	}
+	s.remoteVersions = engine.FetchRemoteVersions(*chosen, repo, branch)
 }
 
 func (s *ActivateService) RefreshConfig()                { s.refreshConfig() }
@@ -194,7 +207,7 @@ func (s *ActivateService) GetState() StateResult {
 	}
 	if chosen != nil {
 		result.Tiers = model.DiscoverAvailableTiers(*chosen)
-		result.Files = engine.ComputeFileStatuses(*chosen, sidecar, s.Config, s.ProjectDir)
+		result.Files = engine.ComputeFileStatuses(*chosen, sidecar, s.Config, s.ProjectDir, s.remoteVersions)
 	}
 	return result
 }
@@ -267,6 +280,16 @@ func (s *ActivateService) SetConfig(scope string, updates *model.Config) (*SetCo
 				s.refreshConfig()
 			}
 		}
+		// Refresh version cache for the newly selected manifest
+		repo := s.Config.Repo
+		branch := s.Config.Branch
+		if repo == "" {
+			repo = storage.DefaultRepo
+		}
+		if branch == "" {
+			branch = storage.DefaultBranch
+		}
+		s.refreshRemoteVersions(repo, branch)
 	}
 
 	return &SetConfigResult{OK: true, Scope: scope}, nil
