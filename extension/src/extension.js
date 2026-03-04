@@ -124,18 +124,50 @@ function verifyBinary(binaryPath) {
 // ── Workspace refresh helpers ─────────────────────────────────
 
 /**
- * Nudge VS Code's file system so watchers (including Copilot) detect
- * files written by the external daemon process.  A readDirectory on the
- * install dir forces VS Code to re-scan; refreshFilesExplorer updates
- * the visible tree.
+ * Notify VS Code that workspace files changed so its internal watchers
+ * (including Copilot's agent/instruction scanner) fire immediately.
+ *
+ * The daemon writes files via Go's os.WriteFile which bypasses VS Code's
+ * file-system layer.  We re-write each affected file through
+ * vscode.workspace.fs so the proper onDidCreate / onDidChange / onDidDelete
+ * events propagate to all listening extensions.
+ *
+ * @param {'add'|'remove'|'bulk'} kind
+ * @param {string} [fileDest] - relative dest path for single-file ops
  */
-function refreshWorkspace() {
-  vscode.commands.executeCommand('workbench.files.action.refreshFilesExplorer');
+async function refreshWorkspace(kind, fileDest) {
   const wsRoot = vscode.workspace.workspaceFolders?.[0]?.uri;
-  if (wsRoot) {
-    const ghDir = vscode.Uri.joinPath(wsRoot, installDir);
-    // Silent read — triggers VS Code's internal file watcher reconciliation
-    vscode.workspace.fs.readDirectory(ghDir).then(() => {}, () => {});
+  if (!wsRoot) return;
+
+  try {
+    if (kind === 'remove' && fileDest) {
+      // File already deleted on disk — fire a delete event via VS Code API.
+      const uri = vscode.Uri.joinPath(wsRoot, installDir, fileDest);
+      try { await vscode.workspace.fs.delete(uri); } catch { /* already gone */ }
+    } else if (kind === 'add' && fileDest) {
+      // File was written on disk — read it back and re-write via VS Code API
+      // to fire the create/change event.
+      const uri = vscode.Uri.joinPath(wsRoot, installDir, fileDest);
+      const data = await vscode.workspace.fs.readFile(uri);
+      await vscode.workspace.fs.writeFile(uri, data);
+    } else {
+      // Bulk operation — touch every file tracked in the sidecar.
+      // Read the sidecar to get the authoritative list.
+      const sidecarUri = vscode.Uri.joinPath(wsRoot, installDir, '.activate-installed.json');
+      try {
+        const raw = await vscode.workspace.fs.readFile(sidecarUri);
+        const sidecar = JSON.parse(Buffer.from(raw).toString('utf8'));
+        for (const rel of (sidecar.files || [])) {
+          const uri = vscode.Uri.joinPath(wsRoot, rel);
+          try {
+            const data = await vscode.workspace.fs.readFile(uri);
+            await vscode.workspace.fs.writeFile(uri, data);
+          } catch { /* file may not exist yet */ }
+        }
+      } catch { /* sidecar may not exist */ }
+    }
+  } catch {
+    // Best-effort — don't break the main flow
   }
 }
 
@@ -231,7 +263,7 @@ async function activate(context) {
         await client.setConfig({ tier: picked.value, scope: 'project' });
         await client.sync();
         controlPanel.refresh();
-        refreshWorkspace();
+        refreshWorkspace('bulk');
       } catch (err) {
         vscode.window.showErrorMessage(`Change tier failed: ${err.message}`);
       }
@@ -267,7 +299,7 @@ async function activate(context) {
         await client.setConfig({ manifest: picked.value, scope: 'project' });
         await client.sync();
         controlPanel.refresh();
-        refreshWorkspace();
+        refreshWorkspace('bulk');
       } catch (err) {
         vscode.window.showErrorMessage(`Change manifest failed: ${err.message}`);
       }
@@ -320,7 +352,7 @@ async function activate(context) {
         await client.repoAdd();
         vscode.window.showInformationMessage('Peregrine Activate files injected.');
         controlPanel.refresh();
-        refreshWorkspace();
+        refreshWorkspace('bulk');
       } catch (err) {
         vscode.window.showErrorMessage(`Add failed: ${err.message}`);
       }
@@ -339,7 +371,7 @@ async function activate(context) {
         await client.repoRemove();
         vscode.window.showInformationMessage('Peregrine Activate files removed.');
         controlPanel.refresh();
-        refreshWorkspace();
+        refreshWorkspace('bulk');
       } catch (err) {
         vscode.window.showErrorMessage(`Remove failed: ${err.message}`);
       }
@@ -352,7 +384,7 @@ async function activate(context) {
         const count = result.updated ? result.updated.length : 0;
         vscode.window.showInformationMessage(`Updated ${count} files.`);
         controlPanel.refresh();
-        refreshWorkspace();
+        refreshWorkspace('bulk');
       } catch (err) {
         vscode.window.showErrorMessage(`Update failed: ${err.message}`);
       }
@@ -369,7 +401,7 @@ async function activate(context) {
         await client.installFile(file.dest);
         vscode.window.showInformationMessage(`Installed: ${file.dest}`);
         controlPanel.refresh();
-        refreshWorkspace();
+        refreshWorkspace('add', file.dest);
       } catch (err) {
         vscode.window.showErrorMessage(`Failed to install: ${file.dest} — ${err.message}`);
       }
@@ -386,7 +418,7 @@ async function activate(context) {
         await client.uninstallFile(file.dest);
         vscode.window.showInformationMessage(`Uninstalled: ${file.dest}`);
         controlPanel.refresh();
-        refreshWorkspace();
+        refreshWorkspace('remove', file.dest);
       } catch (err) {
         vscode.window.showErrorMessage(`Failed to uninstall: ${file.dest} — ${err.message}`);
       }
@@ -556,7 +588,7 @@ async function autoSetup(controlPanel, context) {
   }
 
   controlPanel.refresh();
-  refreshWorkspace();
+  refreshWorkspace('bulk');
 
   // Check for updates (non-blocking)
   checkForUpdates(context, controlPanel);
