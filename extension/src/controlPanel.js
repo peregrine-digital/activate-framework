@@ -196,10 +196,7 @@ class ControlPanelProvider {
         vscode.commands.executeCommand('activate-framework.installFile', msg.file);
         break;
       case 'uninstallFile':
-        // Build a pseudo tree-item the command handler expects
-        vscode.commands.executeCommand('activate-framework.uninstallFile', {
-          fileData: msg.file,
-        });
+        vscode.commands.executeCommand('activate-framework.uninstallFile', msg.file);
         break;
       case 'openFile':
         vscode.commands.executeCommand('activate-framework.openFile', msg.file);

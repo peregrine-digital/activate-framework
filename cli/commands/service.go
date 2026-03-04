@@ -454,15 +454,23 @@ func (s *ActivateService) SkipUpdate(file string) (*FileResult, error) {
 	if chosen.BasePath != "" {
 		srcPath = chosen.BasePath + "/" + target.Src
 	}
-	repo := s.Config.Repo
-	branch := s.Config.Branch
-	if repo == "" {
-		repo = storage.DefaultRepo
+
+	// Use cached version if available, otherwise fetch from remote.
+	var bundledVersion string
+	if s.remoteVersions != nil {
+		bundledVersion = s.remoteVersions[srcPath]
 	}
-	if branch == "" {
-		branch = storage.DefaultBranch
+	if bundledVersion == "" {
+		repo := s.Config.Repo
+		branch := s.Config.Branch
+		if repo == "" {
+			repo = storage.DefaultRepo
+		}
+		if branch == "" {
+			branch = storage.DefaultBranch
+		}
+		bundledVersion, _ = storage.ReadFileVersionRemote(srcPath, repo, branch)
 	}
-	bundledVersion, _ := storage.ReadFileVersionRemote(srcPath, repo, branch)
 	if bundledVersion == "" {
 		return nil, fmt.Errorf("no version found in bundled file %s", target.Src)
 	}
