@@ -9,7 +9,7 @@ The framework has three delivery surfaces: a **compiled Go CLI** with an interac
 1. **Discovers plugins** — Manifests define what files a plugin contains, organized into selectable tiers (core, standard, advanced)
 2. **Installs agent configuration** — Copies `.instructions.md`, `.prompt.md`, `.agent.md`, `SKILL.md`, and `AGENTS.md` files into your workspace's `.github/` directory
 3. **Hides from git** — Installed files are auto-excluded via `.git/info/exclude` so they never get committed
-4. **Tracks state** — A sidecar file (`.github/.activate-installed.json`) tracks what's installed, versions, and checksums
+4. **Tracks state** — A sidecar file (`~/.activate/repos/<hash>/installed.json`) tracks what's installed, versions, and checksums
 5. **Keeps you current** — Both CLI and extension self-update from GitHub Releases, with passive update hints and one-click upgrades
 
 ## Quick Start
@@ -59,7 +59,7 @@ activate install
 │          ┌───────────┬───────┼───────┬────────────┐              │
 │          ▼           ▼       ▼       ▼            ▼              │
 │       Config      Manifest  Installer  Fetcher   Repo            │
-│       (2-layer)   Discovery  (local)   (GitHub)  Sidecar         │
+│       (2-layer)   Discovery  (remote)  (GitHub)  Sidecar         │
 │                                                  + gitexclude    │
 └──────────────────────────────────────────────────────────────────┘
 ```
@@ -73,7 +73,7 @@ Two-layer JSON config with merge semantics:
 | Layer | Path | Scope |
 |:-------|:------|:-------|
 | Global | `~/.activate/config.json` | User-wide defaults |
-| Project | `.activate.json` (workspace root) | Per-project overrides |
+| Project | `~/.activate/repos/<hash>/config.json` | Per-project overrides |
 
 **Precedence:** built-in defaults < global < project < CLI flags
 
@@ -92,12 +92,11 @@ activate-framework/
 │   └── tui/                         #   Interactive Bubbletea UI
 │
 ├── extension/                       # VS Code extension
-│   ├── src/                         #   Extension source (activation, control panel, injector)
-│   │   ├── extension.js             #     Activation, install flow, update system
-│   │   ├── controlPanel.js          #     Sidebar WebviewView (settings, files, status)
-│   │   ├── config.js                #     Config read/write
-│   │   ├── injector.js              #     File injection + sidecar tracking
-│   │   └── __tests__/               #     Tests (97 tests across 3 suites)
+│   ├── src/                         #   Extension source (thin daemon wrapper)
+│   │   ├── extension.js             #     Activation, commands, daemon lifecycle
+│   │   ├── controlPanel.js          #     Sidebar WebviewView (files, settings, usage)
+│   │   ├── client.js                #     JSON-RPC client for CLI daemon
+│   │   └── __tests__/               #     Tests (97 tests across 5 files)
 │   └── package.json                 #   Extension manifest + commands
 │
 ├── manifests/                       # Plugin registry (one JSON per plugin)
@@ -120,7 +119,7 @@ Plugins follow a four-tier guidance hierarchy:
 
 ```
 plugins/{plugin-name}/
-├── AGENTS.md                              # Tier 1: Always active (required)
+├── AGENTS.md                              # Tier 1: Always active (recommended)
 ├── instructions/*.instructions.md         # Tier 2: Auto-applied by glob
 ├── prompts/*.prompt.md                    # Tier 2: Manual /command
 ├── skills/{skill-name}/SKILL.md           # Tier 3: On-demand procedures
@@ -139,7 +138,7 @@ Each manifest defines **tiers** (e.g., core, standard, advanced) that let teams 
 ### Creating a Plugin
 
 1. Create a directory under `plugins/`
-2. Add `AGENTS.md` at the root (required)
+2. Add `AGENTS.md` at the root (recommended)
 3. Add instructions, prompts, skills, and agents as needed
 4. Create a manifest in `manifests/{plugin-name}.json`
 5. Run validation: `npm run validate:plugins`
@@ -157,18 +156,18 @@ Releases are cut with `mise run release`, which bumps versions, tags, and create
 
 ### Prerequisites
 
-- Go 1.24+ and Node.js 20+ (see `mise.toml`)
+- Go 1.25+ and Node.js 20+ (see `mise.toml`)
 
 ### Running Tests
 
 ```bash
-# Go CLI tests
+# Go CLI tests (349 tests)
 cd cli && go test ./...
 
-# Extension tests
+# Extension tests (97 tests)
 cd extension && npm test
 
-# Plugin structure validation
+# Plugin structure validation (10 tests)
 npm run validate:plugins
 ```
 
