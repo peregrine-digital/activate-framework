@@ -494,8 +494,14 @@ func runConfigCommand(svc *commands.ActivateService, args cliArgs, jsonOutput bo
 		if args.tier != "" {
 			updates.Tier = args.tier
 		}
-		if updates.Manifest == "" && updates.Tier == "" {
-			return fmt.Errorf("config set requires --manifest and/or --tier")
+		if args.repo != "" && args.repo != storage.DefaultRepo {
+			updates.Repo = args.repo
+		}
+		if args.branch != "" && args.branch != storage.DefaultBranch {
+			updates.Branch = args.branch
+		}
+		if updates.Manifest == "" && updates.Tier == "" && updates.Repo == "" && updates.Branch == "" {
+			return fmt.Errorf("config set requires --manifest, --tier, --repo, and/or --branch")
 		}
 
 		result, err := svc.SetConfig(scope, updates)

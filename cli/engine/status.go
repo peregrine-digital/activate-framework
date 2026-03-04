@@ -44,11 +44,12 @@ func ComputeFileStatuses(m model.Manifest, sidecar *model.RepoSidecar, cfg model
 
 		fs.Installed = installedSet[destRel]
 
+		srcPath := f.Src
 		if m.BasePath != "" {
-			srcPath := m.BasePath + "/" + f.Src
-			bv, _ := storage.ReadFileVersionRemote(srcPath, cfg.Repo, cfg.Branch)
-			fs.BundledVersion = bv
+			srcPath = m.BasePath + "/" + f.Src
 		}
+		bv, _ := storage.ReadFileVersionRemote(srcPath, cfg.Repo, cfg.Branch)
+		fs.BundledVersion = bv
 
 		if fs.Installed {
 			iv, _ := storage.ReadFileVersion(projectDir + "/" + destRel)
