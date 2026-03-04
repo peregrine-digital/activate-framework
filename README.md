@@ -42,25 +42,25 @@ activate install
 ┌──────────────────────────────────────────────────────────────────┐
 │                        User Interfaces                           │
 │                                                                  │
-│   ┌──────────────┐   ┌──────────────┐   ┌──────────────────┐   │
-│   │   CLI        │   │   TUI        │   │   VS Code        │   │
-│   │   Commands   │   │   (Charm)    │   │   Extension      │   │
-│   └──────┬───────┘   └──────┬───────┘   └────────┬─────────┘   │
+│   ┌──────────────┐   ┌──────────────┐   ┌──────────────────┐     │
+│   │   CLI        │   │   TUI        │   │   VS Code        │     │
+│   │   Commands   │   │   (Charm)    │   │   Extension      │     │
+│   └──────┬───────┘   └──────┬───────┘   └────────-┬────────┘     │
 │          │                  │                     │              │
 │          │   Direct call    │   Direct call       │  JSON-RPC    │
 │          │                  │                     │  over stdio  │
 │          ▼                  ▼                     ▼              │
-│   ┌─────────────────────────────────────────────────────────┐   │
-│   │                  ActivateService (Go)                    │   │
-│   │                                                          │   │
-│   │   State · Config · Manifests · Files · Tiers · MCP      │   │
-│   └──────────────────────────┬──────────────────────────────┘   │
+│   ┌─────────────────────────────────────────────────────────┐    │
+│   │                  ActivateService (Go)                   │    │
+│   │                                                         │    │
+│   │   State · Config · Manifests · Files · Tiers · MCP      │    │
+│   └──────────────────────────┬──────────────────────────────┘    │
 │                              │                                   │
-│          ┌───────────┬───────┼───────┬────────────┐             │
-│          ▼           ▼       ▼       ▼            ▼             │
-│       Config      Manifest  Installer  Fetcher   Repo          │
-│       (2-layer)   Discovery  (local)   (GitHub)  Sidecar       │
-│                                                  + gitexclude  │
+│          ┌───────────┬───────┼───────┬────────────┐              │
+│          ▼           ▼       ▼       ▼            ▼              │
+│       Config      Manifest  Installer  Fetcher   Repo            │
+│       (2-layer)   Discovery  (local)   (GitHub)  Sidecar         │
+│                                                  + gitexclude    │
 └──────────────────────────────────────────────────────────────────┘
 ```
 
@@ -71,7 +71,7 @@ The CLI and TUI call the service directly (same process). The extension spawns a
 Two-layer JSON config with merge semantics:
 
 | Layer | Path | Scope |
-|-------|------|-------|
+|:-------|:------|:-------|
 | Global | `~/.activate/config.json` | User-wide defaults |
 | Project | `.activate.json` (workspace root) | Per-project overrides |
 
