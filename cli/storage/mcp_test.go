@@ -2,8 +2,11 @@ package storage
 
 import (
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/peregrine-digital/activate-framework/cli/model"
@@ -165,20 +168,42 @@ func TestRemoveMcpServers(t *testing.T) {
 
 func TestInjectMcpFromManifest(t *testing.T) {
 	projectDir := t.TempDir()
-	bundleDir := t.TempDir()
+	basePath := "plugins/test"
 
-	// Create MCP server config file
-	mcpDir := filepath.Join(bundleDir, "mcp-servers")
-	os.MkdirAll(mcpDir, 0755)
-	os.WriteFile(filepath.Join(mcpDir, "fetch.json"),
-		[]byte(`{"fetch":{"type":"stdio","command":"npx","args":["-y","@anthropic-ai/mcp-server-fetch"]}}`), 0644)
+	mcpContent := `{"fetch":{"type":"stdio","command":"npx","args":["-y","@anthropic-ai/mcp-server-fetch"]}}`
+
+	// Set up httptest server
+	repo := "test/repo"
+	branch := "main"
+	raw := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		prefix := "/" + repo + "/" + branch + "/"
+		if strings.HasPrefix(r.URL.Path, prefix) {
+			key := strings.TrimPrefix(r.URL.Path, prefix)
+			if key == basePath+"/mcp-servers/fetch.json" {
+				w.Write([]byte(mcpContent))
+				return
+			}
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer raw.Close()
+	origRaw := RawBase
+	origToken := os.Getenv("GITHUB_TOKEN")
+	RawBase = raw.URL
+	os.Unsetenv("GITHUB_TOKEN")
+	defer func() {
+		RawBase = origRaw
+		if origToken != "" {
+			os.Setenv("GITHUB_TOKEN", origToken)
+		}
+	}()
 
 	files := []model.ManifestFile{
 		{Src: "mcp-servers/fetch.json", Dest: "mcp-servers/fetch.json", Tier: "core", Category: "mcp-servers"},
 		{Src: "instructions/general.md", Dest: "instructions/general.md", Tier: "core"},
 	}
 
-	injected, err := InjectMcpFromManifest(files, bundleDir, projectDir, nil)
+	injected, err := InjectMcpFromManifest(files, basePath, projectDir, nil, repo, branch)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -197,7 +222,7 @@ func TestInjectMcpFromManifestNoMcpFiles(t *testing.T) {
 		{Src: "instructions/general.md", Dest: "instructions/general.md", Tier: "core"},
 	}
 
-	injected, err := InjectMcpFromManifest(files, t.TempDir(), t.TempDir(), nil)
+	injected, err := InjectMcpFromManifest(files, t.TempDir(), t.TempDir(), nil, "", "")
 	if err != nil {
 		t.Fatal(err)
 	}

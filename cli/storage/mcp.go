@@ -105,9 +105,9 @@ func RemoveMcpServers(projectDir string, serverNames []string) error {
 	return WriteMcpConfig(projectDir, cfg)
 }
 
-// InjectMcpFromManifest processes MCP server files from a manifest,
-// merging them into .vscode/mcp.json and returning the managed server names.
-func InjectMcpFromManifest(files []model.ManifestFile, basePath, projectDir string, previousNames []string) ([]string, error) {
+// InjectMcpFromManifest fetches MCP server files from GitHub and merges
+// them into .vscode/mcp.json, returning the managed server names.
+func InjectMcpFromManifest(files []model.ManifestFile, basePath, projectDir string, previousNames []string, repo, branch string) ([]string, error) {
 	allServers := make(map[string]json.RawMessage)
 
 	for _, f := range files {
@@ -119,9 +119,17 @@ func InjectMcpFromManifest(files []model.ManifestFile, basePath, projectDir stri
 			continue
 		}
 
-		srcPath := filepath.Join(basePath, f.Src)
-		servers, err := LoadMcpServerConfig(srcPath)
+		srcPath := f.Src
+		if basePath != "" {
+			srcPath = basePath + "/" + f.Src
+		}
+		data, err := FetchFile(srcPath, repo, branch)
 		if err != nil {
+			fmt.Fprintf(os.Stderr, "  ✗  MCP %s: %s\n", f.Src, err)
+			continue
+		}
+		var servers map[string]json.RawMessage
+		if err := json.Unmarshal(data, &servers); err != nil {
 			fmt.Fprintf(os.Stderr, "  ✗  MCP %s: %s\n", f.Src, err)
 			continue
 		}
