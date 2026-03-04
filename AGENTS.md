@@ -45,16 +45,17 @@ activate-framework/
 │   │   ├── config.go                #     ResolveConfig, Read/Write config
 │   │   ├── sidecar.go               #     Read/Write/DeleteRepoSidecar
 │   │   ├── gitexclude.go            #     SyncGitExclude, RemoveGitExcludeBlock
-│   │   ├── filewriter.go            #     WriteManifestFile
+│   │   ├── filewriter.go            #     WriteManifestFile (always remote fetch)
+│   │   ├── manifest_cache.go        #     WriteManifestCache, ReadManifestCache
 │   │   ├── mcp.go                   #     MCP server config read/write/merge
-│   │   └── fetcher.go               #     FetchFile, FetchJSON (GitHub raw/API)
+│   │   └── fetcher.go               #     FetchFile, FetchJSON, DefaultRepo/DefaultBranch
 │   ├── engine/                      #   business logic (→ storage, model)
-│   │   ├── manifest.go              #     DiscoverManifests, DiscoverRemoteManifests
+│   │   ├── manifest.go              #     DiscoverRemoteManifests, InstallFilesFromRemote
 │   │   ├── repo.go                  #     RepoAdd, RepoRemove
 │   │   ├── operations.go            #     UpdateFiles, InstallSingleFile, DiffFile
-│   │   ├── installer.go             #     InstallFiles, ResolveBundleDir
+│   │   ├── status.go                #     ComputeFileStatuses, DetectInstallState
 │   │   ├── diff.go                  #     UnifiedDiff (LCS algorithm)
-│   │   └── telemetry.go             #     Copilot quota tracking, DetectInstallState
+│   │   └── telemetry.go             #     Copilot quota tracking (IsTelemetryEnabled, RunTelemetry)
 │   ├── commands/                    #   command processors (→ engine, storage, model, transport)
 │   │   ├── service.go               #     ActivateAPI interface, ActivateService facade
 │   │   ├── cli.go                   #     RunUpdateCommand, RunDiffCommand, RunSyncCommand
@@ -103,7 +104,7 @@ activate-framework/
 │
 ├── extension/                       # VS Code extension (GUI wrapper around CLI logic)
 │   ├── package.json                 #   extension manifest, commands, views
-│   ├── scripts/prepare-assets.mjs   #   copies plugin files → assets/ at build time
+│   ├── scripts/prepare-assets.mjs   #   copies install.sh → assets/ at build time
 │   └── src/
 │       ├── extension.js             #   activation, command registration, autoSetup
 │       ├── controlPanel.js          #   WebviewView sidebar (HTML render + messages)
@@ -139,6 +140,8 @@ Two-layer JSON config, same schema everywhere:
 {
   "manifest": "activate-framework",
   "tier": "standard",
+  "repo": "peregrine-digital/activate-framework",
+  "branch": "main",
   "fileOverrides": { "dest/path.md": "pinned" | "excluded" },
   "skippedVersions": { "dest/path.md": "0.5.0" }
 }
@@ -150,4 +153,4 @@ Two-layer JSON config, same schema everywhere:
 
 ### Delivery Mode
 
-**Inject-only** — files are copied into the workspace's `.github/` directory and hidden from git via `.git/info/exclude`. The sidecar `.github/.activate-installed.json` tracks what's installed. There is no workspace-mode / multi-root option.
+**Remote-only** — manifests and source files are always fetched from GitHub (`repo`/`branch` in config, defaults in `storage.DefaultRepo`/`storage.DefaultBranch`). There are no local bundles. A manifest cache at `~/.activate/repos/<hash>/manifest-cache.json` provides offline fallback. Files are injected into the workspace's `.github/` directory and hidden from git via `.git/info/exclude`. The sidecar `.github/.activate-installed.json` tracks what's installed.
