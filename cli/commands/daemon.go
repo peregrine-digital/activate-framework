@@ -167,6 +167,12 @@ func (d *Daemon) handleConfigSet(req *transport.Request) *transport.Response {
 	if params.Tier != "" {
 		updates.Tier = params.Tier
 	}
+	if params.Repo != "" {
+		updates.Repo = params.Repo
+	}
+	if params.Branch != "" {
+		updates.Branch = params.Branch
+	}
 	if params.TelemetryEnabled != nil {
 		updates.TelemetryEnabled = params.TelemetryEnabled
 	}

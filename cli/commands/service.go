@@ -239,6 +239,12 @@ func (s *ActivateService) SetConfig(scope string, updates *model.Config) (*SetCo
 	}
 	s.refreshConfig()
 
+	// Re-discover manifests if repo or branch changed
+	if updates.Repo != "" || updates.Branch != "" {
+		s.Manifests = nil
+		s.discoverManifests()
+	}
+
 	if updates.Manifest != "" {
 		chosen := model.FindManifestByID(s.Manifests, s.Config.Manifest)
 		if chosen != nil {

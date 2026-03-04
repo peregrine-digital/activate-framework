@@ -10,6 +10,7 @@ import (
 
 	"github.com/peregrine-digital/activate-framework/cli/commands"
 	"github.com/peregrine-digital/activate-framework/cli/model"
+	"github.com/peregrine-digital/activate-framework/cli/storage"
 	"github.com/peregrine-digital/activate-framework/cli/tui/style"
 )
 
@@ -18,6 +19,8 @@ import (
 type settingsValues struct {
 	manifest  string
 	tier      string
+	repo      string
+	branch    string
 	telemetry bool
 	scope     string
 }
@@ -58,6 +61,8 @@ func newSettingsModel(svc commands.ActivateAPI) settingsModel {
 	vals := &settingsValues{
 		manifest:  cfg.Manifest,
 		tier:      cfg.Tier,
+		repo:      cfg.Repo,
+		branch:    cfg.Branch,
 		telemetry: telemetryOn,
 		scope:     "project",
 	}
@@ -176,6 +181,24 @@ func (m settingsModel) saveSettings() (tea.Model, tea.Cmd) {
 		updates.Tier = m.vals.tier
 		changes = append(changes, fmt.Sprintf("Tier: %s → %s", currentCfg.Tier, m.vals.tier))
 	}
+	if m.vals.repo != currentCfg.Repo {
+		if m.vals.repo == "" {
+			updates.Repo = model.ClearValue
+			changes = append(changes, fmt.Sprintf("Repo: %s → (default)", currentCfg.Repo))
+		} else {
+			updates.Repo = m.vals.repo
+			changes = append(changes, fmt.Sprintf("Repo: %s → %s", currentCfg.Repo, m.vals.repo))
+		}
+	}
+	if m.vals.branch != currentCfg.Branch {
+		if m.vals.branch == "" {
+			updates.Branch = model.ClearValue
+			changes = append(changes, fmt.Sprintf("Branch: %s → (default)", currentCfg.Branch))
+		} else {
+			updates.Branch = m.vals.branch
+			changes = append(changes, fmt.Sprintf("Branch: %s → %s", currentCfg.Branch, m.vals.branch))
+		}
+	}
 
 	currentTelemetry := currentCfg.TelemetryEnabled != nil && *currentCfg.TelemetryEnabled
 	if m.vals.telemetry != currentTelemetry {
@@ -230,6 +253,9 @@ func buildSettingsForm(svc commands.ActivateAPI, vals *settingsValues) *huh.Form
 
 	tierOpts := buildTierOptions(svc, vals.manifest)
 
+	repoPlaceholder := storage.DefaultRepo
+	branchPlaceholder := storage.DefaultBranch
+
 	scopeOpts := []huh.Option[string]{
 		huh.NewOption("Project (this repo only)", "project"),
 		huh.NewOption("Global (all repos)", "global"),
@@ -247,6 +273,16 @@ func buildSettingsForm(svc commands.ActivateAPI, vals *settingsValues) *huh.Form
 				Description("Content tier level").
 				Options(tierOpts...).
 				Value(&vals.tier),
+			huh.NewInput().
+				Title("Repository").
+				Description("GitHub owner/repo (blank = " + repoPlaceholder + ")").
+				Placeholder(repoPlaceholder).
+				Value(&vals.repo),
+			huh.NewInput().
+				Title("Branch").
+				Description("Git branch (blank = " + branchPlaceholder + ")").
+				Placeholder(branchPlaceholder).
+				Value(&vals.branch),
 			huh.NewConfirm().
 				Title("Telemetry").
 				Description("Track Copilot usage quota").

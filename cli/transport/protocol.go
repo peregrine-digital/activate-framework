@@ -56,6 +56,8 @@ type ConfigSetParams struct {
 	Scope            string       `json:"scope,omitempty"` // "project" (default), "global"
 	Manifest         string       `json:"manifest,omitempty"`
 	Tier             string       `json:"tier,omitempty"`
+	Repo             string       `json:"repo,omitempty"`
+	Branch           string       `json:"branch,omitempty"`
 	TelemetryEnabled *bool        `json:"telemetryEnabled,omitempty"`
 	Updates          *model.Config `json:"updates,omitempty"` // for full config patches
 }

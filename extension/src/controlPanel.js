@@ -245,6 +245,46 @@ class ControlPanelProvider {
           () => this._render(),
         );
         break;
+      case 'editRepo': {
+        const currentRepo = msg.current || '';
+        vscode.window.showInputBox({
+          title: 'Repository',
+          prompt: 'GitHub owner/repo (e.g. peregrine-digital/activate-framework)',
+          value: currentRepo,
+          placeHolder: 'peregrine-digital/activate-framework',
+        }).then((value) => {
+          if (value === undefined) return; // cancelled
+          const scope = msg.scope || 'project';
+          const updates = value === ''
+            ? { repo: '__clear__' }
+            : { repo: value };
+          this._client.setConfig({ ...updates, scope }).then(
+            () => this._render(),
+            () => this._render(),
+          );
+        });
+        break;
+      }
+      case 'editBranch': {
+        const currentBranch = msg.current || '';
+        vscode.window.showInputBox({
+          title: 'Branch',
+          prompt: 'Git branch name',
+          value: currentBranch,
+          placeHolder: 'main',
+        }).then((value) => {
+          if (value === undefined) return; // cancelled
+          const scope = msg.scope || 'project';
+          const updates = value === ''
+            ? { branch: '__clear__' }
+            : { branch: value };
+          this._client.setConfig({ ...updates, scope }).then(
+            () => this._render(),
+            () => this._render(),
+          );
+        });
+        break;
+      }
       case 'checkForUpdates':
         vscode.commands.executeCommand('activate-framework.checkForUpdates');
         break;
@@ -1066,6 +1106,8 @@ class ControlPanelProvider {
 
     const manifestLabel = resolved.manifest || '—';
     const tierLabel = (tiers.find((t) => t.id === resolved.tier) || {}).label || resolved.tier || '—';
+    const repoLabel = resolved.repo || 'peregrine-digital/activate-framework';
+    const branchLabel = resolved.branch || 'main';
 
     // Helper: show where a value comes from
     const source = (field) => {
@@ -1076,6 +1118,8 @@ class ControlPanelProvider {
 
     const manifestSrc = source('manifest');
     const tierSrc = source('tier');
+    const repoSrc = source('repo');
+    const branchSrc = source('branch');
     const telemetrySrc = project.telemetryEnabled != null ? 'project'
       : global.telemetryEnabled != null ? 'global' : 'default';
 
@@ -1209,6 +1253,24 @@ class ControlPanelProvider {
   </div>
 
   <div class="setting-row">
+    <span class="setting-label">Repository</span>
+    <span class="setting-value">
+      ${esc(repoLabel)}
+      <button class="toggle-btn" onclick="send('editRepo', { current: '${esc(resolved.repo || '')}', scope: 'project' })" title="Change repository">✎</button>
+      ${srcBadge(repoSrc)}
+    </span>
+  </div>
+
+  <div class="setting-row">
+    <span class="setting-label">Branch</span>
+    <span class="setting-value">
+      ${esc(branchLabel)}
+      <button class="toggle-btn" onclick="send('editBranch', { current: '${esc(resolved.branch || '')}', scope: 'project' })" title="Change branch">✎</button>
+      ${srcBadge(branchSrc)}
+    </span>
+  </div>
+
+  <div class="setting-row">
     <span class="setting-label">Telemetry</span>
     <span class="setting-value">
       <button class="toggle-btn ${telemetryEnabled ? 'active' : ''}"
@@ -1233,6 +1295,14 @@ class ControlPanelProvider {
     <span class="setting-value">${esc(global.tier || '(not set)')}</span>
   </div>
   <div class="setting-row">
+    <span class="setting-label">Repository</span>
+    <span class="setting-value">${esc(global.repo || '(not set)')}</span>
+  </div>
+  <div class="setting-row">
+    <span class="setting-label">Branch</span>
+    <span class="setting-value">${esc(global.branch || '(not set)')}</span>
+  </div>
+  <div class="setting-row">
     <span class="setting-label">Telemetry</span>
     <span class="setting-value">${global.telemetryEnabled === true ? 'Enabled' : global.telemetryEnabled === false ? 'Disabled' : '(not set)'}</span>
   </div>
@@ -1254,6 +1324,20 @@ class ControlPanelProvider {
     <span class="setting-value">
       ${esc(project.tier || '(not set)')}
       ${project.tier ? `<button class="toggle-btn" onclick="send('clearProjectOverride', { updates: { tier: '__clear__' } })">✕</button>` : ''}
+    </span>
+  </div>
+  <div class="setting-row">
+    <span class="setting-label">Repository</span>
+    <span class="setting-value">
+      ${esc(project.repo || '(not set)')}
+      ${project.repo ? `<button class="toggle-btn" onclick="send('clearProjectOverride', { updates: { repo: '__clear__' } })">✕</button>` : ''}
+    </span>
+  </div>
+  <div class="setting-row">
+    <span class="setting-label">Branch</span>
+    <span class="setting-value">
+      ${esc(project.branch || '(not set)')}
+      ${project.branch ? `<button class="toggle-btn" onclick="send('clearProjectOverride', { updates: { branch: '__clear__' } })">✕</button>` : ''}
     </span>
   </div>
 
