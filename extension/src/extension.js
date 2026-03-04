@@ -121,6 +121,24 @@ function verifyBinary(binaryPath) {
   }
 }
 
+// ── Workspace refresh helpers ─────────────────────────────────
+
+/**
+ * Nudge VS Code's file system so watchers (including Copilot) detect
+ * files written by the external daemon process.  A readDirectory on the
+ * install dir forces VS Code to re-scan; refreshFilesExplorer updates
+ * the visible tree.
+ */
+function refreshWorkspace() {
+  vscode.commands.executeCommand('workbench.files.action.refreshFilesExplorer');
+  const wsRoot = vscode.workspace.workspaceFolders?.[0]?.uri;
+  if (wsRoot) {
+    const ghDir = vscode.Uri.joinPath(wsRoot, installDir);
+    // Silent read — triggers VS Code's internal file watcher reconciliation
+    vscode.workspace.fs.readDirectory(ghDir).then(() => {}, () => {});
+  }
+}
+
 // ── Activation ────────────────────────────────────────────────
 
 async function activate(context) {
@@ -213,6 +231,7 @@ async function activate(context) {
         await client.setConfig({ tier: picked.value, scope: 'project' });
         await client.sync();
         controlPanel.refresh();
+        refreshWorkspace();
       } catch (err) {
         vscode.window.showErrorMessage(`Change tier failed: ${err.message}`);
       }
@@ -248,6 +267,7 @@ async function activate(context) {
         await client.setConfig({ manifest: picked.value, scope: 'project' });
         await client.sync();
         controlPanel.refresh();
+        refreshWorkspace();
       } catch (err) {
         vscode.window.showErrorMessage(`Change manifest failed: ${err.message}`);
       }
@@ -300,6 +320,7 @@ async function activate(context) {
         await client.repoAdd();
         vscode.window.showInformationMessage('Peregrine Activate files injected.');
         controlPanel.refresh();
+        refreshWorkspace();
       } catch (err) {
         vscode.window.showErrorMessage(`Add failed: ${err.message}`);
       }
@@ -318,6 +339,7 @@ async function activate(context) {
         await client.repoRemove();
         vscode.window.showInformationMessage('Peregrine Activate files removed.');
         controlPanel.refresh();
+        refreshWorkspace();
       } catch (err) {
         vscode.window.showErrorMessage(`Remove failed: ${err.message}`);
       }
@@ -330,6 +352,7 @@ async function activate(context) {
         const count = result.updated ? result.updated.length : 0;
         vscode.window.showInformationMessage(`Updated ${count} files.`);
         controlPanel.refresh();
+        refreshWorkspace();
       } catch (err) {
         vscode.window.showErrorMessage(`Update failed: ${err.message}`);
       }
@@ -346,6 +369,7 @@ async function activate(context) {
         await client.installFile(file.dest);
         vscode.window.showInformationMessage(`Installed: ${file.dest}`);
         controlPanel.refresh();
+        refreshWorkspace();
       } catch (err) {
         vscode.window.showErrorMessage(`Failed to install: ${file.dest} — ${err.message}`);
       }
@@ -362,6 +386,7 @@ async function activate(context) {
         await client.uninstallFile(file.dest);
         vscode.window.showInformationMessage(`Uninstalled: ${file.dest}`);
         controlPanel.refresh();
+        refreshWorkspace();
       } catch (err) {
         vscode.window.showErrorMessage(`Failed to uninstall: ${file.dest} — ${err.message}`);
       }
@@ -531,6 +556,7 @@ async function autoSetup(controlPanel, context) {
   }
 
   controlPanel.refresh();
+  refreshWorkspace();
 
   // Check for updates (non-blocking)
   checkForUpdates(context, controlPanel);
