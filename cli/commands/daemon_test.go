@@ -124,8 +124,8 @@ type harness struct {
 	clientWriter io.Writer
 	clientReader *bufio.Reader
 	projectDir   string
-	bundleDir    string
 	manifest     model.Manifest
+	remoteFiles  *mutableFiles
 	cleanup      func()
 }
 
@@ -138,7 +138,6 @@ func newHarness(t *testing.T) *harness {
 	t.Cleanup(func() { storage.ActivateBaseDir = old })
 
 	projectDir := t.TempDir()
-	bundleDir := t.TempDir()
 
 	// Create .git/info/exclude so git exclude operations work
 	excludePath := filepath.Join(projectDir, ".git", "info", "exclude")
@@ -149,39 +148,36 @@ func newHarness(t *testing.T) *harness {
 		t.Fatal(err)
 	}
 
-	// Write project config so refreshConfig resolves to our test manifest
-	if err := storage.WriteProjectConfig(projectDir, &model.Config{Manifest: "test-manifest", Tier: "standard"}); err != nil {
-		t.Fatal(err)
-	}
+	basePath := "plugins/test"
 
-	// Create source files with frontmatter versions
-	srcFiles := map[string]string{
-		"instructions/setup.instructions.md": "---\nversion: '1.0.0'\n---\n# Setup Instructions\nHello world\n",
-		"prompts/build.prompt.md":            "---\nversion: '1.0.0'\n---\n# Build Prompt\nBuild it\n",
-	}
-	for rel, content := range srcFiles {
-		p := filepath.Join(bundleDir, rel)
-		if err := os.MkdirAll(filepath.Dir(p), 0755); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(p, []byte(content), 0644); err != nil {
-			t.Fatal(err)
-		}
+	// Serve source files from httptest server
+	mf := &mutableFiles{files: map[string]string{
+		basePath + "/instructions/setup.instructions.md": "---\nversion: '1.0.0'\n---\n# Setup Instructions\nHello world\n",
+		basePath + "/prompts/build.prompt.md":            "---\nversion: '1.0.0'\n---\n# Build Prompt\nBuild it\n",
+	}}
+	_, repo, branch := serveRemoteMutableFiles(t, mf)
+
+	// Write project config so refreshConfig resolves to our test manifest and test repo
+	if err := storage.WriteProjectConfig(projectDir, &model.Config{
+		Manifest: "test-manifest", Tier: "standard",
+		Repo: repo, Branch: branch,
+	}); err != nil {
+		t.Fatal(err)
 	}
 
 	manifest := model.Manifest{
 		ID:       "test-manifest",
 		Name:     "Test Manifest",
 		Version:  "1.0.0",
-		BasePath: bundleDir,
+		BasePath: basePath,
 		Files: []model.ManifestFile{
 			{Src: "instructions/setup.instructions.md", Dest: "instructions/setup.instructions.md", Tier: "core"},
 			{Src: "prompts/build.prompt.md", Dest: "prompts/build.prompt.md", Tier: "core"},
 		},
 	}
 
-	cfg := model.Config{Manifest: "test-manifest", Tier: "standard"}
-	svc := NewService(projectDir, []model.Manifest{manifest}, cfg, false, "", "")
+	cfg := model.Config{Manifest: "test-manifest", Tier: "standard", Repo: repo, Branch: branch}
+	svc := NewService(projectDir, []model.Manifest{manifest}, cfg)
 
 	// Set up pipes: daemon reads from serverRead, writes to serverWrite
 	// client reads from clientRead, writes to clientWrite
@@ -208,8 +204,8 @@ func newHarness(t *testing.T) *harness {
 		clientWriter: clientWrite,
 		clientReader: clientReader,
 		projectDir:   projectDir,
-		bundleDir:    bundleDir,
 		manifest:     manifest,
+		remoteFiles:  mf,
 		cleanup:      cleanup,
 	}
 }
@@ -665,7 +661,7 @@ func newEmptyHarness(t *testing.T) *harness {
 	projectDir := t.TempDir()
 
 	// No config, no manifests, no bundle — bare minimum
-	svc := NewService("", nil, model.Config{}, false, "", "")
+	svc := NewService("", nil, model.Config{})
 
 	clientRead, serverWrite := io.Pipe()
 	serverRead, clientWrite := io.Pipe()

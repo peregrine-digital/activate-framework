@@ -2,8 +2,6 @@ package commands
 
 import (
 	"fmt"
-	"os"
-	"path/filepath"
 
 	"github.com/peregrine-digital/activate-framework/cli/engine"
 	"github.com/peregrine-digital/activate-framework/cli/model"
@@ -33,9 +31,6 @@ type ActivateAPI interface {
 	CurrentConfig() model.Config
 	CurrentManifests() []model.Manifest
 	CurrentProjectDir() string
-	IsRemoteMode() bool
-	RemoteRepo() string
-	RemoteBranch() string
 }
 
 // Compile-time interface check.
@@ -46,20 +41,14 @@ type ActivateService struct {
 	ProjectDir string
 	Manifests  []model.Manifest
 	Config     model.Config
-	UseRemote  bool
-	Repo       string
-	Branch     string
 }
 
 // NewService creates a fully initialized service instance.
-func NewService(projectDir string, manifests []model.Manifest, cfg model.Config, useRemote bool, repo, branch string) *ActivateService {
+func NewService(projectDir string, manifests []model.Manifest, cfg model.Config) *ActivateService {
 	return &ActivateService{
 		ProjectDir: projectDir,
 		Manifests:  manifests,
 		Config:     cfg,
-		UseRemote:  useRemote,
-		Repo:       repo,
-		Branch:     branch,
 	}
 }
 
@@ -79,29 +68,31 @@ func (s *ActivateService) Initialize(projectDir string) {
 	}
 }
 
-// discoverManifests tries to find manifests from the executable dir or project dir.
+// discoverManifests fetches manifests from GitHub, falling back to local cache.
 func (s *ActivateService) discoverManifests() {
-	if s.UseRemote {
-		m, err := engine.DiscoverRemoteManifests(s.Repo, s.Branch)
-		if err == nil {
-			s.Manifests = m
+	repo := s.Config.Repo
+	branch := s.Config.Branch
+	if repo == "" {
+		repo = storage.DefaultRepo
+	}
+	if branch == "" {
+		branch = storage.DefaultBranch
+	}
+
+	m, err := engine.DiscoverRemoteManifests(repo, branch)
+	if err == nil && len(m) > 0 {
+		s.Manifests = m
+		// Update cache for offline fallback
+		if s.ProjectDir != "" {
+			_ = storage.WriteManifestCache(s.ProjectDir, m)
 		}
 		return
 	}
 
-	// Try executable directory first, then project directory
-	for _, base := range []string{resolveExeDir(), s.ProjectDir} {
-		if base == "" {
-			continue
-		}
-		bundleDir, err := engine.ResolveBundleDir(base)
-		if err != nil {
-			continue
-		}
-		m, err := engine.DiscoverManifests(bundleDir)
-		if err == nil && len(m) > 0 {
-			s.Manifests = m
-			return
+	// Fall back to cached manifests
+	if s.ProjectDir != "" {
+		if cached, cacheErr := storage.ReadManifestCache(s.ProjectDir); cacheErr == nil && len(cached) > 0 {
+			s.Manifests = cached
 		}
 	}
 }
@@ -110,18 +101,6 @@ func (s *ActivateService) RefreshConfig()                { s.refreshConfig() }
 func (s *ActivateService) CurrentConfig() model.Config   { return s.Config }
 func (s *ActivateService) CurrentManifests() []model.Manifest { return s.Manifests }
 func (s *ActivateService) CurrentProjectDir() string     { return s.ProjectDir }
-func (s *ActivateService) IsRemoteMode() bool            { return s.UseRemote }
-func (s *ActivateService) RemoteRepo() string            { return s.Repo }
-func (s *ActivateService) RemoteBranch() string          { return s.Branch }
-
-// resolveExeDir returns the directory containing the current executable.
-func resolveExeDir() string {
-	exe, err := os.Executable()
-	if err != nil {
-		return ""
-	}
-	return filepath.Dir(exe)
-}
 
 // ── Result types ───────────────────────────────────────────────
 
@@ -318,7 +297,7 @@ func (s *ActivateService) ListFiles(manifestID, tierID, category string) (*ListF
 }
 
 func (s *ActivateService) RepoAdd() (*RepoAddResult, error) {
-	if err := engine.RepoAdd(s.Manifests, s.Config, s.ProjectDir, s.UseRemote, s.Repo, s.Branch); err != nil {
+	if err := engine.RepoAdd(s.Manifests, s.Config, s.ProjectDir); err != nil {
 		return nil, err
 	}
 	s.refreshConfig()
@@ -352,7 +331,7 @@ func (s *ActivateService) Sync() (*SyncResult, error) {
 	}
 
 	if sidecar.Manifest != chosen.ID || sidecar.Tier != s.Config.Tier {
-		if err := engine.RepoAdd(s.Manifests, s.Config, s.ProjectDir, s.UseRemote, s.Repo, s.Branch); err != nil {
+		if err := engine.RepoAdd(s.Manifests, s.Config, s.ProjectDir); err != nil {
 			return nil, err
 		}
 		return &SyncResult{
@@ -364,7 +343,7 @@ func (s *ActivateService) Sync() (*SyncResult, error) {
 	}
 
 	prevVersion := sidecar.Version
-	updated, skipped, err := engine.UpdateFiles(*chosen, sidecar, s.Config, s.ProjectDir, s.UseRemote, s.Repo, s.Branch)
+	updated, skipped, err := engine.UpdateFiles(*chosen, sidecar, s.Config, s.ProjectDir)
 	if err != nil {
 		return nil, err
 	}
@@ -389,7 +368,7 @@ func (s *ActivateService) InstallFile(file string) (*FileResult, error) {
 		return nil, fmt.Errorf("file %q not found in manifest %s", file, chosen.ID)
 	}
 
-	if err := engine.InstallSingleFile(*target, *chosen, s.ProjectDir, s.UseRemote, s.Repo, s.Branch); err != nil {
+	if err := engine.InstallSingleFile(*target, *chosen, s.ProjectDir, s.Config); err != nil {
 		return nil, err
 	}
 
@@ -419,7 +398,7 @@ func (s *ActivateService) DiffFile(file string) (*DiffResult, error) {
 		return nil, fmt.Errorf("file %q not found in manifest %s", file, chosen.ID)
 	}
 
-	diff, err := engine.DiffFile(*target, *chosen, s.ProjectDir)
+	diff, err := engine.DiffFile(*target, *chosen, s.ProjectDir, s.Config)
 	if err != nil {
 		return nil, err
 	}
@@ -442,7 +421,19 @@ func (s *ActivateService) SkipUpdate(file string) (*FileResult, error) {
 		return nil, fmt.Errorf("file %q not found in manifest %s", file, chosen.ID)
 	}
 
-	bundledVersion, _ := storage.ReadFileVersion(filepath.Join(chosen.BasePath, target.Src))
+	srcPath := target.Src
+	if chosen.BasePath != "" {
+		srcPath = chosen.BasePath + "/" + target.Src
+	}
+	repo := s.Config.Repo
+	branch := s.Config.Branch
+	if repo == "" {
+		repo = storage.DefaultRepo
+	}
+	if branch == "" {
+		branch = storage.DefaultBranch
+	}
+	bundledVersion, _ := storage.ReadFileVersionRemote(srcPath, repo, branch)
 	if bundledVersion == "" {
 		return nil, fmt.Errorf("no version found in bundled file %s", target.Src)
 	}
@@ -473,7 +464,7 @@ func (s *ActivateService) Update() (*UpdateResult, error) {
 		return nil, fmt.Errorf("no installed files found; run 'repo add' first")
 	}
 
-	updated, skipped, err := engine.UpdateFiles(*chosen, sidecar, s.Config, s.ProjectDir, s.UseRemote, s.Repo, s.Branch)
+	updated, skipped, err := engine.UpdateFiles(*chosen, sidecar, s.Config, s.ProjectDir)
 	if err != nil {
 		return nil, err
 	}

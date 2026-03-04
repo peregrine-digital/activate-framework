@@ -2,6 +2,8 @@ package commands
 
 import (
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -13,9 +15,79 @@ import (
 
 // ── helpers ────────────────────────────────────────────────────
 
-// setupBundle creates a temp bundle dir with one source file and returns
-// the manifest, bundle dir, and resolved config.
-func setupBundle(t *testing.T) (model.Manifest, string, string) {
+// serveRemoteFiles creates an httptest server serving files from a map.
+// Returns the test server, repo, and branch strings. Sets storage.RawBase.
+func serveRemoteFiles(t *testing.T, files map[string]string) (*httptest.Server, string, string) {
+	t.Helper()
+	repo := "test/repo"
+	branch := "main"
+	raw := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		prefix := "/" + repo + "/" + branch + "/"
+		if strings.HasPrefix(r.URL.Path, prefix) {
+			key := strings.TrimPrefix(r.URL.Path, prefix)
+			if content, ok := files[key]; ok {
+				w.Write([]byte(content))
+				return
+			}
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+
+	origRaw := storage.RawBase
+	origToken := os.Getenv("GITHUB_TOKEN")
+	storage.RawBase = raw.URL
+	os.Unsetenv("GITHUB_TOKEN")
+	t.Cleanup(func() {
+		storage.RawBase = origRaw
+		if origToken != "" {
+			os.Setenv("GITHUB_TOKEN", origToken)
+		}
+		raw.Close()
+	})
+
+	return raw, repo, branch
+}
+
+// mutableFiles is a thread-safe map for test server content that can be updated mid-test.
+type mutableFiles struct {
+	files map[string]string
+}
+
+// serveRemoteMutableFiles creates an httptest server serving files from a mutable map.
+func serveRemoteMutableFiles(t *testing.T, mf *mutableFiles) (*httptest.Server, string, string) {
+	t.Helper()
+	repo := "test/repo"
+	branch := "main"
+	raw := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		prefix := "/" + repo + "/" + branch + "/"
+		if strings.HasPrefix(r.URL.Path, prefix) {
+			key := strings.TrimPrefix(r.URL.Path, prefix)
+			if content, ok := mf.files[key]; ok {
+				w.Write([]byte(content))
+				return
+			}
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+
+	origRaw := storage.RawBase
+	origToken := os.Getenv("GITHUB_TOKEN")
+	storage.RawBase = raw.URL
+	os.Unsetenv("GITHUB_TOKEN")
+	t.Cleanup(func() {
+		storage.RawBase = origRaw
+		if origToken != "" {
+			os.Setenv("GITHUB_TOKEN", origToken)
+		}
+		raw.Close()
+	})
+
+	return raw, repo, branch
+}
+
+// setupBundle creates a temp project dir and httptest server with one source file.
+// Returns the manifest, projectDir, repo, branch, and a mutableFiles reference for updating content.
+func setupBundle(t *testing.T) (model.Manifest, string, string, string, *mutableFiles) {
 	t.Helper()
 	homeDir := t.TempDir()
 	old := storage.ActivateBaseDir
@@ -33,41 +105,43 @@ func setupBundle(t *testing.T) (model.Manifest, string, string) {
 		t.Fatal(err)
 	}
 
-	bundleDir := t.TempDir()
+	basePath := "plugins/test"
 	srcRel := "instructions/test.instructions.md"
-	srcPath := filepath.Join(bundleDir, srcRel)
-	if err := os.MkdirAll(filepath.Dir(srcPath), 0755); err != nil {
-		t.Fatal(err)
-	}
 	content := "---\nversion: '1.0.0'\n---\n# Test\n"
-	if err := os.WriteFile(srcPath, []byte(content), 0644); err != nil {
-		t.Fatal(err)
-	}
+
+	mf := &mutableFiles{files: map[string]string{
+		basePath + "/" + srcRel: content,
+	}}
+	_, repo, branch := serveRemoteMutableFiles(t, mf)
 
 	m := model.Manifest{
 		ID:       "test-manifest",
 		Name:     "Test Manifest",
 		Version:  "1.0.0",
-		BasePath: bundleDir,
+		BasePath: basePath,
 		Files: []model.ManifestFile{
 			{Src: srcRel, Dest: srcRel, Tier: "core", Category: "instructions"},
 		},
 	}
-	return m, projectDir, bundleDir
+	return m, projectDir, repo, branch, mf
 }
 
-func newTestService(m model.Manifest, projectDir string) *ActivateService {
+func newTestService(m model.Manifest, projectDir, repo, branch string) *ActivateService {
 	cfg := storage.ResolveConfig(projectDir, nil)
 	cfg.Manifest = m.ID
 	cfg.Tier = "minimal"
-	return NewService(projectDir, []model.Manifest{m}, cfg, false, "", "")
+	cfg.Repo = repo
+	cfg.Branch = branch
+	// Write repo/branch to project config so refreshConfig() preserves them
+	_ = storage.WriteProjectConfig(projectDir, &model.Config{Repo: repo, Branch: branch})
+	return NewService(projectDir, []model.Manifest{m}, cfg)
 }
 
 // ── TestNewService ─────────────────────────────────────────────
 
 func TestServiceNewService(t *testing.T) {
-	m, projectDir, _ := setupBundle(t)
-	svc := newTestService(m, projectDir)
+	m, projectDir, repo, branch, _ := setupBundle(t)
+	svc := newTestService(m, projectDir, repo, branch)
 
 	if svc.ProjectDir != projectDir {
 		t.Fatalf("ProjectDir = %q, want %q", svc.ProjectDir, projectDir)
@@ -78,17 +152,14 @@ func TestServiceNewService(t *testing.T) {
 	if svc.Config.Manifest != "test-manifest" {
 		t.Fatalf("Config.Manifest = %q, want test-manifest", svc.Config.Manifest)
 	}
-	if svc.UseRemote != false {
-		t.Fatal("UseRemote should be false")
-	}
 }
 
 // ── TestServiceGetState ────────────────────────────────────────
 
 func TestServiceGetState(t *testing.T) {
 	t.Run("no sidecar", func(t *testing.T) {
-		m, projectDir, _ := setupBundle(t)
-		svc := newTestService(m, projectDir)
+		m, projectDir, repo, branch, _ := setupBundle(t)
+		svc := newTestService(m, projectDir, repo, branch)
 
 		result := svc.GetState()
 		if result.ProjectDir != projectDir {
@@ -100,8 +171,8 @@ func TestServiceGetState(t *testing.T) {
 	})
 
 	t.Run("with sidecar", func(t *testing.T) {
-		m, projectDir, _ := setupBundle(t)
-		svc := newTestService(m, projectDir)
+		m, projectDir, repo, branch, _ := setupBundle(t)
+		svc := newTestService(m, projectDir, repo, branch)
 
 		// Install files to create sidecar
 		if _, err := svc.RepoAdd(); err != nil {
@@ -124,12 +195,12 @@ func TestServiceGetState(t *testing.T) {
 // ── TestServiceGetConfig ───────────────────────────────────────
 
 func TestServiceGetConfig(t *testing.T) {
-	m, projectDir, _ := setupBundle(t)
+	m, projectDir, repo, branch, _ := setupBundle(t)
 	// Write a project config
 	if err := storage.WriteProjectConfig(projectDir, &model.Config{Manifest: "test-manifest", Tier: "minimal"}); err != nil {
 		t.Fatal(err)
 	}
-	svc := newTestService(m, projectDir)
+	svc := newTestService(m, projectDir, repo, branch)
 
 	t.Run("global", func(t *testing.T) {
 		cfg, err := svc.GetConfig("global")
@@ -186,8 +257,8 @@ func TestServiceGetConfig(t *testing.T) {
 
 func TestServiceSetConfig(t *testing.T) {
 	t.Run("project scope", func(t *testing.T) {
-		m, projectDir, _ := setupBundle(t)
-		svc := newTestService(m, projectDir)
+		m, projectDir, repo, branch, _ := setupBundle(t)
+		svc := newTestService(m, projectDir, repo, branch)
 
 		result, err := svc.SetConfig("project", &model.Config{Tier: "advanced"})
 		if err != nil {
@@ -210,8 +281,8 @@ func TestServiceSetConfig(t *testing.T) {
 	})
 
 	t.Run("global scope", func(t *testing.T) {
-		m, projectDir, _ := setupBundle(t)
-		svc := newTestService(m, projectDir)
+		m, projectDir, repo, branch, _ := setupBundle(t)
+		svc := newTestService(m, projectDir, repo, branch)
 
 		result, err := svc.SetConfig("global", &model.Config{Tier: "advanced"})
 		if err != nil {
@@ -228,8 +299,8 @@ func TestServiceSetConfig(t *testing.T) {
 	})
 
 	t.Run("empty scope defaults to project", func(t *testing.T) {
-		m, projectDir, _ := setupBundle(t)
-		svc := newTestService(m, projectDir)
+		m, projectDir, repo, branch, _ := setupBundle(t)
+		svc := newTestService(m, projectDir, repo, branch)
 
 		result, err := svc.SetConfig("", &model.Config{Tier: "advanced"})
 		if err != nil {
@@ -241,8 +312,8 @@ func TestServiceSetConfig(t *testing.T) {
 	})
 
 	t.Run("invalid scope", func(t *testing.T) {
-		m, projectDir, _ := setupBundle(t)
-		svc := newTestService(m, projectDir)
+		m, projectDir, repo, branch, _ := setupBundle(t)
+		svc := newTestService(m, projectDir, repo, branch)
 
 		_, err := svc.SetConfig("bogus", &model.Config{Tier: "advanced"})
 		if err == nil {
@@ -283,7 +354,7 @@ func TestServiceSetConfig(t *testing.T) {
 		cfg := storage.ResolveConfig(projectDir, nil)
 		cfg.Manifest = "manifest-a"
 		cfg.Tier = "alpha"
-		svc := NewService(projectDir, []model.Manifest{mA, mB}, cfg, false, "", "")
+		svc := NewService(projectDir, []model.Manifest{mA, mB}, cfg)
 
 		// Switch to manifest-b — tier "alpha" is invalid for it
 		result, err := svc.SetConfig("project", &model.Config{Manifest: "manifest-b"})
@@ -302,8 +373,8 @@ func TestServiceSetConfig(t *testing.T) {
 }
 
 func TestServiceListManifests(t *testing.T) {
-	m, projectDir, _ := setupBundle(t)
-	svc := newTestService(m, projectDir)
+	m, projectDir, repo, branch, _ := setupBundle(t)
+	svc := newTestService(m, projectDir, repo, branch)
 
 	manifests := svc.ListManifests()
 	if len(manifests) != 1 {
@@ -318,8 +389,8 @@ func TestServiceListManifests(t *testing.T) {
 
 func TestServiceListFiles(t *testing.T) {
 	t.Run("defaults from config", func(t *testing.T) {
-		m, projectDir, _ := setupBundle(t)
-		svc := newTestService(m, projectDir)
+		m, projectDir, repo, branch, _ := setupBundle(t)
+		svc := newTestService(m, projectDir, repo, branch)
 
 		result, err := svc.ListFiles("", "", "")
 		if err != nil {
@@ -334,8 +405,8 @@ func TestServiceListFiles(t *testing.T) {
 	})
 
 	t.Run("explicit manifest and tier", func(t *testing.T) {
-		m, projectDir, _ := setupBundle(t)
-		svc := newTestService(m, projectDir)
+		m, projectDir, repo, branch, _ := setupBundle(t)
+		svc := newTestService(m, projectDir, repo, branch)
 
 		result, err := svc.ListFiles("test-manifest", "minimal", "instructions")
 		if err != nil {
@@ -350,8 +421,8 @@ func TestServiceListFiles(t *testing.T) {
 	})
 
 	t.Run("unknown manifest", func(t *testing.T) {
-		m, projectDir, _ := setupBundle(t)
-		svc := newTestService(m, projectDir)
+		m, projectDir, repo, branch, _ := setupBundle(t)
+		svc := newTestService(m, projectDir, repo, branch)
 
 		_, err := svc.ListFiles("no-such-manifest", "", "")
 		if err == nil {
@@ -366,8 +437,8 @@ func TestServiceListFiles(t *testing.T) {
 // ── TestServiceRepoAdd ─────────────────────────────────────────
 
 func TestServiceRepoAdd(t *testing.T) {
-	m, projectDir, _ := setupBundle(t)
-	svc := newTestService(m, projectDir)
+	m, projectDir, repo, branch, _ := setupBundle(t)
+	svc := newTestService(m, projectDir, repo, branch)
 
 	result, err := svc.RepoAdd()
 	if err != nil {
@@ -396,8 +467,8 @@ func TestServiceRepoAdd(t *testing.T) {
 // ── TestServiceRepoRemove ──────────────────────────────────────
 
 func TestServiceRepoRemove(t *testing.T) {
-	m, projectDir, _ := setupBundle(t)
-	svc := newTestService(m, projectDir)
+	m, projectDir, repo, branch, _ := setupBundle(t)
+	svc := newTestService(m, projectDir, repo, branch)
 
 	// Install first
 	if _, err := svc.RepoAdd(); err != nil {
@@ -427,8 +498,8 @@ func TestServiceRepoRemove(t *testing.T) {
 
 func TestServiceSync(t *testing.T) {
 	t.Run("not installed", func(t *testing.T) {
-		m, projectDir, _ := setupBundle(t)
-		svc := newTestService(m, projectDir)
+		m, projectDir, repo, branch, _ := setupBundle(t)
+		svc := newTestService(m, projectDir, repo, branch)
 
 		result, err := svc.Sync()
 		if err != nil {
@@ -440,8 +511,8 @@ func TestServiceSync(t *testing.T) {
 	})
 
 	t.Run("up to date", func(t *testing.T) {
-		m, projectDir, _ := setupBundle(t)
-		svc := newTestService(m, projectDir)
+		m, projectDir, repo, branch, _ := setupBundle(t)
+		svc := newTestService(m, projectDir, repo, branch)
 
 		if _, err := svc.RepoAdd(); err != nil {
 			t.Fatal(err)
@@ -457,8 +528,8 @@ func TestServiceSync(t *testing.T) {
 	})
 
 	t.Run("version mismatch triggers update", func(t *testing.T) {
-		m, projectDir, _ := setupBundle(t)
-		svc := newTestService(m, projectDir)
+		m, projectDir, repo, branch, _ := setupBundle(t)
+		svc := newTestService(m, projectDir, repo, branch)
 
 		if _, err := svc.RepoAdd(); err != nil {
 			t.Fatal(err)
@@ -487,8 +558,8 @@ func TestServiceSync(t *testing.T) {
 		}
 	})
 	t.Run("tier change triggers reinstall", func(t *testing.T) {
-		m, projectDir, _ := setupBundle(t)
-		svc := newTestService(m, projectDir)
+		m, projectDir, repo, branch, _ := setupBundle(t)
+		svc := newTestService(m, projectDir, repo, branch)
 
 		if _, err := svc.RepoAdd(); err != nil {
 			t.Fatal(err)
@@ -510,16 +581,16 @@ func TestServiceSync(t *testing.T) {
 	})
 
 	t.Run("manifest change triggers reinstall", func(t *testing.T) {
-		m, projectDir, bundleDir := setupBundle(t)
-		svc := newTestService(m, projectDir)
+		m, projectDir, repo, branch, _ := setupBundle(t)
+		svc := newTestService(m, projectDir, repo, branch)
 
 		if _, err := svc.RepoAdd(); err != nil {
 			t.Fatal(err)
 		}
 
-		// Add a second manifest and switch to it
+		// Add a second manifest and switch to it (same basePath, same files served)
 		m2 := model.Manifest{
-			ID: "other-manifest", Version: "1.0.0", BasePath: bundleDir,
+			ID: "other-manifest", Version: "1.0.0", BasePath: m.BasePath,
 			Files: []model.ManifestFile{
 				{Src: "instructions/test.instructions.md", Dest: "instructions/test.instructions.md", Tier: "core", Category: "instructions"},
 			},
@@ -541,18 +612,15 @@ func TestServiceSync(t *testing.T) {
 
 func TestServiceUpdate(t *testing.T) {
 	t.Run("updates installed files", func(t *testing.T) {
-		m, projectDir, bundleDir := setupBundle(t)
-		svc := newTestService(m, projectDir)
+		m, projectDir, repo, branch, mf := setupBundle(t)
+		svc := newTestService(m, projectDir, repo, branch)
 
 		if _, err := svc.RepoAdd(); err != nil {
 			t.Fatal(err)
 		}
 
-		// Change the source file content
-		srcPath := filepath.Join(bundleDir, "instructions", "test.instructions.md")
-		if err := os.WriteFile(srcPath, []byte("---\nversion: '2.0.0'\n---\n# Updated\n"), 0644); err != nil {
-			t.Fatal(err)
-		}
+		// Change the remote source file content
+		mf.files[m.BasePath+"/instructions/test.instructions.md"] = "---\nversion: '2.0.0'\n---\n# Updated\n"
 
 		result, err := svc.Update()
 		if err != nil {
@@ -571,8 +639,8 @@ func TestServiceUpdate(t *testing.T) {
 	})
 
 	t.Run("no sidecar errors", func(t *testing.T) {
-		m, projectDir, _ := setupBundle(t)
-		svc := newTestService(m, projectDir)
+		m, projectDir, repo, branch, _ := setupBundle(t)
+		svc := newTestService(m, projectDir, repo, branch)
 
 		_, err := svc.Update()
 		if err == nil {
@@ -584,8 +652,8 @@ func TestServiceUpdate(t *testing.T) {
 // ── TestServiceInstallFile ─────────────────────────────────────
 
 func TestServiceInstallFile(t *testing.T) {
-	m, projectDir, _ := setupBundle(t)
-	svc := newTestService(m, projectDir)
+	m, projectDir, repo, branch, _ := setupBundle(t)
+	svc := newTestService(m, projectDir, repo, branch)
 
 	result, err := svc.InstallFile("instructions/test.instructions.md")
 	if err != nil {
@@ -617,8 +685,8 @@ func TestServiceInstallFile(t *testing.T) {
 // ── TestServiceUninstallFile ───────────────────────────────────
 
 func TestServiceUninstallFile(t *testing.T) {
-	m, projectDir, _ := setupBundle(t)
-	svc := newTestService(m, projectDir)
+	m, projectDir, repo, branch, _ := setupBundle(t)
+	svc := newTestService(m, projectDir, repo, branch)
 
 	// Install first
 	if _, err := svc.InstallFile("instructions/test.instructions.md"); err != nil {
@@ -658,8 +726,8 @@ func TestServiceUninstallFile(t *testing.T) {
 // ── TestServiceDiffFile ────────────────────────────────────────
 
 func TestServiceDiffFile(t *testing.T) {
-	m, projectDir, _ := setupBundle(t)
-	svc := newTestService(m, projectDir)
+	m, projectDir, repo, branch, _ := setupBundle(t)
+	svc := newTestService(m, projectDir, repo, branch)
 
 	// Install the file
 	if _, err := svc.InstallFile("instructions/test.instructions.md"); err != nil {
@@ -699,8 +767,8 @@ func TestServiceDiffFile(t *testing.T) {
 // ── TestServiceSkipUpdate ──────────────────────────────────────
 
 func TestServiceSkipUpdate(t *testing.T) {
-	m, projectDir, _ := setupBundle(t)
-	svc := newTestService(m, projectDir)
+	m, projectDir, repo, branch, _ := setupBundle(t)
+	svc := newTestService(m, projectDir, repo, branch)
 
 	result, err := svc.SkipUpdate("instructions/test.instructions.md")
 	if err != nil {
@@ -729,8 +797,8 @@ func TestServiceSkipUpdate(t *testing.T) {
 
 func TestServiceSetOverride(t *testing.T) {
 	t.Run("pinned", func(t *testing.T) {
-		m, projectDir, _ := setupBundle(t)
-		svc := newTestService(m, projectDir)
+		m, projectDir, repo, branch, _ := setupBundle(t)
+		svc := newTestService(m, projectDir, repo, branch)
 
 		result, err := svc.SetOverride("instructions/test.instructions.md", "pinned")
 		if err != nil {
@@ -747,8 +815,8 @@ func TestServiceSetOverride(t *testing.T) {
 	})
 
 	t.Run("excluded", func(t *testing.T) {
-		m, projectDir, _ := setupBundle(t)
-		svc := newTestService(m, projectDir)
+		m, projectDir, repo, branch, _ := setupBundle(t)
+		svc := newTestService(m, projectDir, repo, branch)
 
 		if _, err := svc.SetOverride("instructions/test.instructions.md", "excluded"); err != nil {
 			t.Fatal(err)
@@ -760,8 +828,8 @@ func TestServiceSetOverride(t *testing.T) {
 	})
 
 	t.Run("clear", func(t *testing.T) {
-		m, projectDir, _ := setupBundle(t)
-		svc := newTestService(m, projectDir)
+		m, projectDir, repo, branch, _ := setupBundle(t)
+		svc := newTestService(m, projectDir, repo, branch)
 
 		if _, err := svc.SetOverride("instructions/test.instructions.md", "pinned"); err != nil {
 			t.Fatal(err)
@@ -780,8 +848,8 @@ func TestServiceSetOverride(t *testing.T) {
 
 func TestServiceRunTelemetry(t *testing.T) {
 	t.Run("disabled", func(t *testing.T) {
-		m, projectDir, _ := setupBundle(t)
-		svc := newTestService(m, projectDir)
+		m, projectDir, repo, branch, _ := setupBundle(t)
+		svc := newTestService(m, projectDir, repo, branch)
 		// TelemetryEnabled is nil by default (disabled)
 
 		_, err := svc.RunTelemetry("")
@@ -794,9 +862,9 @@ func TestServiceRunTelemetry(t *testing.T) {
 	})
 
 	t.Run("no token", func(t *testing.T) {
-		m, projectDir, _ := setupBundle(t)
+		m, projectDir, repo, branch, _ := setupBundle(t)
 		enabled := true
-		svc := newTestService(m, projectDir)
+		svc := newTestService(m, projectDir, repo, branch)
 		svc.Config.TelemetryEnabled = &enabled
 
 		// Ensure no token is available
@@ -812,8 +880,8 @@ func TestServiceRunTelemetry(t *testing.T) {
 // ── TestServiceReadTelemetryLog ────────────────────────────────
 
 func TestServiceReadTelemetryLog(t *testing.T) {
-	m, projectDir, _ := setupBundle(t)
-	svc := newTestService(m, projectDir)
+	m, projectDir, repo, branch, _ := setupBundle(t)
+	svc := newTestService(m, projectDir, repo, branch)
 
 	entries, err := svc.ReadTelemetryLog()
 	if err != nil {
@@ -828,8 +896,8 @@ func TestServiceReadTelemetryLog(t *testing.T) {
 
 func TestServiceInstallFileErrors(t *testing.T) {
 	t.Run("unknown manifest", func(t *testing.T) {
-		m, projectDir, _ := setupBundle(t)
-		svc := newTestService(m, projectDir)
+		m, projectDir, repo, branch, _ := setupBundle(t)
+		svc := newTestService(m, projectDir, repo, branch)
 		svc.Config.Manifest = "nonexistent"
 
 		_, err := svc.InstallFile("instructions/test.instructions.md")
@@ -842,8 +910,8 @@ func TestServiceInstallFileErrors(t *testing.T) {
 	})
 
 	t.Run("file not in manifest", func(t *testing.T) {
-		m, projectDir, _ := setupBundle(t)
-		svc := newTestService(m, projectDir)
+		m, projectDir, repo, branch, _ := setupBundle(t)
+		svc := newTestService(m, projectDir, repo, branch)
 
 		_, err := svc.InstallFile("agents/nonexistent.md")
 		if err == nil {
@@ -857,8 +925,8 @@ func TestServiceInstallFileErrors(t *testing.T) {
 
 func TestServiceDiffFileErrors(t *testing.T) {
 	t.Run("unknown manifest", func(t *testing.T) {
-		m, projectDir, _ := setupBundle(t)
-		svc := newTestService(m, projectDir)
+		m, projectDir, repo, branch, _ := setupBundle(t)
+		svc := newTestService(m, projectDir, repo, branch)
 		svc.Config.Manifest = "nonexistent"
 
 		_, err := svc.DiffFile("instructions/test.instructions.md")
@@ -871,8 +939,8 @@ func TestServiceDiffFileErrors(t *testing.T) {
 	})
 
 	t.Run("file not in manifest", func(t *testing.T) {
-		m, projectDir, _ := setupBundle(t)
-		svc := newTestService(m, projectDir)
+		m, projectDir, repo, branch, _ := setupBundle(t)
+		svc := newTestService(m, projectDir, repo, branch)
 
 		_, err := svc.DiffFile("agents/nonexistent.md")
 		if err == nil {
@@ -886,8 +954,8 @@ func TestServiceDiffFileErrors(t *testing.T) {
 
 func TestServiceSkipUpdateErrors(t *testing.T) {
 	t.Run("unknown manifest", func(t *testing.T) {
-		m, projectDir, _ := setupBundle(t)
-		svc := newTestService(m, projectDir)
+		m, projectDir, repo, branch, _ := setupBundle(t)
+		svc := newTestService(m, projectDir, repo, branch)
 		svc.Config.Manifest = "nonexistent"
 
 		_, err := svc.SkipUpdate("instructions/test.instructions.md")
@@ -900,8 +968,8 @@ func TestServiceSkipUpdateErrors(t *testing.T) {
 	})
 
 	t.Run("file not in manifest", func(t *testing.T) {
-		m, projectDir, _ := setupBundle(t)
-		svc := newTestService(m, projectDir)
+		m, projectDir, repo, branch, _ := setupBundle(t)
+		svc := newTestService(m, projectDir, repo, branch)
 
 		_, err := svc.SkipUpdate("agents/nonexistent.md")
 		if err == nil {
@@ -915,8 +983,8 @@ func TestServiceSkipUpdateErrors(t *testing.T) {
 
 func TestServiceUpdateErrors(t *testing.T) {
 	t.Run("unknown manifest", func(t *testing.T) {
-		m, projectDir, _ := setupBundle(t)
-		svc := newTestService(m, projectDir)
+		m, projectDir, repo, branch, _ := setupBundle(t)
+		svc := newTestService(m, projectDir, repo, branch)
 		svc.Config.Manifest = "nonexistent"
 
 		_, err := svc.Update()
@@ -931,8 +999,8 @@ func TestServiceUpdateErrors(t *testing.T) {
 
 func TestServiceSyncErrors(t *testing.T) {
 	t.Run("unknown manifest", func(t *testing.T) {
-		m, projectDir, _ := setupBundle(t)
-		svc := newTestService(m, projectDir)
+		m, projectDir, repo, branch, _ := setupBundle(t)
+		svc := newTestService(m, projectDir, repo, branch)
 		svc.Config.Manifest = "nonexistent"
 
 		_, err := svc.Sync()
