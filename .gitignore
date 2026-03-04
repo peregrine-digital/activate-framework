@@ -1,1 +1,8 @@
 .DS_Store
+cli/activate
+cli/activate.exe
+cli/dist/
+cli/npm/platforms/*/activate
+cli/npm/platforms/*/activate.exe
+cli/cli
+.vscode/

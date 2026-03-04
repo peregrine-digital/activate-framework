@@ -1,0 +1,11 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "prepare-assets",
+      "type": "shell",
+      "command": "node scripts/prepare-assets.mjs",
+      "problemMatcher": []
+    }
+  ]
+}

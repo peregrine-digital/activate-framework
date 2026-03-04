@@ -1,0 +1,16 @@
+{
+  "name": "activate-framework",
+  "version": "0.5.0",
+  "description": "AI-assisted development framework with plugins, skills, and agents",
+  "type": "module",
+  "scripts": {
+    "test": "node --test framework/__tests__/*.test.mjs",
+    "validate:plugins": "node framework/validate-structure.mjs",
+    "validate": "npm run validate:plugins && npm run test"
+  },
+  "keywords": ["copilot", "ai", "agents", "framework"],
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  }
+}

@@ -1,5 +1,6 @@
 ---
 description: 'TypeScript conventions and project-specific patterns'
+version: '0.5.0'
 applyTo: '**/*.{ts,tsx}'
 excludeAgent: []
 ---
