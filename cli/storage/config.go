@@ -90,6 +90,8 @@ func ReadProjectConfig(projectDir string) (*model.Config, error) {
 // ResolveConfig merges defaults < global < project < overrides.
 func ResolveConfig(projectDir string, overrides *model.Config) model.Config {
 	result := model.Config{
+		Repo:            DefaultRepo,
+		Branch:          DefaultBranch,
 		Manifest:        model.DefaultManifest,
 		Tier:            model.DefaultTier,
 		FileOverrides:   make(map[string]string),
@@ -181,6 +183,15 @@ func ClearSkippedVersion(projectDir, dest string) error {
 // ReadFileVersion reads a file and extracts its frontmatter version.
 func ReadFileVersion(path string) (string, error) {
 	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", err
+	}
+	return model.ParseFrontmatterVersion(data), nil
+}
+
+// ReadFileVersionRemote fetches a file from GitHub and extracts its frontmatter version.
+func ReadFileVersionRemote(filePath, repo, branch string) (string, error) {
+	data, err := FetchFile(filePath, repo, branch)
 	if err != nil {
 		return "", err
 	}

@@ -10,6 +10,8 @@ const (
 
 // Config is the unified configuration shape used at both layers.
 type Config struct {
+	Repo             string            `json:"repo,omitempty"`
+	Branch           string            `json:"branch,omitempty"`
 	Manifest         string            `json:"manifest"`
 	Tier             string            `json:"tier"`
 	FileOverrides    map[string]string `json:"fileOverrides,omitempty"`
@@ -20,6 +22,16 @@ type Config struct {
 // MergeConfig applies non-zero fields from src onto dst.
 // Use ClearValue ("__clear__") to explicitly unset a string field.
 func MergeConfig(dst, src *Config) {
+	if src.Repo == ClearValue {
+		dst.Repo = ""
+	} else if src.Repo != "" {
+		dst.Repo = src.Repo
+	}
+	if src.Branch == ClearValue {
+		dst.Branch = ""
+	} else if src.Branch != "" {
+		dst.Branch = src.Branch
+	}
 	if src.Manifest == ClearValue {
 		dst.Manifest = ""
 	} else if src.Manifest != "" {
