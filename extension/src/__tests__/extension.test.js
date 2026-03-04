@@ -77,12 +77,17 @@ const vscodeMock = {
 // ── Mock ActivateClient ──────────────────────────────────────
 
 class MockClient extends EventEmitter {
-  constructor() {
+  constructor(opts) {
     super();
+    this.constructorOpts = opts;
     this.calls = [];
     this._disposed = false;
     this._mockResults = {};
+    this._token = opts?.token || '';
   }
+
+  get token() { return this._token; }
+  set token(v) { this._token = v || ''; }
 
   async start() { this.calls.push(['start']); }
   async stop() { this.calls.push(['stop']); this._disposed = true; }
@@ -124,7 +129,14 @@ function installMocks(mockClient) {
   Module._load = function (request, parent, isMain) {
     if (request === 'vscode') return vscodeMock;
     if (request === './client' || request.endsWith('/client')) {
-      return { ActivateClient: function () { return mockClient; } };
+      return {
+        ActivateClient: function (opts) {
+          // Capture constructor opts on the mock for assertion
+          mockClient.constructorOpts = opts;
+          mockClient._token = opts?.token || '';
+          return mockClient;
+        },
+      };
     }
     return origLoad.call(this, request, parent, isMain);
   };
@@ -163,7 +175,7 @@ describe('extension.js', () => {
       }
       if (request === 'vscode') return vscodeMock;
       if (request === './client' || request.endsWith('/client')) {
-        return { ActivateClient: function () { return mockClient; } };
+        return { ActivateClient: function (opts) { mockClient.constructorOpts = opts; mockClient._token = opts?.token || ''; return mockClient; } };
       }
       return origLoad.call(this, request, parent, isMain);
     };
@@ -349,5 +361,75 @@ describe('extension.js', () => {
     assert.equal(repoCalls.length, 0);
     const syncCalls = mockClient.calls.filter(([m]) => m === 'sync');
     assert.equal(syncCalls.length, 1);
+  });
+
+  // ── Daemon auth token tests ──────────────────────────────────
+
+  it('passes VS Code GitHub token to ActivateClient', async () => {
+    authSession = { accessToken: 'ghp_vscode_token_abc' };
+
+    const origFs = Module._load;
+    Module._load = function (request, parent, isMain) {
+      if (request === 'fs') {
+        const realFs = origLoad.call(this, 'fs', parent, isMain);
+        return { ...realFs, existsSync: (p) => p.includes('bin/activate') ? true : realFs.existsSync(p) };
+      }
+      if (request === 'vscode') return vscodeMock;
+      if (request === './client' || request.endsWith('/client')) {
+        return { ActivateClient: function (opts) { mockClient.constructorOpts = opts; mockClient._token = opts?.token || ''; return mockClient; } };
+      }
+      return origLoad.call(this, request, parent, isMain);
+    };
+
+    mockClient._mockResults.getState = {
+      state: 'installed',
+      config: { tier: 'standard', manifest: 'activate-framework' },
+      files: [],
+    };
+    mockClient._mockResults.sync = { action: 'none' };
+
+    const ext = require('../extension');
+    const context = {
+      extensionUri: { fsPath: '/ext' },
+      extension: { packageJSON: { version: '1.0.0' } },
+      subscriptions: subscriptions,
+    };
+    await ext.activate(context);
+
+    assert.strictEqual(mockClient.constructorOpts.token, 'ghp_vscode_token_abc');
+  });
+
+  it('passes empty token when no GitHub auth session', async () => {
+    authSession = null;
+
+    const origFs = Module._load;
+    Module._load = function (request, parent, isMain) {
+      if (request === 'fs') {
+        const realFs = origLoad.call(this, 'fs', parent, isMain);
+        return { ...realFs, existsSync: (p) => p.includes('bin/activate') ? true : realFs.existsSync(p) };
+      }
+      if (request === 'vscode') return vscodeMock;
+      if (request === './client' || request.endsWith('/client')) {
+        return { ActivateClient: function (opts) { mockClient.constructorOpts = opts; mockClient._token = opts?.token || ''; return mockClient; } };
+      }
+      return origLoad.call(this, request, parent, isMain);
+    };
+
+    mockClient._mockResults.getState = {
+      state: 'installed',
+      config: { tier: 'standard', manifest: 'activate-framework' },
+      files: [],
+    };
+    mockClient._mockResults.sync = { action: 'none' };
+
+    const ext = require('../extension');
+    const context = {
+      extensionUri: { fsPath: '/ext' },
+      extension: { packageJSON: { version: '1.0.0' } },
+      subscriptions: subscriptions,
+    };
+    await ext.activate(context);
+
+    assert.strictEqual(mockClient.constructorOpts.token, '');
   });
 });

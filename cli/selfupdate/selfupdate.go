@@ -18,9 +18,6 @@ const (
 	GitHubRepo = "activate-framework"
 )
 
-// apiBase is the GitHub API base URL. Override in tests.
-var apiBase = "https://api.github.com"
-
 // isPrerelease returns true if the version string contains a pre-release suffix.
 func isPrerelease(version string) bool {
 	return strings.ContainsAny(version, "-+")

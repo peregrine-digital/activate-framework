@@ -188,14 +188,14 @@ func TestInjectMcpFromManifest(t *testing.T) {
 	}))
 	defer raw.Close()
 	origRaw := RawBase
-	origToken := os.Getenv("GITHUB_TOKEN")
+	origResolver := TokenResolver
 	RawBase = raw.URL
-	os.Unsetenv("GITHUB_TOKEN")
+	TokenResolver = func() string { return "" }
+	ResetTokenCache()
 	defer func() {
 		RawBase = origRaw
-		if origToken != "" {
-			os.Setenv("GITHUB_TOKEN", origToken)
-		}
+		TokenResolver = origResolver
+		ResetTokenCache()
 	}()
 
 	files := []model.ManifestFile{

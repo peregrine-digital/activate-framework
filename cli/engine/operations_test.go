@@ -44,14 +44,14 @@ func serveRemoteFiles(t *testing.T, files map[string]string) (*httptest.Server, 
 	}))
 
 	origRaw := storage.RawBase
-	origToken := os.Getenv("GITHUB_TOKEN")
+	origResolver := storage.TokenResolver
 	storage.RawBase = raw.URL
-	os.Unsetenv("GITHUB_TOKEN")
+	storage.TokenResolver = func() string { return "" }
+	storage.ResetTokenCache()
 	t.Cleanup(func() {
 		storage.RawBase = origRaw
-		if origToken != "" {
-			os.Setenv("GITHUB_TOKEN", origToken)
-		}
+		storage.TokenResolver = origResolver
+		storage.ResetTokenCache()
 		raw.Close()
 	})
 

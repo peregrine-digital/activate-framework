@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"strings"
 	"testing"
 
@@ -17,16 +16,16 @@ import (
 func withTestServers(t *testing.T, rawSrv, apiSrv *httptest.Server) {
 	t.Helper()
 	origRaw, origAPI := storage.RawBase, storage.APIBase
-	origToken := os.Getenv("GITHUB_TOKEN")
+	origResolver := storage.TokenResolver
 	storage.RawBase = rawSrv.URL
 	storage.APIBase = apiSrv.URL
-	os.Unsetenv("GITHUB_TOKEN")
+	storage.TokenResolver = func() string { return "" }
+	storage.ResetTokenCache()
 	t.Cleanup(func() {
 		storage.RawBase = origRaw
 		storage.APIBase = origAPI
-		if origToken != "" {
-			os.Setenv("GITHUB_TOKEN", origToken)
-		}
+		storage.TokenResolver = origResolver
+		storage.ResetTokenCache()
 	})
 }
 

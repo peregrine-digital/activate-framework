@@ -6,7 +6,6 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -27,15 +26,9 @@ func IsTelemetryEnabled(cfg model.Config) bool {
 }
 
 // ResolveGitHubToken returns a GitHub token from env or gh CLI.
+// Delegates to storage.ResolveToken which caches the result.
 func ResolveGitHubToken() string {
-	if token := os.Getenv("GITHUB_TOKEN"); token != "" {
-		return token
-	}
-	out, err := exec.Command("gh", "auth", "token").Output()
-	if err == nil {
-		return strings.TrimSpace(string(out))
-	}
-	return ""
+	return storage.ResolveToken()
 }
 
 // fetchCopilotUserData fetches Copilot quota data from the GitHub API.
@@ -52,7 +45,7 @@ func fetchCopilotUserData(token string) (map[string]interface{}, error) {
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("User-Agent", telemetryUserAgent)
 
-	resp, err := storage.HTTPClient.Do(req)
+	resp, err := storage.GitHubDo(req)
 	if err != nil {
 		return nil, fmt.Errorf("request failed: %w", err)
 	}

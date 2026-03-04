@@ -446,4 +446,73 @@ describe('ActivateClient', () => {
     sendResponse(req.id, { updated: false });
     await resultPromise;
   });
+
+  // ── Daemon auth token tests ──────────────────────────────────
+
+  it('stores token option and exposes via getter', () => {
+    const client = new ActivateClient({
+      binPath: '/fake/activate',
+      projectDir: '/fake/project',
+      token: 'ghp_test_token_123',
+    });
+    assert.strictEqual(client.token, 'ghp_test_token_123');
+  });
+
+  it('defaults token to empty string when not provided', () => {
+    const client = new ActivateClient({
+      binPath: '/fake/activate',
+      projectDir: '/fake/project',
+    });
+    assert.strictEqual(client.token, '');
+  });
+
+  it('allows updating token after construction', () => {
+    const client = new ActivateClient({
+      binPath: '/fake/activate',
+      projectDir: '/fake/project',
+    });
+    assert.strictEqual(client.token, '');
+    client.token = 'ghp_updated';
+    assert.strictEqual(client.token, 'ghp_updated');
+  });
+
+  it('includes GITHUB_TOKEN in spawn env when token is set', () => {
+    // Capture the spawn call args by overriding _spawnDaemon
+    let capturedEnv;
+    const client = new ActivateClient({
+      binPath: '/fake/activate',
+      projectDir: '/fake/project',
+      token: 'ghp_spawn_test',
+    });
+
+    const spawnOpts = client._buildSpawnOpts();
+    capturedEnv = spawnOpts.env;
+
+    assert.ok(capturedEnv, 'spawn opts should include env');
+    assert.strictEqual(capturedEnv.GITHUB_TOKEN, 'ghp_spawn_test');
+  });
+
+  it('inherits process env in spawn opts alongside GITHUB_TOKEN', () => {
+    const client = new ActivateClient({
+      binPath: '/fake/activate',
+      projectDir: '/fake/project',
+      token: 'ghp_inherit_test',
+    });
+
+    const spawnOpts = client._buildSpawnOpts();
+    // Should inherit PATH from process.env
+    assert.strictEqual(spawnOpts.env.PATH, process.env.PATH);
+    assert.strictEqual(spawnOpts.env.GITHUB_TOKEN, 'ghp_inherit_test');
+  });
+
+  it('omits GITHUB_TOKEN from spawn env when token is empty', () => {
+    const client = new ActivateClient({
+      binPath: '/fake/activate',
+      projectDir: '/fake/project',
+    });
+
+    const spawnOpts = client._buildSpawnOpts();
+    // Should NOT have GITHUB_TOKEN in env (let daemon resolve via gh CLI)
+    assert.strictEqual(spawnOpts.env, undefined);
+  });
 });

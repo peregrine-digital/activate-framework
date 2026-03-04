@@ -51,15 +51,15 @@ func serveVersionFiles(t *testing.T, files map[string]string) (repo, branch stri
 		http.NotFound(w, r)
 	}))
 	oldRaw := storage.RawBase
+	oldResolver := storage.TokenResolver
 	storage.RawBase = raw.URL
-	oldToken := os.Getenv("GITHUB_TOKEN")
-	os.Unsetenv("GITHUB_TOKEN")
+	storage.TokenResolver = func() string { return "" }
+	storage.ResetTokenCache()
 	cleanup = func() {
 		raw.Close()
 		storage.RawBase = oldRaw
-		if oldToken != "" {
-			os.Setenv("GITHUB_TOKEN", oldToken)
-		}
+		storage.TokenResolver = oldResolver
+		storage.ResetTokenCache()
 	}
 	return
 }

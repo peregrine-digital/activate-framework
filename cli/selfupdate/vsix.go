@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"strings"
-	"time"
+
+	"github.com/peregrine-digital/activate-framework/cli/storage"
 )
 
 // VsixInfo describes an available extension update from a GitHub release.
@@ -35,7 +35,7 @@ type githubAsset struct {
 // is the only way to download assets.
 func assetAPIURL(assetID int) string {
 	return fmt.Sprintf("%s/repos/%s/%s/releases/assets/%d",
-		apiBase, GitHubOwner, GitHubRepo, assetID)
+		storage.APIBase, GitHubOwner, GitHubRepo, assetID)
 }
 
 // CheckVsix queries the latest GitHub release for a .vsix asset.
@@ -43,7 +43,7 @@ func assetAPIURL(assetID int) string {
 // repos that only have pre-releases. Token is required for private repos.
 // Returns VsixInfo with Available=false if none found or on error.
 func CheckVsix(currentExtVersion, token string) VsixInfo {
-	url := fmt.Sprintf("%s/repos/%s/%s/releases?per_page=1", apiBase, GitHubOwner, GitHubRepo)
+	url := fmt.Sprintf("%s/repos/%s/%s/releases?per_page=1", storage.APIBase, GitHubOwner, GitHubRepo)
 
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
@@ -52,12 +52,9 @@ func CheckVsix(currentExtVersion, token string) VsixInfo {
 	req.Header.Set("Accept", "application/vnd.github+json")
 	if token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
-	} else if envToken := os.Getenv("GITHUB_TOKEN"); envToken != "" {
-		req.Header.Set("Authorization", "Bearer "+envToken)
 	}
 
-	client := &http.Client{Timeout: 15 * time.Second}
-	resp, err := client.Do(req)
+	resp, err := storage.GitHubDo(req)
 	if err != nil {
 		return VsixInfo{}
 	}
@@ -117,12 +114,9 @@ func fetchChecksum(url, filename, token string) string {
 	req.Header.Set("Accept", "application/octet-stream")
 	if token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
-	} else if envToken := os.Getenv("GITHUB_TOKEN"); envToken != "" {
-		req.Header.Set("Authorization", "Bearer "+envToken)
 	}
 
-	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Do(req)
+	resp, err := storage.GitHubDo(req)
 	if err != nil || resp.StatusCode != 200 {
 		return ""
 	}

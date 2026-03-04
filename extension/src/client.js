@@ -111,12 +111,14 @@ class ActivateClient extends EventEmitter {
    * @param {object} opts
    * @param {string} opts.binPath - Path to the activate binary
    * @param {string} opts.projectDir - Workspace root path
+   * @param {string} [opts.token] - GitHub token for daemon auth
    * @param {object} [opts.log] - Logger with debug/error methods
    */
   constructor(opts) {
     super();
     this._binPath = opts.binPath;
     this._projectDir = opts.projectDir;
+    this._token = opts.token || '';
     this._log = opts.log || { debug() {}, error() {} };
     this._process = null;
     this._reader = null;
@@ -126,14 +128,27 @@ class ActivateClient extends EventEmitter {
     this._disposed = false;
   }
 
+  /** GitHub token passed to the daemon process. */
+  get token() { return this._token; }
+  set token(v) { this._token = v || ''; }
+
+  /** Build spawn options, injecting GITHUB_TOKEN when available. */
+  _buildSpawnOpts() {
+    const opts = {
+      stdio: ['pipe', 'pipe', 'pipe'],
+      cwd: this._projectDir,
+    };
+    if (this._token) {
+      opts.env = { ...process.env, GITHUB_TOKEN: this._token };
+    }
+    return opts;
+  }
+
   /** Start the daemon process and initialize. */
   async start() {
     if (this._process) return;
 
-    this._process = spawn(this._binPath, ['serve', '--stdio'], {
-      stdio: ['pipe', 'pipe', 'pipe'],
-      cwd: this._projectDir,
-    });
+    this._process = spawn(this._binPath, ['serve', '--stdio'], this._buildSpawnOpts());
 
     this._process.on('exit', (code, signal) => {
       this._log.debug(`Daemon exited: code=${code} signal=${signal}`);

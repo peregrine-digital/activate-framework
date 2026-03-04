@@ -461,9 +461,21 @@ async function activate(context) {
 }
 
 async function startDaemon(context, binPath, projectDir, outputChannel, controlPanel) {
+  // Get GitHub token for private repo access in daemon
+  let token = '';
+  try {
+    const session = await vscode.authentication.getSession('github', ['repo'], {
+      createIfNone: false,
+    });
+    token = session?.accessToken || '';
+  } catch {
+    // No auth available — daemon will fall back to gh CLI
+  }
+
   client = new ActivateClient({
     binPath,
     projectDir,
+    token,
     log: {
       debug: (msg) => outputChannel.appendLine(`[debug] ${msg}`),
       error: (msg) => outputChannel.appendLine(`[error] ${msg}`),

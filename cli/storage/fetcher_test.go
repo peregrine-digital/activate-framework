@@ -4,27 +4,26 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"strings"
 	"testing"
 )
 
 // withTestServers overrides RawBase and APIBase for the duration of a test,
 // pointing them at the supplied httptest servers. It restores the originals
-// via t.Cleanup and unsets GITHUB_TOKEN so the default (raw) path is used.
+// via t.Cleanup, suppresses real token resolution so the raw path is used.
 func withTestServers(t *testing.T, rawSrv, apiSrv *httptest.Server) {
 	t.Helper()
 	origRaw, origAPI := RawBase, APIBase
-	origToken := os.Getenv("GITHUB_TOKEN")
+	origResolver := TokenResolver
 	RawBase = rawSrv.URL
 	APIBase = apiSrv.URL
-	os.Unsetenv("GITHUB_TOKEN")
+	TokenResolver = func() string { return "" }
+	ResetTokenCache()
 	t.Cleanup(func() {
 		RawBase = origRaw
 		APIBase = origAPI
-		if origToken != "" {
-			os.Setenv("GITHUB_TOKEN", origToken)
-		}
+		TokenResolver = origResolver
+		ResetTokenCache()
 	})
 }
 
@@ -105,7 +104,8 @@ func TestFetchFileWithToken(t *testing.T) {
 	defer raw.Close()
 
 	withTestServers(t, raw, api)
-	t.Setenv("GITHUB_TOKEN", "test-tok")
+	TokenResolver = func() string { return "test-tok" }
+	ResetTokenCache()
 
 	data, err := FetchFile("file.txt", "owner/repo", "main")
 	if err != nil {
@@ -166,9 +166,15 @@ func TestFetchFileNetworkError(t *testing.T) {
 	defer api.Close()
 
 	origRaw := RawBase
+	origResolver := TokenResolver
 	RawBase = url
-	os.Unsetenv("GITHUB_TOKEN")
-	t.Cleanup(func() { RawBase = origRaw })
+	TokenResolver = func() string { return "" }
+	ResetTokenCache()
+	t.Cleanup(func() {
+		RawBase = origRaw
+		TokenResolver = origResolver
+		ResetTokenCache()
+	})
 
 	_, err := FetchFile("file.md", "owner/repo", "main")
 	if err == nil {
@@ -185,10 +191,17 @@ func TestFetchFileAPINetworkError(t *testing.T) {
 	api.Close()
 
 	origRaw, origAPI := RawBase, APIBase
+	origResolver := TokenResolver
 	RawBase = raw.URL
 	APIBase = url
-	t.Setenv("GITHUB_TOKEN", "tok")
-	t.Cleanup(func() { RawBase = origRaw; APIBase = origAPI })
+	TokenResolver = func() string { return "tok" }
+	ResetTokenCache()
+	t.Cleanup(func() {
+		RawBase = origRaw
+		APIBase = origAPI
+		TokenResolver = origResolver
+		ResetTokenCache()
+	})
 
 	_, err := FetchFile("file.md", "owner/repo", "main")
 	if err == nil {

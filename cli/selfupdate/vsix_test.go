@@ -4,23 +4,25 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"strings"
 	"testing"
+
+	"github.com/peregrine-digital/activate-framework/cli/storage"
 )
 
-// withTestAPI overrides apiBase for the duration of a test.
+// withTestAPI overrides storage.APIBase for the duration of a test and
+// suppresses real token resolution so requests hit the test server.
 func withTestAPI(t *testing.T, srv *httptest.Server) {
 	t.Helper()
-	orig := apiBase
-	origToken := os.Getenv("GITHUB_TOKEN")
-	apiBase = srv.URL
-	os.Unsetenv("GITHUB_TOKEN")
+	origAPI := storage.APIBase
+	origResolver := storage.TokenResolver
+	storage.APIBase = srv.URL
+	storage.TokenResolver = func() string { return "" }
+	storage.ResetTokenCache()
 	t.Cleanup(func() {
-		apiBase = orig
-		if origToken != "" {
-			os.Setenv("GITHUB_TOKEN", origToken)
-		}
+		storage.APIBase = origAPI
+		storage.TokenResolver = origResolver
+		storage.ResetTokenCache()
 	})
 }
 
@@ -129,7 +131,9 @@ func TestCheckVsixFallsBackToEnvToken(t *testing.T) {
 	}))
 	defer srv.Close()
 	withTestAPI(t, srv)
-	os.Setenv("GITHUB_TOKEN", "env-token-456")
+	// Override resolver to simulate env token (withTestAPI suppressed it)
+	storage.TokenResolver = func() string { return "env-token-456" }
+	storage.ResetTokenCache()
 
 	CheckVsix("0.1.0", "")
 	if receivedAuth != "Bearer env-token-456" {
@@ -145,7 +149,9 @@ func TestCheckVsixParamTokenTakesPrecedence(t *testing.T) {
 	}))
 	defer srv.Close()
 	withTestAPI(t, srv)
-	os.Setenv("GITHUB_TOKEN", "env-token")
+	// Even with a resolved token, param token should take precedence
+	storage.TokenResolver = func() string { return "env-token" }
+	storage.ResetTokenCache()
 
 	CheckVsix("0.1.0", "param-token")
 	if receivedAuth != "Bearer param-token" {
