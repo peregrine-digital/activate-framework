@@ -33,6 +33,7 @@ const Method = {
   TelemetryLog:  'activate/telemetryLog',
   CheckUpdate:   'activate/checkUpdate',
   SelfUpdate:    'activate/selfUpdate',
+  BranchList:    'activate/branchList',
 
   // Notifications (server → client)
   NotifyStateChanged: 'activate/stateChanged',
@@ -327,6 +328,10 @@ class ActivateClient extends EventEmitter {
 
   selfUpdate(token) {
     return this.request(Method.SelfUpdate, { token: token || '' });
+  }
+
+  listBranches(repo) {
+    return this.request(Method.BranchList, { repo: repo || '' });
   }
 
   // ── Internal ───────────────────────────────────────────────────

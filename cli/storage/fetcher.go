@@ -132,6 +132,30 @@ func fetchRaw(filePath, repo, branch string) ([]byte, error) {
 	return io.ReadAll(io.LimitReader(resp.Body, 10<<20))
 }
 
+// FetchBranches lists branch names for a GitHub repo via the API.
+func FetchBranches(repo string) ([]string, error) {
+	url := fmt.Sprintf("%s/repos/%s/branches?per_page=100", APIBase, repo)
+	resp, err := GitHubGet(url)
+	if err != nil {
+		return nil, fmt.Errorf("list branches: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf("list branches: %d %s", resp.StatusCode, resp.Status)
+	}
+	var items []struct {
+		Name string `json:"name"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&items); err != nil {
+		return nil, fmt.Errorf("parse branches: %w", err)
+	}
+	names := make([]string, len(items))
+	for i, item := range items {
+		names[i] = item.Name
+	}
+	return names, nil
+}
+
 // FetchJSON fetches and parses a remote JSON file.
 func FetchJSON(filePath, repo, branch string, v interface{}) error {
 	data, err := FetchFile(filePath, repo, branch)

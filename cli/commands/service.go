@@ -26,6 +26,7 @@ type ActivateAPI interface {
 	SkipUpdate(file string) (*FileResult, error)
 	SetOverride(file, override string) (*FileResult, error)
 	RunTelemetry(token string) (*TelemetryRunResult, error)
+	ListBranches(repo string) ([]string, error)
 	ReadTelemetryLog() ([]model.TelemetryEntry, error)
 	RefreshConfig()
 	CurrentConfig() model.Config
@@ -120,6 +121,17 @@ func (s *ActivateService) remoteVersions() map[string]string {
 		versions[srcPath] = model.ParseFrontmatterVersion(data)
 	}
 	return versions
+}
+
+// ListBranches returns branch names for the given (or configured) repo.
+func (s *ActivateService) ListBranches(repo string) ([]string, error) {
+	if repo == "" {
+		repo = s.Config.Repo
+	}
+	if repo == "" {
+		repo = storage.DefaultRepo
+	}
+	return storage.FetchBranches(repo)
 }
 
 func (s *ActivateService) RefreshConfig()                { s.refreshConfig() }

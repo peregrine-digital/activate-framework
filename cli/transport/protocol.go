@@ -28,6 +28,7 @@ const (
 	MethodTelemetryLog  = "activate/telemetryLog"
 	MethodCheckUpdate   = "activate/checkUpdate"
 	MethodSelfUpdate    = "activate/selfUpdate"
+	MethodBranchList    = "activate/branchList"
 
 	// Notification methods (server → client)
 	NotifyStateChanged = "activate/stateChanged"
@@ -83,6 +84,11 @@ type FileOverrideParams struct {
 // TelemetryRunParams optionally provides a token.
 type TelemetryRunParams struct {
 	Token string `json:"token,omitempty"`
+}
+
+// BranchListParams optionally specifies a repo to list branches for.
+type BranchListParams struct {
+	Repo string `json:"repo,omitempty"`
 }
 
 // CheckUpdateParams optionally provides the current extension version.

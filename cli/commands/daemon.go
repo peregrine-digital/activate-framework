@@ -87,6 +87,8 @@ func (d *Daemon) dispatch(req *transport.Request) *transport.Response {
 		return d.handleCheckUpdate(req)
 	case transport.MethodSelfUpdate:
 		return d.handleSelfUpdate(req)
+	case transport.MethodBranchList:
+		return d.handleBranchList(req)
 	default:
 		return transport.ErrorResponse(req.ID, transport.ErrCodeMethodNotFound, fmt.Sprintf("method not found: %s", req.Method))
 	}
@@ -342,4 +344,18 @@ func (d *Daemon) handleSelfUpdate(req *transport.Request) *transport.Response {
 		return transport.ErrorResponse(req.ID, transport.ErrCodeInternal, err.Error())
 	}
 	return transport.SuccessResponse(req.ID, result)
+}
+
+func (d *Daemon) handleBranchList(req *transport.Request) *transport.Response {
+	var params transport.BranchListParams
+	if req.Params != nil {
+		if err := json.Unmarshal(req.Params, &params); err != nil {
+			return transport.ErrorResponse(req.ID, transport.ErrCodeInvalidParams, err.Error())
+		}
+	}
+	branches, err := d.service.ListBranches(params.Repo)
+	if err != nil {
+		return transport.ErrorResponse(req.ID, transport.ErrCodeInternal, err.Error())
+	}
+	return transport.SuccessResponse(req.ID, branches)
 }

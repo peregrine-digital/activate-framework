@@ -261,6 +261,33 @@ func buildSettingsForm(svc commands.ActivateAPI, vals *settingsValues) *huh.Form
 		huh.NewOption("Global (all repos)", "global"),
 	}
 
+	// Fetch branches for the configured repo
+	repo := vals.repo
+	if repo == "" {
+		repo = repoPlaceholder
+	}
+	var branchField huh.Field
+	branches, err := svc.ListBranches(repo)
+	if err == nil && len(branches) > 0 {
+		branchOpts := []huh.Option[string]{
+			huh.NewOption("(default: "+branchPlaceholder+")", ""),
+		}
+		for _, b := range branches {
+			branchOpts = append(branchOpts, huh.NewOption(b, b))
+		}
+		branchField = huh.NewSelect[string]().
+			Title("Branch").
+			Description("Git branch").
+			Options(branchOpts...).
+			Value(&vals.branch)
+	} else {
+		branchField = huh.NewInput().
+			Title("Branch").
+			Description("Git branch (blank = " + branchPlaceholder + ")").
+			Placeholder(branchPlaceholder).
+			Value(&vals.branch)
+	}
+
 	return huh.NewForm(
 		huh.NewGroup(
 			huh.NewSelect[string]().
@@ -278,11 +305,7 @@ func buildSettingsForm(svc commands.ActivateAPI, vals *settingsValues) *huh.Form
 				Description("GitHub owner/repo (blank = " + repoPlaceholder + ")").
 				Placeholder(repoPlaceholder).
 				Value(&vals.repo),
-			huh.NewInput().
-				Title("Branch").
-				Description("Git branch (blank = " + branchPlaceholder + ")").
-				Placeholder(branchPlaceholder).
-				Value(&vals.branch),
+			branchField,
 			huh.NewConfirm().
 				Title("Telemetry").
 				Description("Track Copilot usage quota").

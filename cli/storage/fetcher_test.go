@@ -208,3 +208,50 @@ func TestFetchFileAPINetworkError(t *testing.T) {
 		t.Fatal("expected network error")
 	}
 }
+
+// ── FetchBranches ───────────────────────────────────────────────
+
+func TestFetchBranchesSuccess(t *testing.T) {
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.Contains(r.URL.Path, "/repos/owner/repo/branches") {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode([]map[string]interface{}{
+			{"name": "main"},
+			{"name": "develop"},
+			{"name": "feat/branch-picker"},
+		})
+	}))
+	defer api.Close()
+	raw := httptest.NewServer(http.NotFoundHandler())
+	defer raw.Close()
+	withTestServers(t, raw, api)
+
+	branches, err := FetchBranches("owner/repo")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(branches) != 3 {
+		t.Fatalf("expected 3 branches, got %d", len(branches))
+	}
+	if branches[0] != "main" || branches[1] != "develop" || branches[2] != "feat/branch-picker" {
+		t.Fatalf("unexpected branches: %v", branches)
+	}
+}
+
+func TestFetchBranches404(t *testing.T) {
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer api.Close()
+	raw := httptest.NewServer(http.NotFoundHandler())
+	defer raw.Close()
+	withTestServers(t, raw, api)
+
+	_, err := FetchBranches("owner/nonexistent")
+	if err == nil {
+		t.Fatal("expected error for 404")
+	}
+}

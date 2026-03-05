@@ -279,14 +279,28 @@ class ControlPanelProvider {
       }
       case 'editBranch': {
         const currentBranch = msg.current || '';
-        vscode.window.showInputBox({
-          title: 'Branch',
-          prompt: 'Git branch name',
-          value: currentBranch,
-          placeHolder: 'main',
-        }).then((value) => {
-          if (value === undefined) return; // cancelled
+        const qp = vscode.window.createQuickPick();
+        qp.title = 'Branch';
+        qp.placeholder = 'Type to filter branches…';
+        qp.busy = true;
+        qp.show();
+
+        this._client.listBranches().then((branches) => {
+          qp.items = (branches || []).map(b => ({ label: b }));
+          const current = qp.items.find(i => i.label === currentBranch);
+          if (current) qp.activeItems = [current];
+          qp.busy = false;
+        }).catch(() => {
+          qp.items = currentBranch ? [{ label: currentBranch }] : [];
+          qp.busy = false;
+        });
+
+        qp.onDidAccept(() => {
+          const selected = qp.selectedItems[0];
+          qp.dispose();
+          if (!selected) return;
           const scope = msg.scope || 'project';
+          const value = selected.label;
           const updates = value === ''
             ? { branch: '__clear__' }
             : { branch: value };
@@ -295,6 +309,7 @@ class ControlPanelProvider {
             () => this._render(),
           );
         });
+        qp.onDidHide(() => qp.dispose());
         break;
       }
       case 'checkForUpdates':
