@@ -1,4 +1,5 @@
 ---
+version: '0.2.0'
 name: Documenter
 description: Updates app-specific instructions and agent skills when new reusable patterns emerge
 tools: ['vscode/getProjectSetupInfo', 'vscode/installExtension', 'vscode/newWorkspace', 'vscode/runCommand', 'read/readFile', 'edit', 'search', 'screenshot-viewer/*', 'github/*']

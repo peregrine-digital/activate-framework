@@ -1,4 +1,5 @@
 ---
+version: '0.2.0'
 name: Reviewer
 description: Final quality gate – behaves differently for My PR vs External PR
 tools: ['execute/getTerminalOutput', 'execute/runInTerminal', 'read/problems', 'read/readFile', 'read/terminalSelection', 'read/terminalLastCommand', 'edit', 'search', 'screenshot-viewer/*', 'agent', 'github/*']

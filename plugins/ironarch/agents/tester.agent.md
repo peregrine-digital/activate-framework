@@ -1,4 +1,5 @@
 ---
+version: '0.2.0'
 name: Tester
 description: Writes, runs, and debugs tests — owns the full testing lifecycle
 tools: ['vscode/getProjectSetupInfo', 'vscode/installExtension', 'vscode/newWorkspace', 'vscode/runCommand', 'execute/testFailure', 'execute/getTerminalOutput', 'execute/runInTerminal', 'execute/runTests', 'read/readFile', 'read/terminalSelection', 'read/terminalLastCommand', 'edit', 'search', 'screenshot-viewer/*', 'agent', 'github/*', 'todo']

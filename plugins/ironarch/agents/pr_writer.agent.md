@@ -1,4 +1,5 @@
 ---
+version: '0.2.0'
 name: PR_Writer
 description: Creates minimal, direct PRs using the repo's official template
 model: Claude Opus 4.6 (copilot)

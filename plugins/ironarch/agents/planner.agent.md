@@ -1,4 +1,5 @@
 ---
+version: '0.2.0'
 name: Planner
 description: Determines task type (implement vs review), gathers missing context, produces perfect spec or review plan
 tools: ['execute/getTerminalOutput', 'execute/runInTerminal', 'read/readFile', 'read/terminalSelection', 'read/terminalLastCommand', 'edit', 'search', 'web/fetch', 'screenshot-viewer/*', 'github/*', 'agent', 'todo']

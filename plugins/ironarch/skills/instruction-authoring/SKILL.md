@@ -1,4 +1,5 @@
 ---
+version: '0.2.0'
 name: instruction-authoring
 description: Create or update app/module-specific instruction files in host repos. Provides templates for vets-website (React) and vets-api (Rails) instruction files. Use when the Documenter needs to scaffold or improve an instruction file.
 ---

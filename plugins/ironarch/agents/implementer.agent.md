@@ -1,4 +1,5 @@
 ---
+version: '0.2.0'
 name: Implementer
 description: Implements code exactly to spec using application patterns
 tools: ['vscode/getProjectSetupInfo', 'vscode/installExtension', 'vscode/newWorkspace', 'vscode/runCommand', 'execute/testFailure', 'execute/getTerminalOutput', 'execute/getTaskOutput', 'execute/runInTerminal', 'execute/runTests', 'read', 'edit', 'search', 'screenshot-viewer/*', 'github/*']
