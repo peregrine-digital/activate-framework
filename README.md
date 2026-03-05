@@ -25,7 +25,7 @@ The extension provides a sidebar control panel for switching manifests, changing
 ### CLI Only
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/peregrine-digital/activate-framework/main/install.sh | GITHUB_TOKEN="$GITHUB_TOKEN" sh
+curl -fsSL https://raw.githubusercontent.com/peregrine-digital/activate-framework/main/install-cli.sh | GITHUB_TOKEN="$GITHUB_TOKEN" sh
 ```
 
 Then run the interactive installer:
@@ -109,7 +109,7 @@ activate-framework/
 │
 ├── skills/                          # Shared skills (cross-plugin)
 ├── mcp-servers/                     # Shared MCP server configs
-├── install.sh                       # CLI installer script (curl | sh)
+├── install-cli.sh                   # CLI installer script (curl | sh)
 └── docs/                            # Documentation
 ```
 

@@ -203,42 +203,42 @@ describe('resolveBinPath (real function)', () => {
   });
 });
 
-// ── install.sh path resolution test ─────────────────────────────
-// Verifies that the install.sh path referenced in autoInstallCLI resolves correctly.
+// ── install-cli.sh path resolution test ─────────────────────────────
+// Verifies that the install-cli.sh path referenced in autoInstallCLI resolves correctly.
 
-describe('install.sh path resolution', () => {
-  it('source install.sh exists at repo root for prepare-assets to copy', () => {
-    // prepare-assets.mjs copies install.sh from repo root to extension/
+describe('install-cli.sh path resolution', () => {
+  it('source install-cli.sh exists at repo root for prepare-assets to copy', () => {
+    // prepare-assets.mjs copies install-cli.sh from repo root to extension/
     // Verify the source exists so the build won't silently skip it
     const repoRoot = path.resolve(__dirname, '..', '..', '..');
-    const srcScript = path.join(repoRoot, 'install.sh');
+    const srcScript = path.join(repoRoot, 'install-cli.sh');
     assert.ok(fs.existsSync(srcScript),
-      `install.sh should exist at repo root (${srcScript}) for prepare-assets.mjs to copy`);
+      `install-cli.sh should exist at repo root (${srcScript}) for prepare-assets.mjs to copy`);
   });
 
-  it('autoInstallCLI path resolves to extension/install.sh (created by prepare-assets)', () => {
-    // The code in extension.js uses: path.join(__dirname, '..', 'install.sh')
-    // where __dirname is extension/src/ → resolves to extension/install.sh
+  it('autoInstallCLI path resolves to extension/install-cli.sh (created by prepare-assets)', () => {
+    // The code in extension.js uses: path.join(__dirname, '..', 'install-cli.sh')
+    // where __dirname is extension/src/ → resolves to extension/install-cli.sh
     // This file is created by prepare-assets.mjs at build time
     const extensionSrcDir = path.resolve(__dirname, '..'); // __tests__/../ = src/
     const extensionJsDir = extensionSrcDir; // extension.js lives in src/
-    const expectedPath = path.join(extensionJsDir, '..', 'install.sh'); // src/../install.sh = extension/install.sh
+    const expectedPath = path.join(extensionJsDir, '..', 'install-cli.sh'); // src/../install-cli.sh = extension/install-cli.sh
 
     assert.strictEqual(
       path.basename(path.dirname(expectedPath)), 'extension',
-      'install.sh path should resolve inside extension/ directory',
+      'install-cli.sh path should resolve inside extension/ directory',
     );
   });
 
-  it('prepare-assets.mjs copies install.sh to extension root', () => {
-    // Verify the prepare-assets script references install.sh copy
+  it('prepare-assets.mjs copies install-cli.sh to extension root', () => {
+    // Verify the prepare-assets script references install-cli.sh copy
     const scriptPath = path.resolve(__dirname, '..', '..', 'scripts', 'prepare-assets.mjs');
     assert.ok(fs.existsSync(scriptPath), 'prepare-assets.mjs should exist');
     const content = fs.readFileSync(scriptPath, 'utf8');
-    assert.ok(content.includes('install.sh'),
-      'prepare-assets.mjs should reference install.sh copy');
+    assert.ok(content.includes('install-cli.sh'),
+      'prepare-assets.mjs should reference install-cli.sh copy');
     assert.ok(content.includes('installDest'),
-      'prepare-assets.mjs should copy install.sh to extension dir');
+      'prepare-assets.mjs should copy install-cli.sh to extension dir');
   });
 
   it('package.json exists at expected relative path for version resolution', () => {

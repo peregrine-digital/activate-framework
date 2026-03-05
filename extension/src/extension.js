@@ -47,7 +47,7 @@ async function resolveBinPath(context, outputChannel) {
   const dev = path.join(context.extensionUri.fsPath, '..', 'cli', 'activate');
   if (fs.existsSync(dev)) { outputChannel.appendLine(`[debug] CLI found: dev (${dev})`); return dev; }
 
-  // 3. ~/.activate/bin/activate (installed by install.sh)
+  // 3. ~/.activate/bin/activate (installed by install-cli.sh)
   const home = os.homedir();
   const managed = path.join(home, '.activate', 'bin', 'activate');
   if (fs.existsSync(managed)) { outputChannel.appendLine(`[debug] CLI found: managed (${managed})`); return managed; }
@@ -92,7 +92,7 @@ async function autoInstallCLI() {
     }
 
     // Bundle the install script path (shipped with the extension)
-    const scriptPath = path.join(__dirname, '..', 'install.sh');
+    const scriptPath = path.join(__dirname, '..', 'install-cli.sh');
 
     const terminal = vscode.window.createTerminal({
       name: 'Activate CLI Install',

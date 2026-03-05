@@ -1,6 +1,6 @@
 #!/bin/sh
 # Activate CLI installer — detects platform, downloads latest release, installs binary.
-# Usage: curl -fsSL https://raw.githubusercontent.com/peregrine-digital/activate-framework/main/install.sh | sh
+# Usage: curl -fsSL https://raw.githubusercontent.com/peregrine-digital/activate-framework/main/install-cli.sh | sh
 #
 # Environment variables:
 #   INSTALL_DIR   Override install directory (default: ~/.activate/bin)

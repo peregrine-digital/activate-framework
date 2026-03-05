@@ -1,8 +1,8 @@
 /**
- * Copies install.sh into extension/ at build time.
+ * Copies install-cli.sh into extension/ at build time.
  *
  * Manifest and source files are fetched from GitHub at runtime (remote-only),
- * so this script only needs to bundle install.sh for the auto-install flow.
+ * so this script only needs to bundle install-cli.sh for the auto-install flow.
  *
  * Run: node scripts/prepare-assets.mjs
  */
@@ -15,14 +15,14 @@ const extensionDir = path.resolve(__dirname, '..');
 const repoRoot = path.resolve(extensionDir, '..');
 
 async function main() {
-  // Copy install.sh to extension root so it ships in the VSIX
+  // Copy install-cli.sh to extension root so it ships in the VSIX
   try {
-    const installSrc = path.join(repoRoot, 'install.sh');
-    const installDest = path.join(extensionDir, 'install.sh');
+    const installSrc = path.join(repoRoot, 'install-cli.sh');
+    const installDest = path.join(extensionDir, 'install-cli.sh');
     await copyFile(installSrc, installDest);
-    console.log('  ✓ install.sh');
+    console.log('  ✓ install-cli.sh');
   } catch {
-    console.warn('  ⚠ install.sh — not found at repo root');
+    console.warn('  ⚠ install-cli.sh — not found at repo root');
   }
 
   console.log('\nDone.');
