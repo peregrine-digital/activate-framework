@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -798,5 +800,43 @@ func TestDaemonTelemetryRunDisabled(t *testing.T) {
 	resp := sendRequest(t, h.clientWriter, h.clientReader, transport.MethodTelemetryRun, 2, transport.TelemetryRunParams{})
 	if resp.Error == nil {
 		t.Fatal("expected error when telemetry is disabled")
+	}
+}
+
+func TestDaemonBranchList(t *testing.T) {
+	// Set up a mock API server that returns branches
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.URL.Path, "/repos/") && strings.Contains(r.URL.Path, "/branches") {
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode([]map[string]string{
+				{"name": "main"},
+				{"name": "develop"},
+			})
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer api.Close()
+	origAPI := storage.APIBase
+	storage.APIBase = api.URL
+	t.Cleanup(func() { storage.APIBase = origAPI })
+
+	h := newHarness(t)
+	defer h.cleanup()
+
+	sendRequest(t, h.clientWriter, h.clientReader, transport.MethodInitialize, 1, transport.InitializeParams{ProjectDir: h.projectDir})
+
+	resp := sendRequest(t, h.clientWriter, h.clientReader, transport.MethodBranchList, 2, transport.BranchListParams{})
+	if resp.Error != nil {
+		t.Fatalf("unexpected error: %v", resp.Error)
+	}
+
+	data, _ := json.Marshal(resp.Result)
+	var branches []string
+	if err := json.Unmarshal(data, &branches); err != nil {
+		t.Fatalf("unmarshal branches: %v", err)
+	}
+	if len(branches) != 2 || branches[0] != "main" || branches[1] != "develop" {
+		t.Fatalf("unexpected branches: %v", branches)
 	}
 }

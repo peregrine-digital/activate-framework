@@ -447,6 +447,34 @@ describe('ActivateClient', () => {
     await resultPromise;
   });
 
+  // ── listBranches tests ──────────────────────────────────────────
+
+  it('listBranches sends repo parameter', async () => {
+    const { client, nextRequest, sendResponse } = createMockClient();
+
+    const resultPromise = client.listBranches('owner/repo');
+    const req = await nextRequest();
+
+    assert.strictEqual(req.method, Method.BranchList);
+    assert.strictEqual(req.params.repo, 'owner/repo');
+
+    sendResponse(req.id, ['main', 'develop', 'feat/branch']);
+    const result = await resultPromise;
+    assert.deepStrictEqual(result, ['main', 'develop', 'feat/branch']);
+  });
+
+  it('listBranches defaults empty repo to empty string', async () => {
+    const { client, nextRequest, sendResponse } = createMockClient();
+
+    const resultPromise = client.listBranches();
+    const req = await nextRequest();
+
+    assert.strictEqual(req.params.repo, '');
+
+    sendResponse(req.id, []);
+    await resultPromise;
+  });
+
   // ── Daemon auth token tests ──────────────────────────────────
 
   it('stores token option and exposes via getter', () => {
