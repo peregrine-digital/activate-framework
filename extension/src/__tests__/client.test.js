@@ -300,7 +300,7 @@ describe('ActivateClient', () => {
     const { client, nextRequest, sendResponse } = createMockClient();
 
     const p1 = client.getState();
-    const p2 = client.listManifests();
+    const p2 = client.listFiles();
     const p3 = client.getConfig('resolved');
 
     const r1 = await nextRequest();
@@ -310,11 +310,11 @@ describe('ActivateClient', () => {
     // Respond out of order
     sendResponse(r3.id, { manifest: 'a' });
     sendResponse(r1.id, { installed: true });
-    sendResponse(r2.id, [{ id: 'm1' }]);
+    sendResponse(r2.id, { files: ['x.md'] });
 
     const [res1, res2, res3] = await Promise.all([p1, p2, p3]);
     assert.deepStrictEqual(res1, { installed: true });
-    assert.deepStrictEqual(res2, [{ id: 'm1' }]);
+    assert.deepStrictEqual(res2, { files: ['x.md'] });
     assert.deepStrictEqual(res3, { manifest: 'a' });
   });
 

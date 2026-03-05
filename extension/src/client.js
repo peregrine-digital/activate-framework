@@ -273,10 +273,6 @@ class ActivateClient extends EventEmitter {
     return this.request(Method.ConfigSet, params);
   }
 
-  listManifests() {
-    return this.request(Method.ManifestList);
-  }
-
   listFiles(params) {
     return this.request(Method.ManifestFiles, params || {});
   }
