@@ -182,12 +182,10 @@ type RepoAddResult struct {
 }
 
 type SyncResult struct {
-	Action           string   `json:"action"`
-	PreviousVersion  string   `json:"previousVersion,omitempty"`
-	AvailableVersion string   `json:"availableVersion,omitempty"`
-	Updated          []string `json:"updated,omitempty"`
-	Skipped          []string `json:"skipped,omitempty"`
-	Reason           string   `json:"reason,omitempty"`
+	Action  string   `json:"action"`
+	Updated []string `json:"updated,omitempty"`
+	Skipped []string `json:"skipped,omitempty"`
+	Reason  string   `json:"reason,omitempty"`
 }
 
 type FileResult struct {
@@ -392,38 +390,27 @@ func (s *ActivateService) Sync() (*SyncResult, error) {
 		return &SyncResult{Action: "none", Reason: "not installed"}, nil
 	}
 
-	if !engine.SyncNeeded(*chosen, sidecar, s.Config.Tier) {
-		return &SyncResult{
-			Action:           "none",
-			Reason:           "up to date",
-			AvailableVersion: chosen.Version,
-		}, nil
-	}
-
+	// Manifest or tier changed → full reinstall
 	if sidecar.Manifest != chosen.ID || sidecar.Tier != s.Config.Tier {
 		if err := engine.RepoAdd(s.Manifests, s.Config, s.ProjectDir, s.contentCache); err != nil {
 			return nil, err
 		}
 		return &SyncResult{
-			Action:           "reinstalled",
-			PreviousVersion:  sidecar.Version,
-			AvailableVersion: chosen.Version,
-			Reason:           fmt.Sprintf("manifest/tier changed: %s/%s → %s/%s", sidecar.Manifest, sidecar.Tier, chosen.ID, s.Config.Tier),
+			Action: "reinstalled",
+			Reason: fmt.Sprintf("manifest/tier changed: %s/%s → %s/%s", sidecar.Manifest, sidecar.Tier, chosen.ID, s.Config.Tier),
 		}, nil
 	}
 
-	prevVersion := sidecar.Version
+	// Always re-fetch installed files to pick up per-file changes
 	updated, skipped, err := engine.UpdateFiles(*chosen, sidecar, s.Config, s.ProjectDir)
 	if err != nil {
 		return nil, err
 	}
 
 	return &SyncResult{
-		Action:           "updated",
-		PreviousVersion:  prevVersion,
-		AvailableVersion: chosen.Version,
-		Updated:          updated,
-		Skipped:          skipped,
+		Action:  "updated",
+		Updated: updated,
+		Skipped: skipped,
 	}, nil
 }
 

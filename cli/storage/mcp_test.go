@@ -239,7 +239,6 @@ func TestSidecarMcpServersField(t *testing.T) {
 
 	sc := model.RepoSidecar{
 		Manifest:   "m1",
-		Version:    "1.0.0",
 		Tier:       "standard",
 		Files:      []string{".github/a.md"},
 		McpServers: []string{"fetch", "github"},

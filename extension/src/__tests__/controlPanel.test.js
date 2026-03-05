@@ -85,7 +85,7 @@ describe('ControlPanelProvider', () => {
     it('transforms daemon state into panel shape', async () => {
       mockClient._mockResults.getState = {
         config: { tier: 'standard', manifest: 'test-manifest', fileOverrides: {}, skippedVersions: {} },
-        state: { hasInstallMarker: true, installedVersion: '1.0.0' },
+        state: { hasInstallMarker: true },
         tiers: DEFAULT_TIERS,
         manifests: [
           { id: 'test-manifest', name: 'Test' },
@@ -101,7 +101,6 @@ describe('ControlPanelProvider', () => {
       const state = await panel._gatherState();
 
       assert.equal(state.isActive, true);
-      assert.equal(state.version, '1.0.0');
       assert.equal(state.tier, 'standard');
       assert.equal(state.tierLabel, 'Standard');
       assert.equal(state.manifestName, 'test-manifest');
@@ -114,7 +113,7 @@ describe('ControlPanelProvider', () => {
     it('builds versionMap for installed files', async () => {
       mockClient._mockResults.getState = {
         config: { tier: 'standard', manifest: 'test', fileOverrides: {}, skippedVersions: {} },
-        state: { hasInstallMarker: true, installedVersion: '1.0.0' },
+        state: { hasInstallMarker: true },
         tiers: DEFAULT_TIERS,
         files: [
           { dest: 'instructions/a.md', category: 'instructions', tier: 'core', installed: true, installedVersion: '0.9.0', bundledVersion: '1.0.0' },

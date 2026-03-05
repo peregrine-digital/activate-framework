@@ -3,7 +3,6 @@ package model
 // RepoSidecar tracks installed files and their metadata.
 type RepoSidecar struct {
 	Manifest   string   `json:"manifest"`
-	Version    string   `json:"version"`
 	Tier       string   `json:"tier"`
 	Files      []string `json:"files"`
 	McpServers []string `json:"mcpServers,omitempty"`
@@ -16,7 +15,6 @@ type InstallState struct {
 	HasProjectConfig  bool   `json:"hasProjectConfig"`
 	HasInstallMarker  bool   `json:"hasInstallMarker"`
 	InstalledManifest string `json:"installedManifest,omitempty"`
-	InstalledVersion  string `json:"installedVersion,omitempty"`
 }
 
 // FileStatus describes the install/version state of a single manifest file.

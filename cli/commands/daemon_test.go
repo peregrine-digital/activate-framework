@@ -170,7 +170,6 @@ func newHarness(t *testing.T) *harness {
 	manifest := model.Manifest{
 		ID:       "test-manifest",
 		Name:     "Test Manifest",
-		Version:  "1.0.0",
 		BasePath: basePath,
 		Files: []model.ManifestFile{
 			{Src: "instructions/setup.instructions.md", Dest: "instructions/setup.instructions.md", Tier: "core"},

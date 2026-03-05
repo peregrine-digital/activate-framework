@@ -1,7 +1,6 @@
 {
   "name": "IronArch",
   "description": "VA-oriented agent workflow with specialized agents for planning, implementing, testing, reviewing, documenting, and PR creation",
-  "version": "0.2.0",
   "basePath": "plugins/ironarch",
   "tiers": [
     { "id": "core", "label": "Core" },

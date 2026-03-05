@@ -247,7 +247,7 @@ func buildSettingsForm(svc commands.ActivateAPI, vals *settingsValues) *huh.Form
 	manifests := svc.ListManifests()
 	manifestOpts := make([]huh.Option[string], 0, len(manifests))
 	for _, m := range manifests {
-		label := fmt.Sprintf("%s (v%s)", m.Name, m.Version)
+		label := m.Name
 		manifestOpts = append(manifestOpts, huh.NewOption(label, m.ID))
 	}
 

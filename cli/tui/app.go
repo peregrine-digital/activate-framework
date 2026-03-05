@@ -83,7 +83,7 @@ func initialModel(manifests []model.Manifest, cfg model.Config) installerModel {
 func (m *installerModel) buildManifestForm() *huh.Form {
 	var opts []huh.Option[string]
 	for _, man := range m.manifests {
-		desc := fmt.Sprintf("v%s · %d files", man.Version, len(man.Files))
+		desc := fmt.Sprintf("%d files", len(man.Files))
 		if man.Description != "" {
 			desc += " — " + man.Description
 		}
@@ -226,8 +226,8 @@ func (m installerModel) View() string {
 	case phaseManifest:
 		sections = append(sections, style.DimStyle.Render("  Step 1 of 2 · Select Manifest"))
 	case phaseConfigure:
-		header := fmt.Sprintf("  Step 2 of 2 · %s v%s",
-			style.BrightStyle.Render(m.chosen.Name), m.chosen.Version)
+		header := fmt.Sprintf("  Step 2 of 2 · %s",
+			style.BrightStyle.Render(m.chosen.Name))
 		sections = append(sections, header)
 	}
 	sections = append(sections, "")
@@ -403,10 +403,9 @@ func RunInteractiveInstall(svc commands.ActivateAPI) error {
 	files := model.SelectFiles(result.chosen.Files, result.chosen, result.vals.tierID)
 
 	summary := fmt.Sprintf(
-		"%s  %s v%s\n%s  %s\n%s  %d files\n%s  %s",
+		"%s  %s\n%s  %s\n%s  %d files\n%s  %s",
 		style.DimStyle.Render("Manifest:"),
 		style.BrightStyle.Render(result.chosen.Name),
-		result.chosen.Version,
 		style.DimStyle.Render("Tier:    "),
 		style.BrightStyle.Render(result.vals.tierID),
 		style.DimStyle.Render("Files:   "),
@@ -417,17 +416,16 @@ func RunInteractiveInstall(svc commands.ActivateAPI) error {
 	fmt.Println(style.SummaryBox.Render(summary))
 	fmt.Println()
 
-	if err := engine.InstallFilesFromRemote(files, result.chosen.BasePath, target, result.chosen.Version, result.chosen.ID, svc.CurrentConfig().Repo, svc.CurrentConfig().Branch); err != nil {
+	if err := engine.InstallFilesFromRemote(files, result.chosen.BasePath, target, svc.CurrentConfig().Repo, svc.CurrentConfig().Branch); err != nil {
 		return err
 	}
 
 	_, _ = svc.SetConfig("project", &model.Config{Manifest: result.chosen.ID, Tier: result.vals.tierID})
 
 	resultMsg := fmt.Sprintf(
-		"%s  %s v%s (%s) installed\n%s  %s",
+		"%s  %s (%s) installed\n%s  %s",
 		style.SuccessStyle.Render("✓"),
 		result.chosen.Name,
-		result.chosen.Version,
 		result.vals.tierID,
 		style.DimStyle.Render("→"),
 		target,
@@ -475,12 +473,11 @@ func RunList(svc commands.ActivateAPI, manifestID, tierID, category string, json
 				ID          string `json:"id"`
 				Name        string `json:"name"`
 				Description string `json:"description"`
-				Version     string `json:"version"`
 				FileCount   int    `json:"fileCount"`
 			}
 			var items []summary
 			for _, m := range manifests {
-				items = append(items, summary{m.ID, m.Name, m.Description, m.Version, len(m.Files)})
+				items = append(items, summary{m.ID, m.Name, m.Description, len(m.Files)})
 			}
 			return printJSON(map[string]interface{}{"manifests": items})
 		}
@@ -507,12 +504,10 @@ func RunList(svc commands.ActivateAPI, manifestID, tierID, category string, json
 	}
 	chosen := model.FindManifestByID(svc.CurrentManifests(), result.Manifest)
 	name := result.Manifest
-	ver := ""
 	if chosen != nil {
 		name = chosen.Name
-		ver = chosen.Version
 	}
-	fmt.Println(style.TitleStyle.Render(fmt.Sprintf("\n%s v%s — %s", name, ver, tierLabel)))
+	fmt.Println(style.TitleStyle.Render(fmt.Sprintf("\n%s — %s", name, tierLabel)))
 	fmt.Println(formatGroups(result.Categories))
 	fmt.Println()
 	return nil
@@ -552,5 +547,5 @@ func InstallWithResolvedConfig(manifests []model.Manifest, cfg model.Config, tar
 	}
 
 	files := model.SelectFiles(chosen.Files, *chosen, cfg.Tier)
-	return engine.InstallFilesFromRemote(files, chosen.BasePath, target, chosen.Version, chosen.ID, repo, branch)
+	return engine.InstallFilesFromRemote(files, chosen.BasePath, target, repo, branch)
 }

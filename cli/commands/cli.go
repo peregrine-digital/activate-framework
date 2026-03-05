@@ -68,10 +68,10 @@ func RunSyncCommand(svc ActivateAPI, jsonOutput bool, printJSON func(v interface
 		if result.Reason == "not installed" {
 			fmt.Println("Not installed. Run 'repo add' first.")
 		} else {
-			fmt.Printf("Already up to date (v%s).\n", result.AvailableVersion)
+			fmt.Println("Already up to date.")
 		}
 	case "updated":
-		fmt.Printf("Updated from v%s to v%s.\n", result.PreviousVersion, result.AvailableVersion)
+		fmt.Println("Sync complete.")
 		for _, f := range result.Updated {
 			fmt.Printf("  ✓  %s\n", f)
 		}

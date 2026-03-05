@@ -35,7 +35,6 @@ func TestDiscoverRemoteManifestsViaIndex(t *testing.T) {
 	manifest := manifestJSON{
 		Name:        "Test Plugin",
 		Description: "A test plugin",
-		Version:     "1.0.0",
 		BasePath:    "plugins/test",
 		Files: []model.ManifestFile{
 			{Src: "a.md", Dest: ".github/a.md", Tier: "minimal"},
@@ -79,7 +78,6 @@ func TestDiscoverRemoteManifestsViaIndex(t *testing.T) {
 func TestDiscoverRemoteManifestsFallback(t *testing.T) {
 	manifest := manifestJSON{
 		Name:    "Activate Framework",
-		Version: "2.0.0",
 		Files:   []model.ManifestFile{{Src: "b.md", Dest: ".github/b.md", Tier: "standard"}},
 	}
 	manifestPayload, _ := json.Marshal(manifest)
@@ -106,8 +104,8 @@ func TestDiscoverRemoteManifestsFallback(t *testing.T) {
 	if len(results) != 1 {
 		t.Fatalf("expected 1 manifest, got %d", len(results))
 	}
-	if results[0].Version != "2.0.0" {
-		t.Fatalf("got version %q, want %q", results[0].Version, "2.0.0")
+	if results[0].Name != "Activate Framework" {
+		t.Fatalf("got name %q, want %q", results[0].Name, "Activate Framework")
 	}
 }
 

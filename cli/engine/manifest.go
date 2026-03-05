@@ -47,7 +47,6 @@ func DiscoverRemoteManifests(repo, branch string) ([]model.Manifest, error) {
 type manifestJSON struct {
 	Name        string               `json:"name"`
 	Description string               `json:"description"`
-	Version     string               `json:"version"`
 	BasePath    string               `json:"basePath"`
 	Tiers       []model.TierDef      `json:"tiers,omitempty"`
 	Files       []model.ManifestFile `json:"files"`
@@ -63,15 +62,10 @@ func loadRemoteManifest(id, repo, branch string) (model.Manifest, error) {
 	if name == "" {
 		name = id
 	}
-	version := raw.Version
-	if version == "" {
-		version = "unknown"
-	}
 	return model.Manifest{
 		ID:          id,
 		Name:        name,
 		Description: raw.Description,
-		Version:     version,
 		BasePath:    raw.BasePath,
 		Tiers:       raw.Tiers,
 		Files:       raw.Files,
@@ -79,7 +73,7 @@ func loadRemoteManifest(id, repo, branch string) (model.Manifest, error) {
 }
 
 // InstallFilesFromRemote downloads and writes files from GitHub.
-func InstallFilesFromRemote(files []model.ManifestFile, basePath, targetDir, version, manifestID, repo, branch string) error {
+func InstallFilesFromRemote(files []model.ManifestFile, basePath, targetDir, repo, branch string) error {
 	for _, f := range files {
 		srcPath := f.Src
 		if basePath != "" {

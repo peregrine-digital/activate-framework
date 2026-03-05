@@ -117,7 +117,6 @@ func setupBundle(t *testing.T) (model.Manifest, string, string, string, *mutable
 	m := model.Manifest{
 		ID:       "test-manifest",
 		Name:     "Test Manifest",
-		Version:  "1.0.0",
 		BasePath: basePath,
 		Files: []model.ManifestFile{
 			{Src: srcRel, Dest: srcRel, Tier: "core", Category: "instructions"},
@@ -340,13 +339,13 @@ func TestServiceSetConfig(t *testing.T) {
 
 		// Manifest A has tier "alpha"
 		mA := model.Manifest{
-			ID: "manifest-a", Version: "1.0.0", BasePath: bundleDir,
+			ID: "manifest-a", BasePath: bundleDir,
 			Files: []model.ManifestFile{{Src: srcRel, Dest: srcRel, Tier: "alpha", Category: "instructions"}},
 			Tiers: []model.TierDef{{ID: "alpha", Label: "Alpha"}},
 		}
 		// Manifest B has tier "beta" — "alpha" is NOT valid here
 		mB := model.Manifest{
-			ID: "manifest-b", Version: "1.0.0", BasePath: bundleDir,
+			ID: "manifest-b", BasePath: bundleDir,
 			Files: []model.ManifestFile{{Src: srcRel, Dest: srcRel, Tier: "beta", Category: "instructions"}},
 			Tiers: []model.TierDef{{ID: "beta", Label: "Beta"}},
 		}

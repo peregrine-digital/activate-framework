@@ -25,7 +25,6 @@ type Manifest struct {
 	ID          string         `json:"id"`
 	Name        string         `json:"name"`
 	Description string         `json:"description,omitempty"`
-	Version     string         `json:"version"`
 	BasePath    string         `json:"basePath"` // resolved absolute path (local) or relative prefix (remote)
 	Tiers       []TierDef      `json:"tiers,omitempty"`
 	Files       []ManifestFile `json:"files"`
@@ -36,7 +35,7 @@ func FormatManifestList(manifests []Manifest) string {
 	var b strings.Builder
 	for _, m := range manifests {
 		fmt.Fprintf(&b, "  %s\n", m.ID)
-		fmt.Fprintf(&b, "    %s (v%s) — %d files\n", m.Name, m.Version, len(m.Files))
+		fmt.Fprintf(&b, "    %s — %d files\n", m.Name, len(m.Files))
 		if m.Description != "" {
 			fmt.Fprintf(&b, "    %s\n", m.Description)
 		}

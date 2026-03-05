@@ -162,7 +162,6 @@ func RepoAdd(manifests []model.Manifest, cfg model.Config, projectDir string, co
 
 	if err := storage.WriteRepoSidecar(projectDir, model.RepoSidecar{
 		Manifest:   chosen.ID,
-		Version:    chosen.Version,
 		Tier:       cfg.Tier,
 		Files:      installed,
 		McpServers: mcpServerNames,

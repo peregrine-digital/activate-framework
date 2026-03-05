@@ -18,7 +18,6 @@ const Method = {
   StateGet:      'activate/state',
   ConfigGet:     'activate/configGet',
   ConfigSet:     'activate/configSet',
-  ManifestList:  'activate/manifestList',
   ManifestFiles: 'activate/manifestFiles',
   RepoAdd:       'activate/repoAdd',
   RepoRemove:    'activate/repoRemove',

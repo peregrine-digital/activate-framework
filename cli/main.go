@@ -389,7 +389,7 @@ func runNonInteractive(manifests []model.Manifest, cfg model.Config, args cliArg
 	files := model.SelectFiles(chosen.Files, *chosen, cfg.Tier)
 	fmt.Printf("\nInstalling %d files to %s:\n\n", len(files), target)
 
-	if err := engine.InstallFilesFromRemote(files, chosen.BasePath, target, chosen.Version, chosen.ID, repo, branch); err != nil {
+	if err := engine.InstallFilesFromRemote(files, chosen.BasePath, target, repo, branch); err != nil {
 		return err
 	}
 
@@ -398,7 +398,7 @@ func runNonInteractive(manifests []model.Manifest, cfg model.Config, args cliArg
 		_ = storage.WriteProjectConfig(cwd, &model.Config{Manifest: chosen.ID, Tier: cfg.Tier})
 	}
 
-	fmt.Printf("\nDone. %s v%s (%s) installed.\n", chosen.Name, chosen.Version, cfg.Tier)
+	fmt.Printf("\nDone. %s (%s) installed.\n", chosen.Name, cfg.Tier)
 	return nil
 }
 
@@ -414,7 +414,7 @@ func runStateCommand(svc *commands.ActivateService, jsonOutput bool) error {
 	fmt.Printf("Project config: %t\n", result.State.HasProjectConfig)
 	fmt.Printf("Install marker: %t\n", result.State.HasInstallMarker)
 	if result.State.HasInstallMarker {
-		fmt.Printf("Installed: %s v%s\n", result.State.InstalledManifest, result.State.InstalledVersion)
+		fmt.Printf("Installed: %s\n", result.State.InstalledManifest)
 	}
 	fmt.Printf("Effective config: manifest=%s tier=%s\n", result.Config.Manifest, result.Config.Tier)
 

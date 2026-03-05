@@ -79,7 +79,7 @@ func TestUpdateFilesReinstallsTrackedFiles(t *testing.T) {
 	scPath := storage.SidecarPath(projectDir)
 	os.MkdirAll(filepath.Dir(scPath), 0755)
 	scData, _ := json.Marshal(model.RepoSidecar{
-		Manifest: "test", Version: "0.4.0", Tier: "minimal",
+		Manifest: "test", Tier: "minimal",
 		Files: []string{".github/instructions/general.md"},
 	})
 	os.WriteFile(scPath, scData, 0644)
@@ -90,14 +90,14 @@ func TestUpdateFilesReinstallsTrackedFiles(t *testing.T) {
 	os.WriteFile(filepath.Join(excludeDir, "exclude"), []byte(""), 0644)
 
 	manifest := model.Manifest{
-		ID: "test", Version: "0.5.0", BasePath: basePath,
+		ID: "test", BasePath: basePath,
 		Files: []model.ManifestFile{
 			{Src: "instructions/general.md", Dest: "instructions/general.md", Tier: "core"},
 			{Src: "skills/test.md", Dest: "skills/test.md", Tier: "ad-hoc"}, // not tracked
 		},
 	}
 	sidecar := &model.RepoSidecar{
-		Manifest: "test", Version: "0.4.0", Tier: "minimal",
+		Manifest: "test", Tier: "minimal",
 		Files: []string{".github/instructions/general.md"},
 	}
 	cfg := model.Config{Repo: repo, Branch: branch}
@@ -141,17 +141,17 @@ func TestUpdateFilesRespectsSkippedVersions(t *testing.T) {
 	scPath := storage.SidecarPath(projectDir)
 	os.MkdirAll(filepath.Dir(scPath), 0755)
 	scData, _ := json.Marshal(model.RepoSidecar{
-		Manifest: "test", Version: "0.4.0", Tier: "minimal",
+		Manifest: "test", Tier: "minimal",
 		Files: []string{".github/a.md"},
 	})
 	os.WriteFile(scPath, scData, 0644)
 
 	manifest := model.Manifest{
-		ID: "test", Version: "0.5.0", BasePath: basePath,
+		ID: "test", BasePath: basePath,
 		Files: []model.ManifestFile{{Src: "a.md", Dest: "a.md", Tier: "core"}},
 	}
 	sidecar := &model.RepoSidecar{
-		Manifest: "test", Version: "0.4.0", Tier: "minimal",
+		Manifest: "test", Tier: "minimal",
 		Files: []string{".github/a.md"},
 	}
 	cfg := model.Config{
@@ -199,7 +199,7 @@ func TestInstallSingleFile(t *testing.T) {
 	os.MkdirAll(excludeDir, 0755)
 	os.WriteFile(filepath.Join(excludeDir, "exclude"), []byte(""), 0644)
 
-	manifest := model.Manifest{ID: "m1", Version: "1.0.0", BasePath: basePath}
+	manifest := model.Manifest{ID: "m1", BasePath: basePath}
 	file := model.ManifestFile{Src: "skills/test.md", Dest: "skills/test.md", Tier: "core"}
 	cfg := model.Config{Repo: repo, Branch: branch}
 
@@ -238,7 +238,7 @@ func TestInstallSingleFileIdempotent(t *testing.T) {
 	os.MkdirAll(excludeDir, 0755)
 	os.WriteFile(filepath.Join(excludeDir, "exclude"), []byte(""), 0644)
 
-	manifest := model.Manifest{ID: "m1", Version: "1.0.0", BasePath: basePath}
+	manifest := model.Manifest{ID: "m1", BasePath: basePath}
 	file := model.ManifestFile{Src: "a.md", Dest: "a.md", Tier: "core"}
 	cfg := model.Config{Repo: repo, Branch: branch}
 
@@ -277,7 +277,7 @@ func TestUninstallSingleFile(t *testing.T) {
 	scPath := storage.SidecarPath(projectDir)
 	os.MkdirAll(filepath.Dir(scPath), 0755)
 	scData, _ := json.Marshal(model.RepoSidecar{
-		Manifest: "m1", Version: "1.0.0", Tier: "minimal",
+		Manifest: "m1", Tier: "minimal",
 		Files: []string{".github/instructions/test.md", ".github/other.md"},
 	})
 	os.WriteFile(scPath, scData, 0644)
@@ -456,20 +456,20 @@ func TestUpdateFilesMcpAware(t *testing.T) {
 	scPath := storage.SidecarPath(projectDir)
 	os.MkdirAll(filepath.Dir(scPath), 0755)
 	scData, _ := json.Marshal(model.RepoSidecar{
-		Manifest: "test", Version: "0.4.0", Tier: "minimal",
+		Manifest: "test", Tier: "minimal",
 		Files: []string{".github/instructions/general.md"},
 	})
 	os.WriteFile(scPath, scData, 0644)
 
 	manifest := model.Manifest{
-		ID: "test", Version: "0.5.0", BasePath: basePath,
+		ID: "test", BasePath: basePath,
 		Files: []model.ManifestFile{
 			{Src: "instructions/general.md", Dest: "instructions/general.md", Tier: "core"},
 			{Src: "mcp-servers/server.json", Dest: "mcp-servers/server.json", Tier: "core", Category: "mcp-servers"},
 		},
 	}
 	sidecar := &model.RepoSidecar{
-		Manifest: "test", Version: "0.4.0", Tier: "minimal",
+		Manifest: "test", Tier: "minimal",
 		Files: []string{".github/instructions/general.md"},
 	}
 	cfg := model.Config{Repo: repo, Branch: branch}
@@ -520,39 +520,33 @@ func TestDiffFileMissingBundled(t *testing.T) {
 // ── SyncNeeded tests ────────────────────────────────────────────
 
 func TestSyncNeeded(t *testing.T) {
-	m := model.Manifest{ID: "test-manifest", Version: "1.1.0"}
+	m := model.Manifest{ID: "test-manifest"}
 
-	// Versions differ → sync needed
-	sc := &model.RepoSidecar{Manifest: "test-manifest", Tier: "standard", Version: "1.0.0"}
-	if !SyncNeeded(m, sc, "standard") {
-		t.Fatal("expected SyncNeeded=true when versions differ")
-	}
-
-	// Versions same → no sync needed
-	sc.Version = "1.1.0"
+	// Same manifest and tier → no sync needed
+	sc := &model.RepoSidecar{Manifest: "test-manifest", Tier: "standard"}
 	if SyncNeeded(m, sc, "standard") {
-		t.Fatal("expected SyncNeeded=false when versions match")
+		t.Fatal("expected SyncNeeded=false when manifest and tier match")
 	}
 }
 
 func TestSyncNeededManifestChanged(t *testing.T) {
-	m := model.Manifest{ID: "new-manifest", Version: "1.0.0"}
-	sc := &model.RepoSidecar{Manifest: "old-manifest", Tier: "standard", Version: "1.0.0"}
+	m := model.Manifest{ID: "new-manifest"}
+	sc := &model.RepoSidecar{Manifest: "old-manifest", Tier: "standard"}
 	if !SyncNeeded(m, sc, "standard") {
 		t.Fatal("expected SyncNeeded=true when manifest ID changed")
 	}
 }
 
 func TestSyncNeededTierChanged(t *testing.T) {
-	m := model.Manifest{ID: "test-manifest", Version: "1.0.0"}
-	sc := &model.RepoSidecar{Manifest: "test-manifest", Tier: "minimal", Version: "1.0.0"}
+	m := model.Manifest{ID: "test-manifest"}
+	sc := &model.RepoSidecar{Manifest: "test-manifest", Tier: "minimal"}
 	if !SyncNeeded(m, sc, "standard") {
 		t.Fatal("expected SyncNeeded=true when tier changed")
 	}
 }
 
 func TestSyncNeededNilSidecar(t *testing.T) {
-	m := model.Manifest{Version: "1.0.0"}
+	m := model.Manifest{}
 	if SyncNeeded(m, nil, "standard") {
 		t.Fatal("expected SyncNeeded=false for nil sidecar")
 	}

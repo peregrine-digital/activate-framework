@@ -74,7 +74,6 @@ class ControlPanelProvider {
     const fileOverrides = cfg.fileOverrides || {};
     const skippedVersions = cfg.skippedVersions || {};
     const isActive = state.state?.hasInstallMarker || false;
-    const version = state.state?.installedVersion || '';
     const manifestName = cfg.manifest || '';
     const manifests = state.manifests || [];
     const manifestCount = manifests.length || 1;
@@ -123,7 +122,6 @@ class ControlPanelProvider {
     const tierLabel = activeTier ? activeTier.label : tier;
 
     return {
-      version,
       tier,
       tierLabel,
       isActive,
@@ -364,7 +362,7 @@ class ControlPanelProvider {
 </body></html>`;
   }
 
-  _getHtml({ version, tier, tierLabel, isActive, manifestName, manifestCount, installedFiles, availableFiles, outsideTierFiles, excludedFiles, versionMap, fileOverrides, skippedVersions }) {
+  _getHtml({ tier, tierLabel, isActive, manifestName, manifestCount, installedFiles, availableFiles, outsideTierFiles, excludedFiles, versionMap, fileOverrides, skippedVersions }) {
     const installAction = isActive ? 'removeFromWorkspace' : 'addToWorkspace';
     const installButtonLabel = isActive ? '− Remove' : '+ Install';
 
@@ -759,8 +757,6 @@ class ControlPanelProvider {
 </head>
 <body>
   <div class="status-bar">
-    <span>v${esc(version)}</span>
-    <span class="dot">·</span>
     <span class="badge">${esc(tierLabel)}</span>
     <span class="dot">·</span>
     <span class="badge">${esc(manifestName)}</span>

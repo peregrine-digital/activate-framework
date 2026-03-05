@@ -9,21 +9,21 @@ import (
 
 func TestFormatManifestListMultiple(t *testing.T) {
 	manifests := []Manifest{
-		{ID: "alpha", Name: "Alpha Plugin", Version: "1.0.0", Description: "First plugin", Files: []ManifestFile{{Src: "a.md"}, {Src: "b.md"}}},
-		{ID: "beta", Name: "Beta Plugin", Version: "2.0.0", Files: []ManifestFile{{Src: "c.md"}}},
+		{ID: "alpha", Name: "Alpha Plugin", Description: "First plugin", Files: []ManifestFile{{Src: "a.md"}, {Src: "b.md"}}},
+		{ID: "beta", Name: "Beta Plugin", Files: []ManifestFile{{Src: "c.md"}}},
 	}
 
 	out := FormatManifestList(manifests)
 	if !strings.Contains(out, "alpha") {
 		t.Fatal("expected alpha in output")
 	}
-	if !strings.Contains(out, "Alpha Plugin (v1.0.0) — 2 files") {
+	if !strings.Contains(out, "Alpha Plugin — 2 files") {
 		t.Fatalf("expected formatted alpha line, got:\n%s", out)
 	}
 	if !strings.Contains(out, "First plugin") {
 		t.Fatal("expected description in output")
 	}
-	if !strings.Contains(out, "Beta Plugin (v2.0.0) — 1 files") {
+	if !strings.Contains(out, "Beta Plugin — 1 files") {
 		t.Fatalf("expected formatted beta line, got:\n%s", out)
 	}
 }

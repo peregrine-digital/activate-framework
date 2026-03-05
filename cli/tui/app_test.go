@@ -31,7 +31,7 @@ func setupTestStore(t *testing.T) string {
 func testManifests() []model.Manifest {
 	return []model.Manifest{
 		{
-			ID: "alpha", Name: "Alpha Framework", Version: "1.0.0",
+			ID: "alpha", Name: "Alpha Framework",
 			Description: "First framework",
 			Files: []model.ManifestFile{
 				{Src: "instructions/a.md", Dest: "instructions/a.md", Tier: "core", Category: "instructions"},
@@ -43,7 +43,7 @@ func testManifests() []model.Manifest {
 			},
 		},
 		{
-			ID: "beta", Name: "Beta Framework", Version: "2.0.0",
+			ID: "beta", Name: "Beta Framework",
 			Description: "Second framework",
 			Files: []model.ManifestFile{
 				{Src: "skills/c.md", Dest: "skills/c.md", Tier: "foundation", Category: "skills"},
@@ -505,7 +505,6 @@ func TestBuildMainMenuForm_Installed(t *testing.T) {
 		HasProjectConfig:  true,
 		HasInstallMarker:  true,
 		InstalledManifest: "alpha",
-		InstalledVersion:  "1.0.0",
 	}
 	vals := &menuValues{}
 	form := buildMainMenuForm(state, &vals.choice)
@@ -539,10 +538,9 @@ func TestStateText_Installed(t *testing.T) {
 		HasProjectConfig:  true,
 		HasInstallMarker:  true,
 		InstalledManifest: "alpha",
-		InstalledVersion:  "1.0.0",
 	}}
 	text := m.stateText()
-	if !strings.Contains(text, "installed alpha v1.0.0") {
+	if !strings.Contains(text, "installed alpha") {
 		t.Fatalf("expected install info, got %q", text)
 	}
 }
@@ -557,7 +555,6 @@ func TestStateBody_ShowsConfig(t *testing.T) {
 			HasProjectConfig:  true,
 			HasInstallMarker:  true,
 			InstalledManifest: "alpha",
-			InstalledVersion:  "1.0.0",
 		},
 		cfg: model.Config{Manifest: "alpha", Tier: "standard"},
 	}
@@ -650,7 +647,7 @@ func TestMainMenuModel_WindowSize(t *testing.T) {
 // ── mainMenuModel.View ──────────────────────────────────────────
 
 func TestMainMenuModel_View_MenuMode(t *testing.T) {
-	state := model.InstallState{HasProjectConfig: true, HasInstallMarker: true, InstalledManifest: "alpha", InstalledVersion: "1.0.0"}
+	state := model.InstallState{HasProjectConfig: true, HasInstallMarker: true, InstalledManifest: "alpha"}
 	vals := &menuValues{}
 	form := buildMainMenuForm(state, &vals.choice)
 	m := mainMenuModel{
@@ -1192,7 +1189,6 @@ func TestMainMenu_InstalledStateHasRemoveOption(t *testing.T) {
 		HasProjectConfig:  true,
 		HasInstallMarker:  true,
 		InstalledManifest: "alpha",
-		InstalledVersion:  "1.0.0",
 	}
 	vals := &menuValues{}
 	form := buildMainMenuForm(state, &vals.choice)
@@ -1259,7 +1255,7 @@ func TestMainMenuModel_SelectListShowsFrameworks(t *testing.T) {
 }
 
 func TestMainMenuModel_SelectStateShowsBody(t *testing.T) {
-	state := model.InstallState{HasProjectConfig: true, HasInstallMarker: true, InstalledManifest: "alpha", InstalledVersion: "1.0.0"}
+	state := model.InstallState{HasProjectConfig: true, HasInstallMarker: true, InstalledManifest: "alpha"}
 	vals := &menuValues{}
 	form := buildMainMenuForm(state, &vals.choice)
 	form.Init()
@@ -1505,7 +1501,6 @@ func TestMainMenuModel_ExitViaModelUpdate(t *testing.T) {
 		HasProjectConfig:  true,
 		HasInstallMarker:  true,
 		InstalledManifest: "alpha",
-		InstalledVersion:  "1.0.0",
 	}
 	vals := &menuValues{}
 	form := buildMainMenuForm(state, &vals.choice)
@@ -1537,7 +1532,6 @@ func TestMainMenuModel_ShowFrameworksViaModelUpdate(t *testing.T) {
 		HasProjectConfig:  true,
 		HasInstallMarker:  true,
 		InstalledManifest: "alpha",
-		InstalledVersion:  "1.0.0",
 	}
 	vals := &menuValues{}
 	form := buildMainMenuForm(state, &vals.choice)
@@ -1571,7 +1565,6 @@ func TestMainMenuModel_ChoiceTracksDuringNavigation(t *testing.T) {
 		HasProjectConfig:  true,
 		HasInstallMarker:  true,
 		InstalledManifest: "alpha",
-		InstalledVersion:  "1.0.0",
 	}
 	vals := &menuValues{}
 	form := buildMainMenuForm(state, &vals.choice)
@@ -1623,7 +1616,6 @@ func TestMainMenuModel_FrameworksRoundTrip_ThenExit(t *testing.T) {
 		HasProjectConfig:  true,
 		HasInstallMarker:  true,
 		InstalledManifest: "alpha",
-		InstalledVersion:  "1.0.0",
 	}
 	vals := &menuValues{}
 	form := buildMainMenuForm(state, &vals.choice)
@@ -1789,7 +1781,7 @@ func TestMainMenu_NewItemsPresent_FreshState(t *testing.T) {
 func TestMainMenu_NewItemsPresent_InstalledState(t *testing.T) {
 	state := model.InstallState{
 		HasProjectConfig: true, HasInstallMarker: true,
-		InstalledManifest: "alpha", InstalledVersion: "1.0.0",
+		InstalledManifest: "alpha",
 	}
 	vals := &menuValues{}
 	form := buildMainMenuForm(state, &vals.choice)
@@ -1877,7 +1869,7 @@ func TestMainMenu_TelemetryAction(t *testing.T) {
 func TestMainMenu_UpdateAllAction(t *testing.T) {
 	state := model.InstallState{
 		HasProjectConfig: true, HasInstallMarker: true,
-		InstalledManifest: "alpha", InstalledVersion: "1.0.0",
+		InstalledManifest: "alpha",
 	}
 	vals := &menuValues{}
 	form := buildMainMenuForm(state, &vals.choice)

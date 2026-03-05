@@ -95,7 +95,15 @@ func ComputeFileStatuses(m model.Manifest, sidecar *model.RepoSidecar, cfg model
 		if remoteVersions != nil {
 			fs.BundledVersion = remoteVersions[srcPath]
 		} else {
-			bv, _ := storage.ReadFileVersionRemote(srcPath, cfg.Repo, cfg.Branch)
+			repo := cfg.Repo
+			branch := cfg.Branch
+			if repo == "" {
+				repo = storage.DefaultRepo
+			}
+			if branch == "" {
+				branch = storage.DefaultBranch
+			}
+			bv, _ := storage.ReadFileVersionRemote(srcPath, repo, branch)
 			fs.BundledVersion = bv
 		}
 
@@ -132,7 +140,6 @@ func DetectInstallState(projectDir string) model.InstallState {
 	if sc, _ := storage.ReadRepoSidecar(projectDir); sc != nil {
 		state.HasInstallMarker = true
 		state.InstalledManifest = sc.Manifest
-		state.InstalledVersion = sc.Version
 	}
 
 	return state

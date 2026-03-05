@@ -45,7 +45,7 @@ func TestWriteAndDeleteRepoSidecarLifecycle(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	prev := model.RepoSidecar{Manifest: "m1", Version: "1", Tier: "minimal", Files: []string{".github/old.md", ".github/keep.md"}}
+	prev := model.RepoSidecar{Manifest: "m1", Tier: "minimal", Files: []string{".github/old.md", ".github/keep.md"}}
 	prevData, _ := json.Marshal(prev)
 	scPath := SidecarPath(projectDir)
 	if err := os.MkdirAll(filepath.Dir(scPath), 0755); err != nil {
@@ -55,7 +55,7 @@ func TestWriteAndDeleteRepoSidecarLifecycle(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	next := model.RepoSidecar{Manifest: "m1", Version: "1", Tier: "minimal", Files: []string{".github/keep.md"}}
+	next := model.RepoSidecar{Manifest: "m1", Tier: "minimal", Files: []string{".github/keep.md"}}
 	if err := WriteRepoSidecar(projectDir, next); err != nil {
 		t.Fatal(err)
 	}
@@ -127,7 +127,7 @@ func TestWriteRepoSidecarDeletesStaleFiles(t *testing.T) {
 
 	// Write initial sidecar with [a, b, c]
 	first := model.RepoSidecar{
-		Manifest: "m1", Version: "1", Tier: "minimal",
+		Manifest: "m1", Tier: "minimal",
 		Files: []string{".github/a.md", ".github/b.md", ".github/c.md"},
 	}
 	if err := WriteRepoSidecar(projectDir, first); err != nil {
@@ -143,7 +143,7 @@ func TestWriteRepoSidecarDeletesStaleFiles(t *testing.T) {
 
 	// Write again with only [a, b]
 	second := model.RepoSidecar{
-		Manifest: "m1", Version: "1", Tier: "minimal",
+		Manifest: "m1", Tier: "minimal",
 		Files: []string{".github/a.md", ".github/b.md"},
 	}
 	if err := WriteRepoSidecar(projectDir, second); err != nil {

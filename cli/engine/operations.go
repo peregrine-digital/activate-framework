@@ -77,7 +77,6 @@ func UpdateFiles(m model.Manifest, sidecar *model.RepoSidecar, cfg model.Config,
 		}
 	}
 
-	sidecar.Version = m.Version
 	if err := storage.WriteRepoSidecar(projectDir, *sidecar); err != nil {
 		return updated, skipped, err
 	}
@@ -105,7 +104,7 @@ func InstallSingleFile(f model.ManifestFile, m model.Manifest, projectDir string
 
 	sidecar, _ := storage.ReadRepoSidecar(projectDir)
 	if sidecar == nil {
-		sidecar = &model.RepoSidecar{Manifest: m.ID, Version: m.Version, Tier: ""}
+		sidecar = &model.RepoSidecar{Manifest: m.ID, Tier: ""}
 	}
 	if !model.ContainsString(sidecar.Files, destRel) {
 		sidecar.Files = append(sidecar.Files, destRel)
@@ -170,5 +169,5 @@ func SyncNeeded(m model.Manifest, sidecar *model.RepoSidecar, tier string) bool 
 	if sidecar == nil {
 		return false
 	}
-	return sidecar.Version != m.Version || sidecar.Manifest != m.ID || sidecar.Tier != tier
+	return sidecar.Manifest != m.ID || sidecar.Tier != tier
 }

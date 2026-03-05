@@ -135,20 +135,19 @@ func (m mainMenuModel) stateText() string {
 		text = "no project config detected"
 	}
 	if m.state.HasInstallMarker {
-		text += fmt.Sprintf(" · installed %s v%s", m.state.InstalledManifest, m.state.InstalledVersion)
+		text += fmt.Sprintf(" · installed %s", m.state.InstalledManifest)
 	}
 	return text
 }
 
 func (m mainMenuModel) stateBody() string {
 	return fmt.Sprintf(
-		"Project: %s\nGlobal config:  %t\nProject config: %t\nInstall marker: %t\nInstalled: %s v%s\n\nEffective config:\n  manifest: %s\n  tier: %s",
+		"Project: %s\nGlobal config:  %t\nProject config: %t\nInstall marker: %t\nInstalled: %s\n\nEffective config:\n  manifest: %s\n  tier: %s",
 		m.projectDir,
 		m.state.HasGlobalConfig,
 		m.state.HasProjectConfig,
 		m.state.HasInstallMarker,
 		m.state.InstalledManifest,
-		m.state.InstalledVersion,
 		m.cfg.Manifest,
 		m.cfg.Tier,
 	)
@@ -198,7 +197,7 @@ func buildMainMenuForm(state model.InstallState, choice *string) *huh.Form {
 		stateText = "no project config detected"
 	}
 	if state.HasInstallMarker {
-		stateText += fmt.Sprintf(" · installed %s v%s", state.InstalledManifest, state.InstalledVersion)
+		stateText += fmt.Sprintf(" · installed %s", state.InstalledManifest)
 	}
 
 	return huh.NewForm(

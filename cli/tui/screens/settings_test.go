@@ -14,7 +14,7 @@ import (
 func testManifests() []model.Manifest {
 	return []model.Manifest{
 		{
-			ID: "alpha", Name: "Alpha Framework", Version: "1.0.0",
+			ID: "alpha", Name: "Alpha Framework",
 			Description: "First framework",
 			Files: []model.ManifestFile{
 				{Src: "instructions/a.md", Dest: "instructions/a.md", Tier: "core", Category: "instructions"},
@@ -26,7 +26,7 @@ func testManifests() []model.Manifest {
 			},
 		},
 		{
-			ID: "beta", Name: "Beta Framework", Version: "2.0.0",
+			ID: "beta", Name: "Beta Framework",
 			Description: "Second framework",
 			Files: []model.ManifestFile{
 				{Src: "skills/c.md", Dest: "skills/c.md", Tier: "foundation", Category: "skills"},
