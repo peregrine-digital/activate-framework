@@ -275,11 +275,11 @@ func TestComputeFileStatusesCachedVersions(t *testing.T) {
 	}
 }
 
-func TestFetchRemoteVersions(t *testing.T) {
+func TestPrefetchManifestFiles(t *testing.T) {
 	basePath := "plugins/test"
 	repo, branch, cleanup := serveVersionFiles(t, map[string]string{
-		basePath + "/a.md": "---\nversion: '1.0.0'\n---\n",
-		basePath + "/b.md": "---\nversion: '2.0.0'\n---\n",
+		basePath + "/a.md": "---\nversion: '1.0.0'\n---\ncontent a",
+		basePath + "/b.md": "---\nversion: '2.0.0'\n---\ncontent b",
 	})
 	defer cleanup()
 
@@ -291,11 +291,15 @@ func TestFetchRemoteVersions(t *testing.T) {
 		},
 	}
 
-	versions := FetchRemoteVersions(manifest, repo, branch)
-	if v := versions[basePath+"/a.md"]; v != "1.0.0" {
-		t.Fatalf("expected 1.0.0 for a.md, got %q", v)
+	cache := PrefetchManifestFiles(manifest, repo, branch)
+	if data, ok := cache[basePath+"/a.md"]; !ok || !strings.Contains(string(data), "content a") {
+		t.Fatalf("expected cached content for a.md, got %q", string(data))
 	}
-	if v := versions[basePath+"/b.md"]; v != "2.0.0" {
-		t.Fatalf("expected 2.0.0 for b.md, got %q", v)
+	if data, ok := cache[basePath+"/b.md"]; !ok || !strings.Contains(string(data), "content b") {
+		t.Fatalf("expected cached content for b.md, got %q", string(data))
+	}
+	// Verify versions can be derived from cached content
+	if v := model.ParseFrontmatterVersion(cache[basePath+"/a.md"]); v != "1.0.0" {
+		t.Fatalf("expected version 1.0.0, got %q", v)
 	}
 }

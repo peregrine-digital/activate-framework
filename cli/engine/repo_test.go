@@ -315,11 +315,11 @@ func TestRepoAddDeltaSkipsCurrentVersion(t *testing.T) {
 		Files: []model.ManifestFile{{Src: srcRel, Dest: srcRel, Tier: "core"}},
 	}
 
-	// Remote versions say file is at 1.0.0 — same as on disk
-	remoteVersions := map[string]string{basePath + "/" + srcRel: "1.0.0"}
+	// Content cache has the remote file bytes — version matches on-disk
+	contentCache := map[string][]byte{basePath + "/" + srcRel: []byte("---\nversion: '1.0.0'\n---\nremote copy")}
 
 	cfg := model.Config{Manifest: "m1", Tier: "minimal", Repo: repo, Branch: branch}
-	if err := RepoAdd([]model.Manifest{manifest}, cfg, projectDir, remoteVersions); err != nil {
+	if err := RepoAdd([]model.Manifest{manifest}, cfg, projectDir, contentCache); err != nil {
 		t.Fatal(err)
 	}
 
@@ -370,10 +370,10 @@ func TestRepoAddDeltaRedownloadsStaleVersion(t *testing.T) {
 		Files: []model.ManifestFile{{Src: srcRel, Dest: srcRel, Tier: "core"}},
 	}
 
-	remoteVersions := map[string]string{basePath + "/" + srcRel: "2.0.0"}
+	contentCache := map[string][]byte{basePath + "/" + srcRel: []byte(newContent)}
 
 	cfg := model.Config{Manifest: "m1", Tier: "minimal", Repo: repo, Branch: branch}
-	if err := RepoAdd([]model.Manifest{manifest}, cfg, projectDir, remoteVersions); err != nil {
+	if err := RepoAdd([]model.Manifest{manifest}, cfg, projectDir, contentCache); err != nil {
 		t.Fatal(err)
 	}
 
@@ -412,11 +412,11 @@ func TestRepoAddDeltaDownloadsNewFile(t *testing.T) {
 		Files: []model.ManifestFile{{Src: srcRel, Dest: srcRel, Tier: "core"}},
 	}
 
-	// Remote versions provided but file doesn't exist on disk
-	remoteVersions := map[string]string{basePath + "/" + srcRel: "1.0.0"}
+	// Content cache provided but file doesn't exist on disk — should write from cache
+	contentCache := map[string][]byte{basePath + "/" + srcRel: []byte(content)}
 
 	cfg := model.Config{Manifest: "m1", Tier: "minimal", Repo: repo, Branch: branch}
-	if err := RepoAdd([]model.Manifest{manifest}, cfg, projectDir, remoteVersions); err != nil {
+	if err := RepoAdd([]model.Manifest{manifest}, cfg, projectDir, contentCache); err != nil {
 		t.Fatal(err)
 	}
 

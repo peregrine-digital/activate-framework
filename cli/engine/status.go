@@ -2,26 +2,47 @@ package engine
 
 import (
 	"os"
+	"sync"
 
 	"github.com/peregrine-digital/activate-framework/cli/model"
 	"github.com/peregrine-digital/activate-framework/cli/storage"
 )
 
-// FetchRemoteVersions fetches the frontmatter version of every file in a
-// manifest from the remote repo.  The returned map is keyed by the full
-// remote srcPath (basePath + "/" + file.Src).  Callers can pass the map to
-// ComputeFileStatuses to avoid per-file HTTP calls on every GetState.
-func FetchRemoteVersions(m model.Manifest, repo, branch string) map[string]string {
-	versions := make(map[string]string, len(m.Files))
-	for _, f := range m.Files {
+// PrefetchManifestFiles downloads all file contents for a manifest
+// concurrently and returns them keyed by srcPath.  Callers can derive
+// version strings via model.ParseFrontmatterVersion and pass cached
+// bytes to RepoAdd so tier/manifest changes need zero HTTP calls.
+func PrefetchManifestFiles(m model.Manifest, repo, branch string) map[string][]byte {
+	type fetchResult struct {
+		srcPath string
+		data    []byte
+	}
+	results := make([]fetchResult, len(m.Files))
+	var wg sync.WaitGroup
+	sem := make(chan struct{}, 8)
+	for i, f := range m.Files {
 		srcPath := f.Src
 		if m.BasePath != "" {
 			srcPath = m.BasePath + "/" + f.Src
 		}
-		v, _ := storage.ReadFileVersionRemote(srcPath, repo, branch)
-		versions[srcPath] = v
+		wg.Add(1)
+		go func(idx int, sp string) {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+			data, _ := storage.FetchFile(sp, repo, branch)
+			results[idx] = fetchResult{srcPath: sp, data: data}
+		}(i, srcPath)
 	}
-	return versions
+	wg.Wait()
+
+	cache := make(map[string][]byte, len(m.Files))
+	for _, r := range results {
+		if r.data != nil {
+			cache[r.srcPath] = r.data
+		}
+	}
+	return cache
 }
 
 // ComputeFileStatuses builds a status list for every file in the manifest.

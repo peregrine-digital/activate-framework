@@ -17,9 +17,6 @@ let outputChannel = null;
 /** Cached install directory from daemon (e.g. ".github"). */
 let installDir = '.github';
 
-/** Cached state from the last getState() response for quick QuickPick population. */
-let lastState = null;
-
 /** Temp directories created for diff views; cleaned up on deactivate. */
 const tempDirs = [];
 
@@ -122,20 +119,6 @@ function verifyBinary(binaryPath) {
   } catch (err) {
     return err;
   }
-}
-
-// ── State caching ─────────────────────────────────────────────
-
-/**
- * Get daemon state, updating the module-level cache.
- * Use `lastState` directly when a stale snapshot is acceptable (e.g.
- * populating a QuickPick that will sync afterward).
- */
-async function cachedGetState() {
-  const state = await client.getState();
-  lastState = state;
-  if (state.installDir) installDir = state.installDir;
-  return state;
 }
 
 // ── Workspace refresh helpers ─────────────────────────────────
@@ -258,7 +241,7 @@ async function activate(context) {
     vscode.commands.registerCommand('activate-framework.changeTier', async () => {
       if (!requireClient()) return;
       try {
-        const state = lastState || await cachedGetState();
+        const state = await client.getState();
         const tiers = state.tiers || [];
         if (tiers.length === 0) {
           vscode.window.showWarningMessage('No tiers available for this manifest.');
@@ -292,7 +275,7 @@ async function activate(context) {
     vscode.commands.registerCommand('activate-framework.changeManifest', async () => {
       if (!requireClient()) return;
       try {
-        const state = lastState || await cachedGetState();
+        const state = await client.getState();
         const currentManifest = state?.config?.manifest || '';
         const manifests = state.manifests || [];
         if (!manifests || manifests.length === 0) {
@@ -577,7 +560,7 @@ async function startDaemon(context, binPath, projectDir, outputChannel, controlP
 
 async function autoSetup(controlPanel, context) {
   try {
-    const state = await cachedGetState();
+    const state = await client.getState();
 
     // If not yet installed, add files automatically
     if (state.state === 'none' || state.state === 'not_installed') {

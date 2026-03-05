@@ -38,10 +38,10 @@ var _ ActivateAPI = (*ActivateService)(nil)
 
 // ActivateService is the single API surface for all domain operations.
 type ActivateService struct {
-	ProjectDir     string
-	Manifests      []model.Manifest
-	Config         model.Config
-	remoteVersions map[string]string // cached remote file versions (srcPath → version)
+	ProjectDir   string
+	Manifests    []model.Manifest
+	Config       model.Config
+	contentCache map[string][]byte  // cached remote file contents (srcPath → bytes)
 }
 
 // NewService creates a fully initialized service instance.
@@ -87,7 +87,7 @@ func (s *ActivateService) discoverManifests() {
 		if s.ProjectDir != "" {
 			_ = storage.WriteManifestCache(s.ProjectDir, m)
 		}
-		s.refreshRemoteVersions(repo, branch)
+		s.prefetchFiles(repo, branch)
 		return
 	}
 
@@ -99,15 +99,27 @@ func (s *ActivateService) discoverManifests() {
 	}
 }
 
-// refreshRemoteVersions fetches the remote frontmatter version for every file
-// in the active manifest and caches the results so that GetState does not need
-// to make per-file HTTP calls.
-func (s *ActivateService) refreshRemoteVersions(repo, branch string) {
+// prefetchFiles downloads all file contents for the active manifest in
+// parallel and caches them.  Remote versions are derived from the cached
+// content so no separate HTTP calls are needed.
+func (s *ActivateService) prefetchFiles(repo, branch string) {
 	chosen := model.FindManifestByID(s.Manifests, s.Config.Manifest)
 	if chosen == nil {
 		return
 	}
-	s.remoteVersions = engine.FetchRemoteVersions(*chosen, repo, branch)
+	s.contentCache = engine.PrefetchManifestFiles(*chosen, repo, branch)
+}
+
+// remoteVersions derives a srcPath→version map from the content cache.
+func (s *ActivateService) remoteVersions() map[string]string {
+	if s.contentCache == nil {
+		return nil
+	}
+	versions := make(map[string]string, len(s.contentCache))
+	for srcPath, data := range s.contentCache {
+		versions[srcPath] = model.ParseFrontmatterVersion(data)
+	}
+	return versions
 }
 
 func (s *ActivateService) RefreshConfig()                { s.refreshConfig() }
@@ -224,7 +236,7 @@ func (s *ActivateService) GetState() StateResult {
 
 	if chosen != nil {
 		result.Tiers = model.DiscoverAvailableTiers(*chosen)
-		result.Files = engine.ComputeFileStatuses(*chosen, sidecar, s.Config, s.ProjectDir, s.remoteVersions)
+		result.Files = engine.ComputeFileStatuses(*chosen, sidecar, s.Config, s.ProjectDir, s.remoteVersions())
 	}
 	return result
 }
@@ -306,7 +318,7 @@ func (s *ActivateService) SetConfig(scope string, updates *model.Config) (*SetCo
 		if branch == "" {
 			branch = storage.DefaultBranch
 		}
-		s.refreshRemoteVersions(repo, branch)
+		s.prefetchFiles(repo, branch)
 	}
 
 	return &SetConfigResult{OK: true, Scope: scope}, nil
@@ -343,7 +355,7 @@ func (s *ActivateService) ListFiles(manifestID, tierID, category string) (*ListF
 }
 
 func (s *ActivateService) RepoAdd() (*RepoAddResult, error) {
-	if err := engine.RepoAdd(s.Manifests, s.Config, s.ProjectDir, s.remoteVersions); err != nil {
+	if err := engine.RepoAdd(s.Manifests, s.Config, s.ProjectDir, s.contentCache); err != nil {
 		return nil, err
 	}
 	s.refreshConfig()
@@ -377,7 +389,7 @@ func (s *ActivateService) Sync() (*SyncResult, error) {
 	}
 
 	if sidecar.Manifest != chosen.ID || sidecar.Tier != s.Config.Tier {
-		if err := engine.RepoAdd(s.Manifests, s.Config, s.ProjectDir, s.remoteVersions); err != nil {
+		if err := engine.RepoAdd(s.Manifests, s.Config, s.ProjectDir, s.contentCache); err != nil {
 			return nil, err
 		}
 		return &SyncResult{
@@ -472,10 +484,12 @@ func (s *ActivateService) SkipUpdate(file string) (*FileResult, error) {
 		srcPath = chosen.BasePath + "/" + target.Src
 	}
 
-	// Use cached version if available, otherwise fetch from remote.
+	// Use cached content if available, otherwise fetch from remote.
 	var bundledVersion string
-	if s.remoteVersions != nil {
-		bundledVersion = s.remoteVersions[srcPath]
+	if s.contentCache != nil {
+		if data, ok := s.contentCache[srcPath]; ok {
+			bundledVersion = model.ParseFrontmatterVersion(data)
+		}
 	}
 	if bundledVersion == "" {
 		repo := s.Config.Repo
