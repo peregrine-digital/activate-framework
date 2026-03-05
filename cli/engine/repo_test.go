@@ -32,7 +32,6 @@ func TestRepoAddLocalCopiesManagedFiles(t *testing.T) {
 	manifest := model.Manifest{
 		ID:       "m1",
 		Name:     "Manifest One",
-		Version:  "1.0.0",
 		BasePath: basePath,
 		Files: []model.ManifestFile{
 			{Src: srcRel, Dest: srcRel, Tier: "core"},
@@ -94,7 +93,6 @@ func TestRepoRemoveCleanup(t *testing.T) {
 	// Write sidecar with those files and an exclude block
 	sc := model.RepoSidecar{
 		Manifest: "m1",
-		Version:  "1.0.0",
 		Tier:     "minimal",
 		Files:    []string{".github/instructions/a.md", ".github/agents/b.md"},
 	}
@@ -179,7 +177,6 @@ func TestDeleteRepoSidecarCleansMcpServers(t *testing.T) {
 	// Write sidecar referencing managed-server
 	sc := model.RepoSidecar{
 		Manifest:   "m1",
-		Version:    "1.0.0",
 		Tier:       "minimal",
 		Files:      []string{},
 		McpServers: []string{"managed-server"},
@@ -235,7 +232,6 @@ func TestRepoAddFiltersMcpFiles(t *testing.T) {
 	manifest := model.Manifest{
 		ID:       "m1",
 		Name:     "Test Manifest",
-		Version:  "1.0.0",
 		BasePath: basePath,
 		Files: []model.ManifestFile{
 			{Src: "instructions/setup.instructions.md", Dest: "instructions/setup.instructions.md", Tier: "core"},
@@ -311,7 +307,7 @@ func TestRepoAddDeltaSkipsCurrentVersion(t *testing.T) {
 	}
 
 	manifest := model.Manifest{
-		ID: "m1", Name: "Test", Version: "1.0.0", BasePath: basePath,
+		ID: "m1", Name: "Test", BasePath: basePath,
 		Files: []model.ManifestFile{{Src: srcRel, Dest: srcRel, Tier: "core"}},
 	}
 
@@ -366,7 +362,7 @@ func TestRepoAddDeltaRedownloadsStaleVersion(t *testing.T) {
 	}
 
 	manifest := model.Manifest{
-		ID: "m1", Name: "Test", Version: "2.0.0", BasePath: basePath,
+		ID: "m1", Name: "Test", BasePath: basePath,
 		Files: []model.ManifestFile{{Src: srcRel, Dest: srcRel, Tier: "core"}},
 	}
 
@@ -408,7 +404,7 @@ func TestRepoAddDeltaDownloadsNewFile(t *testing.T) {
 	})
 
 	manifest := model.Manifest{
-		ID: "m1", Name: "Test", Version: "1.0.0", BasePath: basePath,
+		ID: "m1", Name: "Test", BasePath: basePath,
 		Files: []model.ManifestFile{{Src: srcRel, Dest: srcRel, Tier: "core"}},
 	}
 

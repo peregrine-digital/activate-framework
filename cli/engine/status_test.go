@@ -79,7 +79,7 @@ func TestComputeFileStatusesBasic(t *testing.T) {
 	os.WriteFile(installedPath, []byte("---\nversion: '0.4.0'\n---\n# General"), 0644)
 
 	manifest := model.Manifest{
-		ID: "test", Version: "0.5.0", BasePath: basePath,
+		ID: "test", BasePath: basePath,
 		Files: []model.ManifestFile{
 			{Src: "instructions/general.md", Dest: "instructions/general.md", Tier: "core"},
 			{Src: "skills/test.md", Dest: "skills/test.md", Tier: "ad-hoc"},
@@ -136,7 +136,7 @@ func TestComputeFileStatusesSkipped(t *testing.T) {
 	os.WriteFile(installedPath, []byte("---\nversion: '0.4.0'\n---\n# Sec"), 0644)
 
 	manifest := model.Manifest{
-		ID: "test", Version: "0.5.0", BasePath: basePath,
+		ID: "test", BasePath: basePath,
 		Files: []model.ManifestFile{{Src: "instructions/sec.md", Dest: "instructions/sec.md", Tier: "core"}},
 	}
 	sidecar := &model.RepoSidecar{Files: []string{".github/instructions/sec.md"}}
@@ -165,7 +165,7 @@ func TestComputeFileStatusesOverrides(t *testing.T) {
 	defer cleanup()
 
 	manifest := model.Manifest{
-		ID: "test", Version: "1.0.0", BasePath: basePath,
+		ID: "test", BasePath: basePath,
 		Files: []model.ManifestFile{
 			{Src: "a.md", Dest: "a.md", Tier: "core"},
 			{Src: "b.md", Dest: "b.md", Tier: "core"},
@@ -196,7 +196,7 @@ func TestComputeFileStatusesNilSidecar(t *testing.T) {
 	defer cleanup()
 
 	manifest := model.Manifest{
-		ID: "test", Version: "1.0.0", BasePath: basePath,
+		ID: "test", BasePath: basePath,
 		Files: []model.ManifestFile{{Src: "a.md", Dest: "a.md", Tier: "core"}},
 	}
 
@@ -223,7 +223,7 @@ func TestComputeFileStatusesSameVersion(t *testing.T) {
 	os.WriteFile(installedPath, []byte("---\nversion: '1.0.0'\n---\n"), 0644)
 
 	manifest := model.Manifest{
-		ID: "test", Version: "1.0.0", BasePath: basePath,
+		ID: "test", BasePath: basePath,
 		Files: []model.ManifestFile{{Src: "a.md", Dest: "a.md", Tier: "core"}},
 	}
 	sidecar := &model.RepoSidecar{Files: []string{".github/a.md"}}
@@ -252,7 +252,7 @@ func TestComputeFileStatusesCachedVersions(t *testing.T) {
 	os.WriteFile(installedPath, []byte("---\nversion: '0.4.0'\n---\n# General"), 0644)
 
 	manifest := model.Manifest{
-		ID: "test", Version: "0.5.0", BasePath: basePath,
+		ID: "test", BasePath: basePath,
 		Files: []model.ManifestFile{
 			{Src: "instructions/general.md", Dest: "instructions/general.md", Tier: "core"},
 		},
@@ -284,7 +284,7 @@ func TestPrefetchManifestFiles(t *testing.T) {
 	defer cleanup()
 
 	manifest := model.Manifest{
-		ID: "test", Version: "1.0.0", BasePath: basePath,
+		ID: "test", BasePath: basePath,
 		Files: []model.ManifestFile{
 			{Src: "a.md", Dest: "a.md", Tier: "core"},
 			{Src: "b.md", Dest: "b.md", Tier: "core"},

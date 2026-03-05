@@ -36,7 +36,7 @@ func TestDetectInstallState(t *testing.T) {
 	if err := os.MkdirAll(filepath.Dir(scPath), 0755); err != nil {
 		t.Fatal(err)
 	}
-	scData, _ := json.Marshal(model.RepoSidecar{Manifest: "ironarch", Version: "1.2.3"})
+	scData, _ := json.Marshal(model.RepoSidecar{Manifest: "ironarch"})
 	if err := os.WriteFile(scPath, scData, 0644); err != nil {
 		t.Fatal(err)
 	}
@@ -45,7 +45,7 @@ func TestDetectInstallState(t *testing.T) {
 	if !state.HasGlobalConfig || !state.HasProjectConfig || !state.HasInstallMarker {
 		t.Fatalf("expected all state flags true, got %+v", state)
 	}
-	if state.InstalledManifest != "ironarch" || state.InstalledVersion != "1.2.3" {
+	if state.InstalledManifest != "ironarch" {
 		t.Fatalf("unexpected installed marker values: %+v", state)
 	}
 }
