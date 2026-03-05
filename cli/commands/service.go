@@ -326,7 +326,7 @@ func (s *ActivateService) ListFiles(manifestID, tierID, category string) (*ListF
 }
 
 func (s *ActivateService) RepoAdd() (*RepoAddResult, error) {
-	if err := engine.RepoAdd(s.Manifests, s.Config, s.ProjectDir); err != nil {
+	if err := engine.RepoAdd(s.Manifests, s.Config, s.ProjectDir, s.remoteVersions); err != nil {
 		return nil, err
 	}
 	s.refreshConfig()
@@ -360,7 +360,7 @@ func (s *ActivateService) Sync() (*SyncResult, error) {
 	}
 
 	if sidecar.Manifest != chosen.ID || sidecar.Tier != s.Config.Tier {
-		if err := engine.RepoAdd(s.Manifests, s.Config, s.ProjectDir); err != nil {
+		if err := engine.RepoAdd(s.Manifests, s.Config, s.ProjectDir, s.remoteVersions); err != nil {
 			return nil, err
 		}
 		return &SyncResult{

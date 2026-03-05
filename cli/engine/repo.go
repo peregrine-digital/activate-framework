@@ -10,7 +10,9 @@ import (
 )
 
 // RepoAdd installs manifest files into a project and creates the sidecar.
-func RepoAdd(manifests []model.Manifest, cfg model.Config, projectDir string) error {
+// If remoteVersions is non-nil, files already on disk at the matching remote
+// version are skipped (delta install) to avoid unnecessary HTTP fetches.
+func RepoAdd(manifests []model.Manifest, cfg model.Config, projectDir string, remoteVersions map[string]string) error {
 	chosen := model.FindManifestByID(manifests, cfg.Manifest)
 	if chosen == nil {
 		return fmt.Errorf("unknown manifest: %s", cfg.Manifest)
@@ -51,6 +53,20 @@ func RepoAdd(manifests []model.Manifest, cfg model.Config, projectDir string) er
 	for _, f := range regularFiles {
 		destRel := filepath.ToSlash(filepath.Join(".github", f.Dest))
 		destPath := filepath.Join(projectDir, destRel)
+
+		// Delta install: skip download if file on disk matches remote version.
+		if remoteVersions != nil {
+			srcPath := f.Src
+			if chosen.BasePath != "" {
+				srcPath = chosen.BasePath + "/" + f.Src
+			}
+			if rv := remoteVersions[srcPath]; rv != "" {
+				if iv, err := storage.ReadFileVersion(destPath); err == nil && iv == rv {
+					installed = append(installed, destRel)
+					continue
+				}
+			}
+		}
 
 		if err := storage.WriteManifestFile(f, chosen.BasePath, destPath, repo, branch); err != nil {
 			fmt.Fprintf(os.Stderr, "  ✗  %s: %s\n", f.Dest, err)

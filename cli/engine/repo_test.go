@@ -40,7 +40,7 @@ func TestRepoAddLocalCopiesManagedFiles(t *testing.T) {
 	}
 
 	cfg := model.Config{Manifest: "m1", Tier: "minimal", Repo: repo, Branch: branch}
-	if err := RepoAdd([]model.Manifest{manifest}, cfg, projectDir); err != nil {
+	if err := RepoAdd([]model.Manifest{manifest}, cfg, projectDir, nil); err != nil {
 		t.Fatal(err)
 	}
 
@@ -244,7 +244,7 @@ func TestRepoAddFiltersMcpFiles(t *testing.T) {
 	}
 
 	cfg := model.Config{Manifest: "m1", Tier: "minimal", Repo: repo, Branch: branch}
-	if err := RepoAdd([]model.Manifest{manifest}, cfg, projectDir); err != nil {
+	if err := RepoAdd([]model.Manifest{manifest}, cfg, projectDir, nil); err != nil {
 		t.Fatal(err)
 	}
 
@@ -277,5 +277,155 @@ func TestRepoAddFiltersMcpFiles(t *testing.T) {
 	}
 	if !strings.Contains(string(scData), "test-mcp-server") {
 		t.Fatalf("expected sidecar to track test-mcp-server, got:\n%s", string(scData))
+	}
+}
+
+func TestRepoAddDeltaSkipsCurrentVersion(t *testing.T) {
+	projectDir := t.TempDir()
+	setupTestStore(t)
+
+	excludePath := filepath.Join(projectDir, ".git", "info", "exclude")
+	if err := os.MkdirAll(filepath.Dir(excludePath), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(excludePath, []byte(""), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	basePath := "plugins/test"
+	srcRel := "instructions/test.instructions.md"
+	localContent := "---\nversion: '1.0.0'\n---\nlocal copy"
+
+	// Serve a DIFFERENT body so we can tell if it was re-fetched
+	_, repo, branch := serveRemoteFiles(t, map[string]string{
+		basePath + "/" + srcRel: "---\nversion: '1.0.0'\n---\nremote copy",
+	})
+
+	// Pre-install the file on disk at version 1.0.0
+	destPath := filepath.Join(projectDir, ".github", srcRel)
+	if err := os.MkdirAll(filepath.Dir(destPath), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(destPath, []byte(localContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	manifest := model.Manifest{
+		ID: "m1", Name: "Test", Version: "1.0.0", BasePath: basePath,
+		Files: []model.ManifestFile{{Src: srcRel, Dest: srcRel, Tier: "core"}},
+	}
+
+	// Remote versions say file is at 1.0.0 — same as on disk
+	remoteVersions := map[string]string{basePath + "/" + srcRel: "1.0.0"}
+
+	cfg := model.Config{Manifest: "m1", Tier: "minimal", Repo: repo, Branch: branch}
+	if err := RepoAdd([]model.Manifest{manifest}, cfg, projectDir, remoteVersions); err != nil {
+		t.Fatal(err)
+	}
+
+	// File should still have LOCAL content (not re-fetched)
+	data, _ := os.ReadFile(destPath)
+	if string(data) != localContent {
+		t.Fatalf("expected delta skip to preserve local copy, got: %q", string(data))
+	}
+
+	// File should still be tracked in sidecar
+	sc, _ := storage.ReadRepoSidecar(projectDir)
+	if sc == nil || len(sc.Files) != 1 {
+		t.Fatalf("expected 1 file in sidecar, got %v", sc)
+	}
+}
+
+func TestRepoAddDeltaRedownloadsStaleVersion(t *testing.T) {
+	projectDir := t.TempDir()
+	setupTestStore(t)
+
+	excludePath := filepath.Join(projectDir, ".git", "info", "exclude")
+	if err := os.MkdirAll(filepath.Dir(excludePath), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(excludePath, []byte(""), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	basePath := "plugins/test"
+	srcRel := "instructions/test.instructions.md"
+	newContent := "---\nversion: '2.0.0'\n---\nupdated"
+
+	_, repo, branch := serveRemoteFiles(t, map[string]string{
+		basePath + "/" + srcRel: newContent,
+	})
+
+	// Pre-install old version on disk
+	destPath := filepath.Join(projectDir, ".github", srcRel)
+	if err := os.MkdirAll(filepath.Dir(destPath), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(destPath, []byte("---\nversion: '1.0.0'\n---\nold"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	manifest := model.Manifest{
+		ID: "m1", Name: "Test", Version: "2.0.0", BasePath: basePath,
+		Files: []model.ManifestFile{{Src: srcRel, Dest: srcRel, Tier: "core"}},
+	}
+
+	remoteVersions := map[string]string{basePath + "/" + srcRel: "2.0.0"}
+
+	cfg := model.Config{Manifest: "m1", Tier: "minimal", Repo: repo, Branch: branch}
+	if err := RepoAdd([]model.Manifest{manifest}, cfg, projectDir, remoteVersions); err != nil {
+		t.Fatal(err)
+	}
+
+	// File should be updated to new content
+	data, err := os.ReadFile(destPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), "updated") {
+		t.Fatalf("expected updated content, got: %s", string(data))
+	}
+}
+
+func TestRepoAddDeltaDownloadsNewFile(t *testing.T) {
+	projectDir := t.TempDir()
+	setupTestStore(t)
+
+	excludePath := filepath.Join(projectDir, ".git", "info", "exclude")
+	if err := os.MkdirAll(filepath.Dir(excludePath), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(excludePath, []byte(""), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	basePath := "plugins/test"
+	srcRel := "instructions/new.instructions.md"
+	content := "---\nversion: '1.0.0'\n---\nbrand new"
+
+	_, repo, branch := serveRemoteFiles(t, map[string]string{
+		basePath + "/" + srcRel: content,
+	})
+
+	manifest := model.Manifest{
+		ID: "m1", Name: "Test", Version: "1.0.0", BasePath: basePath,
+		Files: []model.ManifestFile{{Src: srcRel, Dest: srcRel, Tier: "core"}},
+	}
+
+	// Remote versions provided but file doesn't exist on disk
+	remoteVersions := map[string]string{basePath + "/" + srcRel: "1.0.0"}
+
+	cfg := model.Config{Manifest: "m1", Tier: "minimal", Repo: repo, Branch: branch}
+	if err := RepoAdd([]model.Manifest{manifest}, cfg, projectDir, remoteVersions); err != nil {
+		t.Fatal(err)
+	}
+
+	destPath := filepath.Join(projectDir, ".github", srcRel)
+	data, err := os.ReadFile(destPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), "brand new") {
+		t.Fatalf("expected new content, got: %s", string(data))
 	}
 }
