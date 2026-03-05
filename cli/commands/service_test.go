@@ -1,7 +1,6 @@
 package commands
 
 import (
-	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -521,24 +520,16 @@ func TestServiceSync(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if result.Action != "none" || result.Reason != "up to date" {
-			t.Fatalf("expected up to date, got: %+v", result)
+		if result.Action != "updated" {
+			t.Fatalf("expected updated action, got: %+v", result)
 		}
 	})
 
-	t.Run("version mismatch triggers update", func(t *testing.T) {
+	t.Run("sync always updates installed files", func(t *testing.T) {
 		m, projectDir, repo, branch, _ := setupBundle(t)
 		svc := newTestService(m, projectDir, repo, branch)
 
 		if _, err := svc.RepoAdd(); err != nil {
-			t.Fatal(err)
-		}
-
-		// Tamper sidecar version to simulate mismatch
-		sc, _ := storage.ReadRepoSidecar(projectDir)
-		sc.Version = "0.9.0"
-		scData, _ := json.MarshalIndent(sc, "", "  ")
-		if err := os.WriteFile(storage.SidecarPath(projectDir), append(scData, '\n'), 0644); err != nil {
 			t.Fatal(err)
 		}
 
@@ -548,12 +539,6 @@ func TestServiceSync(t *testing.T) {
 		}
 		if result.Action != "updated" {
 			t.Fatalf("expected updated, got %q", result.Action)
-		}
-		if result.PreviousVersion != "0.9.0" {
-			t.Fatalf("PreviousVersion = %q, want 0.9.0", result.PreviousVersion)
-		}
-		if result.AvailableVersion != "1.0.0" {
-			t.Fatalf("AvailableVersion = %q, want 1.0.0", result.AvailableVersion)
 		}
 	})
 	t.Run("tier change triggers reinstall", func(t *testing.T) {
@@ -589,7 +574,7 @@ func TestServiceSync(t *testing.T) {
 
 		// Add a second manifest and switch to it (same basePath, same files served)
 		m2 := model.Manifest{
-			ID: "other-manifest", Version: "1.0.0", BasePath: m.BasePath,
+			ID: "other-manifest", BasePath: m.BasePath,
 			Files: []model.ManifestFile{
 				{Src: "instructions/test.instructions.md", Dest: "instructions/test.instructions.md", Tier: "core", Category: "instructions"},
 			},

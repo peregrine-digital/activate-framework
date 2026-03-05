@@ -438,14 +438,14 @@ func TestDaemonSync(t *testing.T) {
 	sendRequest(t, h.clientWriter, h.clientReader, transport.MethodRepoAdd, 2, nil)
 	readNotification(t, h.clientReader)
 
-	// Sync should say up to date since versions match
+	// Sync should find nothing to update since versions match
 	resp := sendRequest(t, h.clientWriter, h.clientReader, transport.MethodSync, 3, nil)
 	m := resultMap(t, resp)
 	// Consume state-changed notification
 	readNotification(t, h.clientReader)
 
-	if m["reason"] != "up to date" {
-		t.Errorf("sync reason = %v, want 'up to date'", m["reason"])
+	if m["action"] != "updated" {
+		t.Errorf("sync action = %v, want 'updated'", m["action"])
 	}
 }
 

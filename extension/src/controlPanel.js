@@ -279,21 +279,33 @@ class ControlPanelProvider {
         const currentBranch = msg.current || '';
         const qp = vscode.window.createQuickPick();
         let disposed = false;
+        let fetchedItems = [];
         qp.title = 'Branch';
-        qp.placeholder = 'Type to filter branches…';
+        qp.placeholder = 'Type a branch name or select from the list…';
         qp.busy = true;
         qp.show();
 
         this._client.listBranches().then((branches) => {
           if (disposed) return;
-          qp.items = (branches || []).map(b => ({ label: b }));
+          fetchedItems = (branches || []).map(b => ({ label: b }));
+          qp.items = fetchedItems;
           const current = qp.items.find(i => i.label === currentBranch);
           if (current) qp.activeItems = [current];
           qp.busy = false;
         }).catch(() => {
           if (disposed) return;
-          qp.items = currentBranch ? [{ label: currentBranch }] : [];
+          fetchedItems = currentBranch ? [{ label: currentBranch }] : [];
+          qp.items = fetchedItems;
           qp.busy = false;
+        });
+
+        // Allow freeform input: add typed value as first item if not in list
+        qp.onDidChangeValue((value) => {
+          if (!value || fetchedItems.some(i => i.label === value)) {
+            qp.items = fetchedItems;
+          } else {
+            qp.items = [{ label: value, description: '(custom)' }, ...fetchedItems];
+          }
         });
 
         qp.onDidAccept(() => {
