@@ -981,6 +981,78 @@ func TestServiceUpdateErrors(t *testing.T) {
 	})
 }
 
+func TestServiceListBranches(t *testing.T) {
+	t.Run("uses explicit repo", func(t *testing.T) {
+		api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path == "/repos/org/explicit/branches" {
+				w.Header().Set("Content-Type", "application/json")
+				w.Write([]byte(`[{"name":"main"},{"name":"dev"}]`))
+				return
+			}
+			w.WriteHeader(http.StatusNotFound)
+		}))
+		defer api.Close()
+		origAPI := storage.APIBase
+		storage.APIBase = api.URL
+		t.Cleanup(func() { storage.APIBase = origAPI })
+
+		m, projectDir, repo, branch, _ := setupBundle(t)
+		svc := newTestService(m, projectDir, repo, branch)
+
+		branches, err := svc.ListBranches("org/explicit")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(branches) != 2 || branches[0] != "main" || branches[1] != "dev" {
+			t.Fatalf("unexpected branches: %v", branches)
+		}
+	})
+
+	t.Run("falls back to config repo", func(t *testing.T) {
+		api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if strings.Contains(r.URL.Path, "/branches") {
+				w.Header().Set("Content-Type", "application/json")
+				w.Write([]byte(`[{"name":"release"}]`))
+				return
+			}
+			w.WriteHeader(http.StatusNotFound)
+		}))
+		defer api.Close()
+		origAPI := storage.APIBase
+		storage.APIBase = api.URL
+		t.Cleanup(func() { storage.APIBase = origAPI })
+
+		m, projectDir, repo, branch, _ := setupBundle(t)
+		svc := newTestService(m, projectDir, repo, branch)
+
+		branches, err := svc.ListBranches("")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(branches) != 1 || branches[0] != "release" {
+			t.Fatalf("expected [release], got: %v", branches)
+		}
+	})
+
+	t.Run("error on 404", func(t *testing.T) {
+		api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusNotFound)
+		}))
+		defer api.Close()
+		origAPI := storage.APIBase
+		storage.APIBase = api.URL
+		t.Cleanup(func() { storage.APIBase = origAPI })
+
+		m, projectDir, repo, branch, _ := setupBundle(t)
+		svc := newTestService(m, projectDir, repo, branch)
+
+		_, err := svc.ListBranches("org/missing")
+		if err == nil {
+			t.Fatal("expected error for 404")
+		}
+	})
+}
+
 func TestServiceSyncErrors(t *testing.T) {
 	t.Run("unknown manifest", func(t *testing.T) {
 		m, projectDir, repo, branch, _ := setupBundle(t)
