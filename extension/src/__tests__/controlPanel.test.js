@@ -88,16 +88,16 @@ describe('ControlPanelProvider', () => {
         config: { tier: 'standard', manifest: 'test-manifest', fileOverrides: {}, skippedVersions: {} },
         state: { hasInstallMarker: true, installedVersion: '1.0.0' },
         tiers: DEFAULT_TIERS,
+        manifests: [
+          { id: 'test-manifest', name: 'Test' },
+          { id: 'other', name: 'Other' },
+        ],
         files: [
           { dest: 'instructions/a.md', category: 'instructions', tier: 'core', installed: true, installedVersion: '1.0.0', bundledVersion: '1.0.0', override: '', inTier: true },
           { dest: 'prompts/b.md', category: 'prompts', tier: 'ad-hoc', installed: false, bundledVersion: '1.0.0', override: '', inTier: true },
           { dest: 'agents/c.md', category: 'agents', tier: 'ad-hoc-advanced', installed: false, bundledVersion: '1.0.0', override: '', inTier: false },
         ],
       };
-      mockClient._mockResults.listManifests = [
-        { id: 'test-manifest', name: 'Test' },
-        { id: 'other', name: 'Other' },
-      ];
 
       const state = await panel._gatherState();
 

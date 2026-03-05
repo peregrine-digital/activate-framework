@@ -122,12 +122,18 @@ type CategoryInfo struct {
 	Label string `json:"label"`
 }
 
+type ManifestInfo struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
 type StateResult struct {
 	ProjectDir       string               `json:"projectDir"`
 	InstallDir       string               `json:"installDir"`
 	TelemetryLogPath string               `json:"telemetryLogPath,omitempty"`
 	State            model.InstallState   `json:"state"`
 	Config           model.Config         `json:"config"`
+	Manifests        []ManifestInfo       `json:"manifests,omitempty"`
 	Tiers            []model.ResolvedTier `json:"tiers,omitempty"`
 	Categories       []CategoryInfo       `json:"categories,omitempty"`
 	Files            []model.FileStatus   `json:"files,omitempty"`
@@ -205,6 +211,17 @@ func (s *ActivateService) GetState() StateResult {
 		Config:           s.Config,
 		Categories:       cats,
 	}
+
+	// Include lightweight manifest metadata so the extension doesn't
+	// need a separate listManifests() RPC call.
+	if len(s.Manifests) > 0 {
+		mi := make([]ManifestInfo, len(s.Manifests))
+		for i, m := range s.Manifests {
+			mi[i] = ManifestInfo{ID: m.ID, Name: m.Name}
+		}
+		result.Manifests = mi
+	}
+
 	if chosen != nil {
 		result.Tiers = model.DiscoverAvailableTiers(*chosen)
 		result.Files = engine.ComputeFileStatuses(*chosen, sidecar, s.Config, s.ProjectDir, s.remoteVersions)

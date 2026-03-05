@@ -17,6 +17,9 @@ let outputChannel = null;
 /** Cached install directory from daemon (e.g. ".github"). */
 let installDir = '.github';
 
+/** Cached state from the last getState() response for quick QuickPick population. */
+let lastState = null;
+
 /** Temp directories created for diff views; cleaned up on deactivate. */
 const tempDirs = [];
 
@@ -119,6 +122,20 @@ function verifyBinary(binaryPath) {
   } catch (err) {
     return err;
   }
+}
+
+// ── State caching ─────────────────────────────────────────────
+
+/**
+ * Get daemon state, updating the module-level cache.
+ * Use `lastState` directly when a stale snapshot is acceptable (e.g.
+ * populating a QuickPick that will sync afterward).
+ */
+async function cachedGetState() {
+  const state = await client.getState();
+  lastState = state;
+  if (state.installDir) installDir = state.installDir;
+  return state;
 }
 
 // ── Workspace refresh helpers ─────────────────────────────────
@@ -241,8 +258,7 @@ async function activate(context) {
     vscode.commands.registerCommand('activate-framework.changeTier', async () => {
       if (!requireClient()) return;
       try {
-        const state = await client.getState();
-        if (state.installDir) installDir = state.installDir;
+        const state = lastState || await cachedGetState();
         const tiers = state.tiers || [];
         if (tiers.length === 0) {
           vscode.window.showWarningMessage('No tiers available for this manifest.');
@@ -267,7 +283,6 @@ async function activate(context) {
         if (!picked) return;
         await client.setConfig({ tier: picked.value, scope: 'project' });
         await client.sync();
-        controlPanel.refresh();
         refreshWorkspace('bulk');
       } catch (err) {
         vscode.window.showErrorMessage(`Change tier failed: ${err.message}`);
@@ -277,9 +292,9 @@ async function activate(context) {
     vscode.commands.registerCommand('activate-framework.changeManifest', async () => {
       if (!requireClient()) return;
       try {
-        const state = await client.getState();
+        const state = lastState || await cachedGetState();
         const currentManifest = state?.config?.manifest || '';
-        const manifests = await client.listManifests();
+        const manifests = state.manifests || [];
         if (!manifests || manifests.length === 0) {
           vscode.window.showWarningMessage('No manifests found.');
           return;
@@ -303,7 +318,6 @@ async function activate(context) {
         if (!picked) return;
         await client.setConfig({ manifest: picked.value, scope: 'project' });
         await client.sync();
-        controlPanel.refresh();
         refreshWorkspace('bulk');
       } catch (err) {
         vscode.window.showErrorMessage(`Change manifest failed: ${err.message}`);
@@ -334,7 +348,6 @@ async function activate(context) {
       try {
         await client.repoRemove();
         vscode.window.showInformationMessage('Peregrine Activate files removed from workspace.');
-        controlPanel.refresh();
       } catch (err) {
         vscode.window.showErrorMessage(`Remove failed: ${err.message}`);
       }
@@ -356,7 +369,6 @@ async function activate(context) {
       try {
         await client.repoAdd();
         vscode.window.showInformationMessage('Peregrine Activate files injected.');
-        controlPanel.refresh();
         refreshWorkspace('bulk');
       } catch (err) {
         vscode.window.showErrorMessage(`Add failed: ${err.message}`);
@@ -375,7 +387,6 @@ async function activate(context) {
       try {
         await client.repoRemove();
         vscode.window.showInformationMessage('Peregrine Activate files removed.');
-        controlPanel.refresh();
         refreshWorkspace('bulk');
       } catch (err) {
         vscode.window.showErrorMessage(`Remove failed: ${err.message}`);
@@ -388,7 +399,6 @@ async function activate(context) {
         const result = await client.update();
         const count = result.updated ? result.updated.length : 0;
         vscode.window.showInformationMessage(`Updated ${count} files.`);
-        controlPanel.refresh();
         refreshWorkspace('bulk');
       } catch (err) {
         vscode.window.showErrorMessage(`Update failed: ${err.message}`);
@@ -405,7 +415,6 @@ async function activate(context) {
       try {
         await client.installFile(file.dest);
         vscode.window.showInformationMessage(`Installed: ${file.dest}`);
-        controlPanel.refresh();
         refreshWorkspace('add', file.dest);
       } catch (err) {
         vscode.window.showErrorMessage(`Failed to install: ${file.dest} — ${err.message}`);
@@ -422,7 +431,6 @@ async function activate(context) {
       try {
         await client.uninstallFile(file.dest);
         vscode.window.showInformationMessage(`Uninstalled: ${file.dest}`);
-        controlPanel.refresh();
         refreshWorkspace('remove', file.dest);
       } catch (err) {
         vscode.window.showErrorMessage(`Failed to uninstall: ${file.dest} — ${err.message}`);
@@ -480,7 +488,6 @@ async function activate(context) {
       try {
         await client.skipFileUpdate(file.dest);
         vscode.window.showInformationMessage(`Skipped update for ${file.dest}`);
-        controlPanel.refresh();
       } catch (err) {
         vscode.window.showWarningMessage(`Could not skip update for ${file.dest}: ${err.message}`);
       }
@@ -570,8 +577,7 @@ async function startDaemon(context, binPath, projectDir, outputChannel, controlP
 
 async function autoSetup(controlPanel, context) {
   try {
-    const state = await client.getState();
-    if (state.installDir) installDir = state.installDir;
+    const state = await cachedGetState();
 
     // If not yet installed, add files automatically
     if (state.state === 'none' || state.state === 'not_installed') {

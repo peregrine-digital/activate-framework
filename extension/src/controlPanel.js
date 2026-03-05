@@ -68,7 +68,6 @@ class ControlPanelProvider {
 
   async _gatherState() {
     const state = await this._client.getState();
-    const manifests = await this._client.listManifests();
 
     const cfg = state.config || {};
     const tier = cfg.tier || '';
@@ -77,7 +76,8 @@ class ControlPanelProvider {
     const isActive = state.state?.hasInstallMarker || false;
     const version = state.state?.installedVersion || '';
     const manifestName = cfg.manifest || '';
-    const manifestCount = Array.isArray(manifests) ? manifests.length : 1;
+    const manifests = state.manifests || [];
+    const manifestCount = manifests.length || 1;
 
     // Cache metadata from daemon for use by other methods
     this._categories = state.categories || [];
