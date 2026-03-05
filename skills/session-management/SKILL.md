@@ -1,6 +1,7 @@
 ---
 name: session-management
 description: Manage persistent session state across agent invocations. Use to create, load, and update session.md in tmp/copilot-sessions/. Tracks timeline of agent activity, decisions, and handoff notes.
+version: '0.2.0'
 ---
 
 # Session Management

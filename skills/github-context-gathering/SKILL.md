@@ -1,6 +1,7 @@
 ---
 name: github-context-gathering
 description: Fetch GitHub resources (PRs, issues, commits) and recursively resolve all linked content. Use when any GitHub URL or reference is encountered. MUST use gh CLI or GitHub MCP — never fetch URLs directly.
+version: '0.2.0'
 ---
 
 # GitHub Context Gathering

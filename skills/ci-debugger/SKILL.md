@@ -1,6 +1,7 @@
 ---
 name: ci-debugger
 description: Diagnose and fix CI/CD pipeline failures. Use when CI checks are red on a PR, a GitHub Actions workflow has failed, or debugging test failures from CI. Requires gh CLI and GitHub MCP; optionally uses Screenshot Viewer MCP for visual test failures.
+version: '0.2.0'
 ---
 
 # CI Debugger

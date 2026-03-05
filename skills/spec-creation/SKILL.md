@@ -1,6 +1,7 @@
 ---
 name: spec-creation
 description: Generate structured implementation specs to document work, track decisions, and facilitate handoffs between agents or sessions.
+version: '0.2.0'
 ---
 
 # Spec Creation

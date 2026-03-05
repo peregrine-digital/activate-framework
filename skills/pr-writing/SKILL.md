@@ -1,6 +1,7 @@
 ---
 name: pr-writing
 description: Create a pull request from session context. Finds the repo's PR template, maps session data to template sections, and creates a draft PR via GitHub MCP. Use when any agent needs to open a PR.
+version: '0.2.0'
 ---
 
 # PR Writing

@@ -1,6 +1,7 @@
 ---
 name: visual-verification
 description: Write temporary Cypress screenshot tests to visually confirm UI changes. Run the test, view screenshots via MCP, and iterate until the change looks correct. Use when an agent needs visual confirmation of implemented changes.
+version: '0.2.0'
 ---
 
 # Visual Verification

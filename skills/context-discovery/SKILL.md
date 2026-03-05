@@ -1,6 +1,7 @@
 ---
 name: context-discovery
 description: Detect the target repository and identify the specific application or module being worked on. Use when starting any task to determine workspace context from git changes, open files, ticket URLs, or user input.
+version: '0.2.0'
 ---
 
 # Context Discovery
