@@ -1,0 +1,71 @@
+#!/usr/bin/env node
+
+/**
+ * Bin shim for the Activate CLI.
+ *
+ * Resolves the platform-specific Go binary from optionalDependencies
+ * (installed by npm/yarn/pnpm) and spawns it with the user's arguments.
+ *
+ * Pattern borrowed from esbuild, biome, turbo, lefthook.
+ */
+
+"use strict";
+
+const { execFileSync } = require("child_process");
+const path = require("path");
+const fs = require("fs");
+
+const PLATFORM_PACKAGES = {
+  "darwin-arm64":  "@anthropic/activate-cli-darwin-arm64",
+  "darwin-x64":    "@anthropic/activate-cli-darwin-x64",
+  "linux-arm64":   "@anthropic/activate-cli-linux-arm64",
+  "linux-x64":     "@anthropic/activate-cli-linux-x64",
+  "win32-x64":     "@anthropic/activate-cli-win32-x64",
+};
+
+function getBinaryPath() {
+  const platformKey = `${process.platform}-${process.arch}`;
+  const pkg = PLATFORM_PACKAGES[platformKey];
+  if (!pkg) {
+    throw new Error(
+      `Unsupported platform: ${platformKey}. ` +
+      `Supported: ${Object.keys(PLATFORM_PACKAGES).join(", ")}`
+    );
+  }
+
+  // Try to resolve the platform package
+  try {
+    const pkgDir = path.dirname(require.resolve(`${pkg}/package.json`));
+    const ext = process.platform === "win32" ? ".exe" : "";
+    const bin = path.join(pkgDir, `activate${ext}`);
+    if (fs.existsSync(bin)) return bin;
+  } catch {
+    // Package not installed — fall through
+  }
+
+  // Fallback: check if binary was placed by postinstall
+  const localBin = path.join(
+    __dirname,
+    process.platform === "win32" ? "activate.exe" : "activate"
+  );
+  if (fs.existsSync(localBin)) return localBin;
+
+  throw new Error(
+    `Could not find the activate binary for ${platformKey}.\n` +
+    `Make sure ${pkg} is installed, or download from GitHub Releases.`
+  );
+}
+
+try {
+  const binary = getBinaryPath();
+  const result = execFileSync(binary, process.argv.slice(2), {
+    stdio: "inherit",
+    env: process.env,
+  });
+} catch (err) {
+  if (err.status != null) {
+    process.exit(err.status);
+  }
+  console.error(err.message);
+  process.exit(1);
+}

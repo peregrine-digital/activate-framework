@@ -1,6 +1,7 @@
 ---
 name: activate-installer
 description: Installs Activate Copilot in a repository with intelligent customization. Use when asked to install, set up, or update Activate.
+version: '0.5.0'
 inputs:
   - name: tier
     description: 'minimal, standard, or advanced. Defaults to standard.'
@@ -133,9 +134,9 @@ Show user the file list:
 Bundle includes:
 
 ✓ install.mjs (root shim)
+✓ framework/install.mjs (CLI engine)
 ✓ docs/README.md
-✓ plugins/activate-framework/manifest.json
-✓ plugins/activate-framework/install.mjs
+✓ manifests/activate-framework.json
 ```
 
 ### Step 5: Install Files

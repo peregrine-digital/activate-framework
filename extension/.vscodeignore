@@ -1,0 +1,5 @@
+node_modules/
+scripts/
+.gitignore
+.vscode/
+src/__tests__/

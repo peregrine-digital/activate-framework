@@ -1,0 +1,136 @@
+{
+  "name": "peregrine-activate",
+  "displayName": "Peregrine Activate",
+  "description": "Cross-functional agentic framework for government delivery teams — install Copilot instructions, prompts, skills, and agents into your workspace.",
+  "version": "0.1.31-r10",
+  "releaseTag": "v0.1.31-r10",
+  "publisher": "peregrine",
+  "license": "SEE LICENSE IN LICENSE",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/peregrine-digital/activate-framework"
+  },
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "keywords": [
+    "copilot",
+    "agents",
+    "instructions",
+    "skills",
+    "government"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./src/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "peregrine-activate",
+          "title": "Peregrine Activate",
+          "icon": "media/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "peregrine-activate": [
+        {
+          "type": "webview",
+          "id": "activate-framework.controlPanel",
+          "name": "Activate"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "activate-framework.changeTier",
+        "title": "Peregrine Activate: Change Tier",
+        "icon": "$(settings-gear)"
+      },
+      {
+        "command": "activate-framework.showStatus",
+        "title": "Peregrine Activate: Show Status"
+      },
+      {
+        "command": "activate-framework.remove",
+        "title": "Peregrine Activate: Remove Files"
+      },
+      {
+        "command": "activate-framework.refresh",
+        "title": "Refresh",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "activate-framework.addToWorkspace",
+        "title": "Install Files",
+        "icon": "$(add)"
+      },
+      {
+        "command": "activate-framework.removeFromWorkspace",
+        "title": "Remove Files",
+        "icon": "$(remove)"
+      },
+      {
+        "command": "activate-framework.updateAll",
+        "title": "Update All Installed Files",
+        "icon": "$(sync)"
+      },
+      {
+        "command": "activate-framework.installFile",
+        "title": "Install",
+        "icon": "$(cloud-download)"
+      },
+      {
+        "command": "activate-framework.uninstallFile",
+        "title": "Uninstall",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "activate-framework.openFile",
+        "title": "Open File"
+      },
+      {
+        "command": "activate-framework.diffFile",
+        "title": "Peregrine Activate: Diff File (Installed vs Bundled)"
+      },
+      {
+        "command": "activate-framework.skipFileUpdate",
+        "title": "Peregrine Activate: Skip File Update"
+      },
+      {
+        "command": "activate-framework.changeManifest",
+        "title": "Peregrine Activate: Change Manifest"
+      },
+      {
+        "command": "activate-framework.telemetryRunNow",
+        "title": "Peregrine Activate: Run Copilot Telemetry Log Now"
+      },
+      {
+        "command": "activate-framework.installCLI",
+        "title": "Peregrine Activate: Install CLI"
+      },
+      {
+        "command": "activate-framework.checkForUpdates",
+        "title": "Peregrine Activate: Check for Updates"
+      }
+    ],
+    "configuration": {
+      "title": "Peregrine Activate",
+      "properties": {}
+    }
+  },
+  "scripts": {
+    "prepare-assets": "node scripts/prepare-assets.mjs",
+    "package": "npm run prepare-assets && vsce package --no-dependencies --allow-missing-repository --skip-license",
+    "test": "node --test src/__tests__/*.test.js"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.85.0",
+    "@vscode/vsce": "^3.0.0"
+  }
+}

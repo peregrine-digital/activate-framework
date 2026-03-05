@@ -1,0 +1,26 @@
+package storage
+
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+
+	"github.com/peregrine-digital/activate-framework/cli/model"
+)
+
+// WriteManifestFile fetches a manifest file from GitHub and writes it to destPath.
+func WriteManifestFile(f model.ManifestFile, basePath, destPath, repo, branch string) error {
+	if err := os.MkdirAll(filepath.Dir(destPath), 0755); err != nil {
+		return err
+	}
+
+	srcPath := f.Src
+	if basePath != "" {
+		srcPath = basePath + "/" + f.Src
+	}
+	data, err := FetchFile(srcPath, repo, branch)
+	if err != nil {
+		return fmt.Errorf("fetch %s: %w", f.Src, err)
+	}
+	return os.WriteFile(destPath, data, 0644)
+}

@@ -16,6 +16,8 @@ Follow the prompts to choose assistant target, tier, and install directory.
 
 Open `../plugins/activate-framework/skills/activate-installer/SKILL.md` in your AI agent and invoke it.
 
+> **Note:** The CLI engine lives in `../framework/` (install, config, manifest discovery). Plugin content (instructions, prompts, skills, agents) lives under `../plugins/`.
+
 ## Tiers
 
 | Choice | Contents |
@@ -26,4 +28,4 @@ Open `../plugins/activate-framework/skills/activate-installer/SKILL.md` in your 
 
 ## Version
 
-See `../plugins/activate-framework/.activate-version` for the installed version.
+The installed version is recorded in `manifests/activate-framework.json`.
