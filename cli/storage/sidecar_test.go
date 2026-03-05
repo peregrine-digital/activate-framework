@@ -161,3 +161,67 @@ func TestWriteRepoSidecarDeletesStaleFiles(t *testing.T) {
 		t.Fatalf("expected c.md to be deleted, err=%v", err)
 	}
 }
+
+func TestWriteRepoSidecarPrunesEmptyDirs(t *testing.T) {
+	setupTestStore(t)
+	projectDir := t.TempDir()
+
+	excludePath := filepath.Join(projectDir, ".git", "info", "exclude")
+	if err := os.MkdirAll(filepath.Dir(excludePath), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(excludePath, []byte(""), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create files in nested directories
+	agentFile := filepath.Join(projectDir, ".github", "agents", "planner.agent.md")
+	instrFile := filepath.Join(projectDir, ".github", "instructions", "setup.instructions.md")
+	if err := os.MkdirAll(filepath.Dir(agentFile), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Dir(instrFile), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(agentFile, []byte("agent"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(instrFile, []byte("instr"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Write sidecar with both files
+	first := model.RepoSidecar{
+		Manifest: "m1", Tier: "standard",
+		Files: []string{".github/agents/planner.agent.md", ".github/instructions/setup.instructions.md"},
+	}
+	if err := WriteRepoSidecar(projectDir, first); err != nil {
+		t.Fatal(err)
+	}
+
+	// Switch to manifest with only instructions (drop agents)
+	second := model.RepoSidecar{
+		Manifest: "m2", Tier: "standard",
+		Files: []string{".github/instructions/setup.instructions.md"},
+	}
+	if err := WriteRepoSidecar(projectDir, second); err != nil {
+		t.Fatal(err)
+	}
+
+	// agents/ dir should be pruned
+	agentsDir := filepath.Join(projectDir, ".github", "agents")
+	if _, err := os.Stat(agentsDir); !os.IsNotExist(err) {
+		t.Fatalf("expected agents/ directory to be pruned, err=%v", err)
+	}
+
+	// .github/ should still exist (has instructions/)
+	githubDir := filepath.Join(projectDir, ".github")
+	if _, err := os.Stat(githubDir); err != nil {
+		t.Fatalf("expected .github/ to still exist, err=%v", err)
+	}
+
+	// instructions file should still exist
+	if _, err := os.Stat(instrFile); err != nil {
+		t.Fatalf("expected instructions file to remain, err=%v", err)
+	}
+}

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/peregrine-digital/activate-framework/cli/model"
 )
@@ -49,7 +50,9 @@ func WriteRepoSidecar(projectDir string, next model.RepoSidecar) error {
 		if _, exists := nextSet[oldPath]; exists {
 			continue
 		}
-		_ = os.Remove(filepath.Join(projectDir, oldPath))
+		full := filepath.Join(projectDir, oldPath)
+		_ = os.Remove(full)
+		pruneEmptyDirs(filepath.Dir(full), filepath.Join(projectDir, ".github"))
 	}
 
 	if err := EnsureRepoMeta(projectDir); err != nil {
@@ -72,7 +75,9 @@ func DeleteRepoSidecar(projectDir string) error {
 	sc, _ := ReadRepoSidecar(projectDir)
 	if sc != nil {
 		for _, rel := range sc.Files {
-			_ = os.Remove(filepath.Join(projectDir, rel))
+			full := filepath.Join(projectDir, rel)
+			_ = os.Remove(full)
+			pruneEmptyDirs(filepath.Dir(full), filepath.Join(projectDir, ".github"))
 		}
 		if len(sc.McpServers) > 0 {
 			_ = RemoveMcpServers(projectDir, sc.McpServers)
@@ -80,4 +85,23 @@ func DeleteRepoSidecar(projectDir string) error {
 	}
 	_ = os.Remove(SidecarPath(projectDir))
 	return RemoveGitExcludeBlock(projectDir)
+}
+
+// pruneEmptyDirs removes empty directories from dir upward, stopping at
+// (and never removing) boundary. This cleans up e.g. .github/agents/
+// after all agent files are uninstalled.
+func pruneEmptyDirs(dir, boundary string) {
+	boundary = filepath.Clean(boundary)
+	for {
+		dir = filepath.Clean(dir)
+		if dir == boundary || !strings.HasPrefix(dir, boundary+string(filepath.Separator)) {
+			return
+		}
+		entries, err := os.ReadDir(dir)
+		if err != nil || len(entries) > 0 {
+			return
+		}
+		_ = os.Remove(dir)
+		dir = filepath.Dir(dir)
+	}
 }
