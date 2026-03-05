@@ -114,7 +114,6 @@ class MockClient extends EventEmitter {
   async getState() { return this._record('getState'); }
   async getConfig() { return this._record('getConfig'); }
   async setConfig(p) { return this._record('setConfig', p); }
-  async listManifests() { return this._record('listManifests'); }
   async listFiles(p) { return this._record('listFiles', p); }
   async repoAdd(p) { return this._record('repoAdd', p); }
   async repoRemove() { return this._record('repoRemove'); }

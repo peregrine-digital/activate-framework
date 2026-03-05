@@ -13,7 +13,6 @@ class MockClient extends EventEmitter {
   }
 
   async getState() { return this._mockResults.getState || {}; }
-  async listManifests() { return this._mockResults.listManifests || []; }
   async readTelemetryLog() { return this._mockResults.readTelemetryLog || []; }
   async getConfig(scope) { return this._mockResults[`config_${scope}`] || {}; }
   async setConfig() { return { ok: true }; }
@@ -121,7 +120,6 @@ describe('ControlPanelProvider', () => {
           { dest: 'instructions/a.md', category: 'instructions', tier: 'core', installed: true, installedVersion: '0.9.0', bundledVersion: '1.0.0' },
         ],
       };
-      mockClient._mockResults.listManifests = [];
 
       const state = await panel._gatherState();
       const vInfo = state.versionMap.get('instructions/a.md');
@@ -139,7 +137,6 @@ describe('ControlPanelProvider', () => {
           { dest: 'a.md', category: 'instructions', tier: 'core', installed: false, override: 'excluded', inTier: true },
         ],
       };
-      mockClient._mockResults.listManifests = [];
 
       const state = await panel._gatherState();
       assert.equal(state.installedFiles.length, 0);
@@ -156,7 +153,6 @@ describe('ControlPanelProvider', () => {
           { dest: 'prompts/b.md', category: 'prompts', tier: 'ad-hoc', installed: false, override: 'pinned', inTier: false },
         ],
       };
-      mockClient._mockResults.listManifests = [];
 
       const state = await panel._gatherState();
       // Pinned file should be in available, not outside-tier
@@ -166,7 +162,6 @@ describe('ControlPanelProvider', () => {
 
     it('handles missing config gracefully', async () => {
       mockClient._mockResults.getState = { files: [] };
-      mockClient._mockResults.listManifests = [];
 
       const state = await panel._gatherState();
       assert.equal(state.tier, '');
@@ -188,7 +183,6 @@ describe('ControlPanelProvider', () => {
           { dest: 'b.md', category: 'prompts', tier: 'extras', installed: false, override: '', inTier: false },
         ],
       };
-      mockClient._mockResults.listManifests = [];
 
       const state = await panel._gatherState();
       assert.equal(state.tierLabel, 'Basic');
@@ -271,7 +265,6 @@ describe('groupByCategory (via controlPanel module)', () => {
         { dest: 'agents/d.md', category: 'agents', tier: 'ad-hoc-advanced', installed: true, inTier: true },
       ],
     };
-    mockClient._mockResults.listManifests = [];
 
     const state = await panel._gatherState();
     assert.equal(state.installedFiles.length, 4);
@@ -292,7 +285,6 @@ describe('groupByCategory (via controlPanel module)', () => {
         { dest: 'instructions/a.md', category: 'instructions', tier: 'core', installed: false, bundledVersion: '2.0.0', description: 'Test file', inTier: true },
       ],
     };
-    mockClient._mockResults.listManifests = [];
 
     const state = await panel._gatherState();
     assert.equal(state.availableFiles.length, 1);
@@ -310,7 +302,6 @@ describe('groupByCategory (via controlPanel module)', () => {
       mockClient._mockResults.getState = {
         state: {}, config: {}, tiers: [], categories: [], files: [],
       };
-      mockClient._mockResults.listManifests = [];
 
       let renderCount = 0;
       const origRender = panel._render.bind(panel);
