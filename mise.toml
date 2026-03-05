@@ -3,13 +3,21 @@ go = "latest"
 node = "20"
 
 [tasks.release]
-description = "Create a GitHub release (bumps version, tags, publishes)"
+description = "Bump version, open a PR, and create a GitHub release after merge"
 run = '''
 #!/usr/bin/env bash
 set -euo pipefail
 
 CLI_VERSION_FILE="cli/main.go"
 EXT_VERSION_FILE="extension/package.json"
+
+# Ensure we're on main and up to date
+CURRENT_BRANCH=$(git branch --show-current)
+if [[ "$CURRENT_BRANCH" != "main" ]]; then
+  echo "ERROR: Must be on main to start a release (currently on '$CURRENT_BRANCH')"
+  exit 1
+fi
+git pull --ff-only origin main
 
 # Read current versions
 CLI_VERSION=$(grep 'const version' "$CLI_VERSION_FILE" | head -1 | cut -d'"' -f2)
@@ -70,6 +78,10 @@ echo "Pre-release: ${IS_PRERELEASE}"
 read -rp "Continue? [y/N]: " CONFIRM
 [[ "$CONFIRM" != "y" && "$CONFIRM" != "Y" ]] && echo "Aborted." && exit 0
 
+# Create release branch
+RELEASE_BRANCH="release/v${NEW_VERSION}"
+git checkout -b "$RELEASE_BRANCH"
+
 # Bump CLI version
 sed -i.bak "s/const version = \"${CLI_VERSION}\"/const version = \"${NEW_VERSION}\"/" "$CLI_VERSION_FILE"
 rm -f "${CLI_VERSION_FILE}.bak"
@@ -84,20 +96,42 @@ rm -f "${EXT_VERSION_FILE}.bak"
 echo "✓ Bumped CLI to v${NEW_VERSION}"
 echo "✓ Bumped extension to v${NEW_VERSION}"
 
-# Commit, tag, push
+# Commit and push branch
 git add "$CLI_VERSION_FILE" "$EXT_VERSION_FILE" extension/package-lock.json
 git commit -m "chore: bump version to v${NEW_VERSION}"
-git tag "v${NEW_VERSION}"
-git push origin HEAD
-git push origin "v${NEW_VERSION}"
+git push origin "$RELEASE_BRANCH"
 
-# Create GitHub release
+# Open PR
 PRERELEASE_FLAG=""
 $IS_PRERELEASE && PRERELEASE_FLAG="--prerelease"
 
+PR_URL=$(gh pr create \
+  --base main \
+  --head "$RELEASE_BRANCH" \
+  --title "chore: release v${NEW_VERSION}" \
+  --body "Bumps CLI and extension to v${NEW_VERSION}.")
+
+echo ""
+echo "✓ PR opened: ${PR_URL}"
+echo ""
+read -rp "Merge the PR, then press Enter to tag and create the release... "
+
+# Return to main and pull the merge
+git checkout main
+git pull --ff-only origin main
+
+# Tag and push
+git tag "v${NEW_VERSION}"
+git push origin "v${NEW_VERSION}"
+
+# Create GitHub release
 gh release create "v${NEW_VERSION}" $PRERELEASE_FLAG \
   --title "v${NEW_VERSION}" \
   --generate-notes
+
+# Clean up release branch
+git branch -D "$RELEASE_BRANCH"
+git push origin --delete "$RELEASE_BRANCH" 2>/dev/null || true
 
 echo ""
 echo "✓ Release v${NEW_VERSION} created!"

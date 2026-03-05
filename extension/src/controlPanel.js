@@ -152,9 +152,11 @@ class ControlPanelProvider {
         const entries = await this._client.readTelemetryLog();
         this._view.webview.html = this._getUsageHtml(entries || [], telemetryEnabled);
       } else if (this._currentPage === 'settings') {
-        const state = await this._client.getState();
-        const globalCfg = await this._client.getConfig('global');
-        const projectCfg = await this._client.getConfig('project');
+        const [state, globalCfg, projectCfg] = await Promise.all([
+          this._client.getState(),
+          this._client.getConfig('global'),
+          this._client.getConfig('project'),
+        ]);
         this._view.webview.html = this._getSettingsHtml(state, globalCfg, projectCfg);
       } else {
         const state = await this._gatherState();
