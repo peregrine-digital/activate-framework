@@ -709,7 +709,15 @@ async function checkForUpdates(context, controlPanel, force = false) {
             `Activate CLI updated to v${update.latestVersion}. Daemon restarted.`,
           );
         }
-        // If extension was updated, downloadAndInstallVsix already prompts for reload
+        if (hasExt) {
+          const reload = await vscode.window.showInformationMessage(
+            'Activate extension updated. Reload to apply changes.',
+            'Reload',
+          );
+          if (reload === 'Reload') {
+            await vscode.commands.executeCommand('workbench.action.reloadWindow');
+          }
+        }
       } catch (err) {
         log(`Update FAILED: ${err.message}\n${err.stack || ''}`);
         vscode.window.showErrorMessage(`Update failed: ${err.message}`);
@@ -798,14 +806,6 @@ async function downloadAndInstallVsix(url, filename, expectedSha256, token) {
     vscode.Uri.file(dest),
   );
   log('VSIX install command completed');
-
-  const action = await vscode.window.showInformationMessage(
-    'Activate extension updated. Reload to apply changes.',
-    'Reload',
-  );
-  if (action === 'Reload') {
-    await vscode.commands.executeCommand('workbench.action.reloadWindow');
-  }
 }
 
 // ── Deactivation ──────────────────────────────────────────────
