@@ -300,3 +300,78 @@ func TestPrefetchManifestFiles(t *testing.T) {
 		t.Fatalf("expected version 1.0.0, got %q", v)
 	}
 }
+
+func TestPrefetchManifestFilesRelativePaths(t *testing.T) {
+	basePath := "plugins/ironarch"
+
+	// Register files at the RESOLVED paths (what path.Clean produces)
+	repo, branch, cleanup := serveVersionFiles(t, map[string]string{
+		"skills/ci-debugger/SKILL.md":  "---\nversion: '1.0.0'\n---\nci debugger",
+		"skills/pr-writing/SKILL.md":   "---\nversion: '2.0.0'\n---\npr writing",
+		basePath + "/agents/planner.md": "---\nversion: '3.0.0'\n---\nplanner",
+	})
+	defer cleanup()
+
+	manifest := model.Manifest{
+		ID: "ironarch", BasePath: basePath,
+		Files: []model.ManifestFile{
+			{Src: "../../skills/ci-debugger/SKILL.md", Dest: "skills/ci-debugger/SKILL.md", Tier: "skills"},
+			{Src: "../../skills/pr-writing/SKILL.md", Dest: "skills/pr-writing/SKILL.md", Tier: "skills"},
+			{Src: "agents/planner.md", Dest: "agents/planner.md", Tier: "core"},
+		},
+	}
+
+	cache := PrefetchManifestFiles(manifest, repo, branch)
+
+	// Relative paths should resolve and fetch successfully
+	if _, ok := cache["skills/ci-debugger/SKILL.md"]; !ok {
+		t.Fatal("expected cached content for ../../skills/ci-debugger/SKILL.md (resolved to skills/ci-debugger/SKILL.md)")
+	}
+	if _, ok := cache["skills/pr-writing/SKILL.md"]; !ok {
+		t.Fatal("expected cached content for ../../skills/pr-writing/SKILL.md (resolved to skills/pr-writing/SKILL.md)")
+	}
+	// Non-relative path should still work
+	if _, ok := cache[basePath+"/agents/planner.md"]; !ok {
+		t.Fatal("expected cached content for agents/planner.md")
+	}
+	if len(cache) != 3 {
+		t.Fatalf("expected 3 cached files, got %d", len(cache))
+	}
+}
+
+func TestComputeFileStatusesRelativePaths(t *testing.T) {
+	projectDir := t.TempDir()
+	basePath := "plugins/ironarch"
+
+	// Install a file locally with an older version
+	installedPath := filepath.Join(projectDir, ".github", "skills", "ci-debugger", "SKILL.md")
+	os.MkdirAll(filepath.Dir(installedPath), 0755)
+	os.WriteFile(installedPath, []byte("---\nversion: '0.9.0'\n---\n# CI Debugger"), 0644)
+
+	manifest := model.Manifest{
+		ID: "ironarch", BasePath: basePath,
+		Files: []model.ManifestFile{
+			{Src: "../../skills/ci-debugger/SKILL.md", Dest: "skills/ci-debugger/SKILL.md", Tier: "skills"},
+		},
+	}
+	sidecar := &model.RepoSidecar{Files: []string{".github/skills/ci-debugger/SKILL.md"}}
+
+	// Remote versions keyed by RESOLVED path (what path.Clean produces)
+	remoteVersions := map[string]string{
+		"skills/ci-debugger/SKILL.md": "1.0.0",
+	}
+
+	statuses := ComputeFileStatuses(manifest, sidecar, model.Config{}, projectDir, remoteVersions)
+	if len(statuses) != 1 {
+		t.Fatalf("expected 1 status, got %d", len(statuses))
+	}
+	if statuses[0].BundledVersion != "1.0.0" {
+		t.Fatalf("expected bundled 1.0.0 from resolved path lookup, got %q", statuses[0].BundledVersion)
+	}
+	if statuses[0].InstalledVersion != "0.9.0" {
+		t.Fatalf("expected installed 0.9.0, got %q", statuses[0].InstalledVersion)
+	}
+	if !statuses[0].UpdateAvailable {
+		t.Fatal("expected updateAvailable=true for relative-path file with version mismatch")
+	}
+}

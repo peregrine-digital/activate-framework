@@ -3,6 +3,7 @@ package commands
 import (
 	"fmt"
 	"os"
+	"path"
 	"time"
 
 	"github.com/peregrine-digital/activate-framework/cli/engine"
@@ -490,7 +491,7 @@ func (s *ActivateService) SkipUpdate(file string) (*FileResult, error) {
 
 	srcPath := target.Src
 	if chosen.BasePath != "" {
-		srcPath = chosen.BasePath + "/" + target.Src
+		srcPath = path.Clean(chosen.BasePath + "/" + target.Src)
 	}
 
 	// Use cached content if available, otherwise fetch from remote.

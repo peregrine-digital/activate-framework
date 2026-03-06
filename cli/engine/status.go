@@ -3,6 +3,7 @@ package engine
 import (
 	"fmt"
 	"os"
+	"path"
 	"sync"
 	"time"
 
@@ -27,7 +28,7 @@ func PrefetchManifestFiles(m model.Manifest, repo, branch string) map[string][]b
 	for i, f := range m.Files {
 		srcPath := f.Src
 		if m.BasePath != "" {
-			srcPath = m.BasePath + "/" + f.Src
+			srcPath = path.Clean(m.BasePath + "/" + f.Src)
 		}
 		wg.Add(1)
 		go func(idx int, sp string) {
@@ -97,10 +98,8 @@ func ComputeFileStatuses(m model.Manifest, sidecar *model.RepoSidecar, cfg model
 
 		srcPath := f.Src
 		if m.BasePath != "" {
-			srcPath = m.BasePath + "/" + f.Src
+			srcPath = path.Clean(m.BasePath + "/" + f.Src)
 		}
-
-		// Use cached version if available; skip if cache is empty.
 		if remoteVersions != nil {
 			fs.BundledVersion = remoteVersions[srcPath]
 		}
