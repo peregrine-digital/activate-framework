@@ -2,6 +2,8 @@ package commands
 
 import (
 	"fmt"
+	"os"
+	"time"
 
 	"github.com/peregrine-digital/activate-framework/cli/engine"
 	"github.com/peregrine-digital/activate-framework/cli/model"
@@ -95,7 +97,9 @@ func (s *ActivateService) discoverManifests() {
 	// Fall back to cached manifests
 	if s.ProjectDir != "" {
 		if cached, cacheErr := storage.ReadManifestCache(s.ProjectDir); cacheErr == nil && len(cached) > 0 {
+			fmt.Fprintf(os.Stderr, "[service] manifest discovery failed, using cache (%d manifests)\n", len(cached))
 			s.Manifests = cached
+			s.prefetchFiles(repo, branch)
 		}
 	}
 }
@@ -212,6 +216,7 @@ type TelemetryRunResult struct {
 // ── Service methods ────────────────────────────────────────────
 
 func (s *ActivateService) GetState() StateResult {
+	start := time.Now()
 	state := engine.DetectInstallState(s.ProjectDir)
 	sidecar, _ := storage.ReadRepoSidecar(s.ProjectDir)
 	chosen := model.FindManifestByID(s.Manifests, s.Config.Manifest)
@@ -246,8 +251,13 @@ func (s *ActivateService) GetState() StateResult {
 
 	if chosen != nil {
 		result.Tiers = model.DiscoverAvailableTiers(*chosen)
-		result.Files = engine.ComputeFileStatuses(*chosen, sidecar, s.Config, s.ProjectDir, s.remoteVersions())
+		rv := s.remoteVersions()
+		if rv == nil {
+			fmt.Fprintf(os.Stderr, "[service] WARNING: content cache empty, remote versions unavailable\n")
+		}
+		result.Files = engine.ComputeFileStatuses(*chosen, sidecar, s.Config, s.ProjectDir, rv)
 	}
+	fmt.Fprintf(os.Stderr, "[service] GetState completed in %s\n", time.Since(start))
 	return result
 }
 
