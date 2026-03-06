@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 
 	"github.com/peregrine-digital/activate-framework/cli/model"
@@ -121,7 +122,7 @@ func InjectMcpFromManifest(files []model.ManifestFile, basePath, projectDir stri
 
 		srcPath := f.Src
 		if basePath != "" {
-			srcPath = basePath + "/" + f.Src
+			srcPath = path.Clean(basePath + "/" + f.Src)
 		}
 		data, err := FetchFile(srcPath, repo, branch)
 		if err != nil {

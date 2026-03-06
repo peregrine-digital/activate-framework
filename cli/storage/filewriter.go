@@ -3,6 +3,7 @@ package storage
 import (
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 
 	"github.com/peregrine-digital/activate-framework/cli/model"
@@ -16,7 +17,7 @@ func WriteManifestFile(f model.ManifestFile, basePath, destPath, repo, branch st
 
 	srcPath := f.Src
 	if basePath != "" {
-		srcPath = basePath + "/" + f.Src
+		srcPath = path.Clean(basePath + "/" + f.Src)
 	}
 	data, err := FetchFile(srcPath, repo, branch)
 	if err != nil {

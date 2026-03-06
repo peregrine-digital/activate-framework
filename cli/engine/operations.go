@@ -3,6 +3,7 @@ package engine
 import (
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 
@@ -50,7 +51,7 @@ func UpdateFiles(m model.Manifest, sidecar *model.RepoSidecar, cfg model.Config,
 		if sv, ok := cfg.SkippedVersions[f.Dest]; ok {
 			srcPath := f.Src
 			if m.BasePath != "" {
-				srcPath = m.BasePath + "/" + f.Src
+				srcPath = path.Clean(m.BasePath + "/" + f.Src)
 			}
 			bv, _ := storage.ReadFileVersionRemote(srcPath, repo, branch)
 			if sv == bv {
@@ -147,7 +148,7 @@ func DiffFile(f model.ManifestFile, m model.Manifest, projectDir string, cfg mod
 
 	srcPath := f.Src
 	if m.BasePath != "" {
-		srcPath = m.BasePath + "/" + f.Src
+		srcPath = path.Clean(m.BasePath + "/" + f.Src)
 	}
 	bundled, err := storage.FetchFile(srcPath, repo, branch)
 	if err != nil {

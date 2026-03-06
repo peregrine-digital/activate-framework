@@ -3,6 +3,7 @@ package engine
 import (
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 
 	"github.com/peregrine-digital/activate-framework/cli/model"
@@ -77,7 +78,7 @@ func InstallFilesFromRemote(files []model.ManifestFile, basePath, targetDir, rep
 	for _, f := range files {
 		srcPath := f.Src
 		if basePath != "" {
-			srcPath = basePath + "/" + f.Src
+			srcPath = path.Clean(basePath + "/" + f.Src)
 		}
 		destPath := targetDir + "/" + f.Dest
 

@@ -3,6 +3,7 @@ package engine
 import (
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"sync"
 
@@ -66,7 +67,7 @@ func RepoAdd(manifests []model.Manifest, cfg model.Config, projectDir string, co
 
 		srcPath := f.Src
 		if chosen.BasePath != "" {
-			srcPath = chosen.BasePath + "/" + f.Src
+			srcPath = path.Clean(chosen.BasePath + "/" + f.Src)
 		}
 
 		// Delta: skip if file on disk matches cached remote version.
