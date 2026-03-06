@@ -510,15 +510,20 @@ async function activate(context) {
 }
 
 async function startDaemon(context, binPath, projectDir, outputChannel, controlPanel) {
-  // Get GitHub token for private repo access in daemon
+  // Get GitHub token for private repo access in daemon.
+  // createIfNone: true prompts the user to sign in if no session exists —
+  // required for private repos where unauthenticated fetches always 404.
   let token = '';
   try {
     const session = await vscode.authentication.getSession('github', ['repo'], {
-      createIfNone: false,
+      createIfNone: true,
     });
     token = session?.accessToken || '';
   } catch {
-    // No auth available — daemon will fall back to gh CLI
+    // User declined sign-in or auth unavailable — daemon will fall back to gh CLI
+  }
+  if (!token) {
+    outputChannel.appendLine('[warn] No GitHub token available — private repo access will fail');
   }
 
   client = new ActivateClient({
@@ -542,6 +547,28 @@ async function startDaemon(context, binPath, projectDir, outputChannel, controlP
       controlPanel.refresh();
     }
   });
+
+  // Update daemon token when the user signs in/out of GitHub
+  context.subscriptions.push(
+    vscode.authentication.onDidChangeSessions(async (e) => {
+      if (e.provider.id !== 'github') return;
+      try {
+        const session = await vscode.authentication.getSession('github', ['repo'], {
+          createIfNone: false,
+        });
+        const newToken = session?.accessToken || '';
+        if (newToken !== client.token) {
+          outputChannel.appendLine('[info] GitHub auth changed — restarting daemon with new token');
+          client.token = newToken;
+          client._disposed = false;  // allow restart after stop()
+          await client.stop();
+          client._disposed = false;  // stop() sets this true
+          await client.start();
+          controlPanel.refresh();
+        }
+      } catch { /* ignore */ }
+    }),
+  );
 
   // Auto-restart daemon on unexpected exit (skip during intentional update)
   client.on('exit', () => {

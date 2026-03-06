@@ -54,6 +54,11 @@ func defaultTokenResolver() string {
 func ResolveToken() string {
 	tokenOnce.Do(func() {
 		tokenVal = TokenResolver()
+		if tokenVal != "" {
+			fmt.Fprintf(os.Stderr, "[auth] GitHub token resolved (%d chars)\n", len(tokenVal))
+		} else {
+			fmt.Fprintf(os.Stderr, "[auth] WARNING: no GitHub token available — private repo access will fail\n")
+		}
 	})
 	return tokenVal
 }
