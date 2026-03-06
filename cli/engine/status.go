@@ -1,8 +1,10 @@
 package engine
 
 import (
+	"fmt"
 	"os"
 	"sync"
+	"time"
 
 	"github.com/peregrine-digital/activate-framework/cli/model"
 	"github.com/peregrine-digital/activate-framework/cli/storage"
@@ -13,12 +15,14 @@ import (
 // version strings via model.ParseFrontmatterVersion and pass cached
 // bytes to RepoAdd so tier/manifest changes need zero HTTP calls.
 func PrefetchManifestFiles(m model.Manifest, repo, branch string) map[string][]byte {
+	start := time.Now()
 	type fetchResult struct {
 		srcPath string
 		data    []byte
 	}
 	results := make([]fetchResult, len(m.Files))
 	var wg sync.WaitGroup
+	var failCount int
 	sem := make(chan struct{}, 8)
 	for i, f := range m.Files {
 		srcPath := f.Src
@@ -30,7 +34,11 @@ func PrefetchManifestFiles(m model.Manifest, repo, branch string) map[string][]b
 			defer wg.Done()
 			sem <- struct{}{}
 			defer func() { <-sem }()
-			data, _ := storage.FetchFile(sp, repo, branch)
+			data, err := storage.FetchFile(sp, repo, branch)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "[prefetch] failed to fetch %s: %s\n", sp, err)
+				failCount++
+			}
 			results[idx] = fetchResult{srcPath: sp, data: data}
 		}(i, srcPath)
 	}
@@ -42,14 +50,15 @@ func PrefetchManifestFiles(m model.Manifest, repo, branch string) map[string][]b
 			cache[r.srcPath] = r.data
 		}
 	}
+	fmt.Fprintf(os.Stderr, "[prefetch] completed in %s (%d files, %d failures)\n", time.Since(start), len(cache), failCount)
 	return cache
 }
 
 // ComputeFileStatuses builds a status list for every file in the manifest.
 //
 // If remoteVersions is non-nil it is used as a cache – no HTTP calls are
-// made.  Pass nil to fetch each version from the remote (legacy behaviour,
-// useful in CLI one-shot commands where latency is acceptable).
+// made.  When nil, bundled versions are left empty rather than fetching
+// each file individually (which would cause multi-second delays).
 func ComputeFileStatuses(m model.Manifest, sidecar *model.RepoSidecar, cfg model.Config, projectDir string, remoteVersions map[string]string) []model.FileStatus {
 	allowedTiers := model.GetAllowedFileTiers(m, cfg.Tier)
 
@@ -91,20 +100,9 @@ func ComputeFileStatuses(m model.Manifest, sidecar *model.RepoSidecar, cfg model
 			srcPath = m.BasePath + "/" + f.Src
 		}
 
-		// Use cached version if available, otherwise fetch from remote.
+		// Use cached version if available; skip if cache is empty.
 		if remoteVersions != nil {
 			fs.BundledVersion = remoteVersions[srcPath]
-		} else {
-			repo := cfg.Repo
-			branch := cfg.Branch
-			if repo == "" {
-				repo = storage.DefaultRepo
-			}
-			if branch == "" {
-				branch = storage.DefaultBranch
-			}
-			bv, _ := storage.ReadFileVersionRemote(srcPath, repo, branch)
-			fs.BundledVersion = bv
 		}
 
 		if fs.Installed {

@@ -68,11 +68,6 @@ func TestComputeFileStatusesBasic(t *testing.T) {
 	projectDir := t.TempDir()
 	basePath := "plugins/test"
 
-	repo, branch, cleanup := serveVersionFiles(t, map[string]string{
-		basePath + "/instructions/general.md": "---\nversion: '0.5.0'\n---\n# General",
-	})
-	defer cleanup()
-
 	// Create installed file with older version
 	installedPath := filepath.Join(projectDir, ".github", "instructions", "general.md")
 	os.MkdirAll(filepath.Dir(installedPath), 0755)
@@ -86,9 +81,13 @@ func TestComputeFileStatusesBasic(t *testing.T) {
 		},
 	}
 	sidecar := &model.RepoSidecar{Files: []string{".github/instructions/general.md"}}
-	cfg := model.Config{Repo: repo, Branch: branch}
+	cfg := model.Config{}
 
-	statuses := ComputeFileStatuses(manifest, sidecar, cfg, projectDir, nil)
+	remoteVersions := map[string]string{
+		basePath + "/instructions/general.md": "0.5.0",
+	}
+
+	statuses := ComputeFileStatuses(manifest, sidecar, cfg, projectDir, remoteVersions)
 	if len(statuses) != 2 {
 		t.Fatalf("expected 2 statuses, got %d", len(statuses))
 	}
@@ -126,11 +125,6 @@ func TestComputeFileStatusesSkipped(t *testing.T) {
 	projectDir := t.TempDir()
 	basePath := "plugins/test"
 
-	repo, branch, cleanup := serveVersionFiles(t, map[string]string{
-		basePath + "/instructions/sec.md": "---\nversion: '0.5.0'\n---\n# Sec",
-	})
-	defer cleanup()
-
 	installedPath := filepath.Join(projectDir, ".github", "instructions", "sec.md")
 	os.MkdirAll(filepath.Dir(installedPath), 0755)
 	os.WriteFile(installedPath, []byte("---\nversion: '0.4.0'\n---\n# Sec"), 0644)
@@ -141,11 +135,14 @@ func TestComputeFileStatusesSkipped(t *testing.T) {
 	}
 	sidecar := &model.RepoSidecar{Files: []string{".github/instructions/sec.md"}}
 	cfg := model.Config{
-		Repo: repo, Branch: branch,
 		SkippedVersions: map[string]string{"instructions/sec.md": "0.5.0"},
 	}
 
-	statuses := ComputeFileStatuses(manifest, sidecar, cfg, projectDir, nil)
+	remoteVersions := map[string]string{
+		basePath + "/instructions/sec.md": "0.5.0",
+	}
+
+	statuses := ComputeFileStatuses(manifest, sidecar, cfg, projectDir, remoteVersions)
 	if len(statuses) != 1 {
 		t.Fatalf("expected 1 status, got %d", len(statuses))
 	}
