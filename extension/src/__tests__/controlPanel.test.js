@@ -235,6 +235,12 @@ describe('ControlPanelProvider', () => {
       assert.ok(panel._view.webview.html.includes('Global Defaults'), 'should show global section');
       assert.ok(panel._view.webview.html.includes('Project Overrides'), 'should show project section');
       assert.ok(panel._view.webview.html.includes('Enabled'), 'should show telemetry status');
+      assert.ok(panel._view.webview.html.includes('Save Current Setup as Global Default'), 'should show save-global-default button');
+      assert.ok(panel._view.webview.html.includes("setGlobalDefault"), 'button should wire to setGlobalDefault message');
+      assert.ok(panel._view.webview.html.includes('Run Quick Start Setup'), 'should show quick-start button');
+      assert.ok(panel._view.webview.html.includes("runQuickStart"), 'quick-start button should wire to runQuickStart message');
+      assert.ok(panel._view.webview.html.includes('Reset Global Defaults'), 'should show reset-global button');
+      assert.ok(panel._view.webview.html.includes("resetGlobalDefaults"), 'reset button should wire to resetGlobalDefaults message');
     });
   });
 });

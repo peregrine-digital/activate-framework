@@ -314,7 +314,7 @@ async function activate(context) {
         outputChannel.clear();
         outputChannel.appendLine('=== Activate Framework Status ===');
         outputChannel.appendLine(`Project:  ${state.projectDir}`);
-        outputChannel.appendLine(`State:    ${state.state}`);
+        outputChannel.appendLine(`State:    ${state.state.hasInstallMarker ? 'installed' : 'not_installed'}`);
         outputChannel.appendLine(`Manifest: ${state.config.manifest}`);
         outputChannel.appendLine(`Tier:     ${state.config.tier}`);
         if (state.files) {
@@ -494,6 +494,19 @@ async function activate(context) {
       if (!requireClient()) return;
       await checkForUpdates(context, controlPanel, true);
     }),
+
+    vscode.commands.registerCommand('activate-framework.quickStart', async () => {
+      if (!requireClient()) return;
+      try {
+        await context.workspaceState.update('quickStartDismissed', false);
+        const state = await client.getState();
+        await showQuickStartPrompt(context, state, { skipGuards: true });
+        controlPanel.refresh();
+        refreshWorkspace('bulk');
+      } catch (err) {
+        vscode.window.showErrorMessage(`Quick Start failed: ${err.message}`);
+      }
+    }),
   );
 
   // ── Resolve CLI and start daemon ──────────────────────────
@@ -589,9 +602,8 @@ async function autoSetup(controlPanel, context) {
   try {
     const state = await client.getState();
 
-    // If not yet installed, add files automatically
-    if (state.state === 'none' || state.state === 'not_installed') {
-      await client.repoAdd();
+    if (!state.state.hasInstallMarker) {
+      await showQuickStartPrompt(context, state);
     } else {
       // Sync to pick up version changes
       const result = await client.sync();
@@ -610,6 +622,50 @@ async function autoSetup(controlPanel, context) {
 
   // Check for updates (non-blocking)
   checkForUpdates(context, controlPanel);
+}
+
+/**
+ * Show a quick-start prompt on first activation in a new workspace.
+ * Offers "Quick Start" which installs ironarch/workflow. Cancelling
+ * sets a per-workspace dismiss flag.
+ *
+ * Guards (skipped when `skipGuards` is true, e.g. manual re-trigger):
+ *  1. If global config already has a manifest → auto-install silently.
+ *  2. If user previously dismissed in this workspace → do nothing.
+ */
+async function showQuickStartPrompt(context, state, { skipGuards = false } = {}) {
+  if (!skipGuards) {
+    // 1. Global preference already set → auto-install silently
+    const globalCfg = await client.getConfig('global');
+    if (globalCfg?.manifest) {
+      await client.repoAdd();
+      return;
+    }
+
+    // 2. Previously dismissed in this workspace → do nothing
+    if (context.workspaceState.get('quickStartDismissed')) {
+      return;
+    }
+  }
+
+  // 3. Show modal prompt
+  const picked = await vscode.window.showInformationMessage(
+    'Set up Activate with a pre-configured workflow?\n\n'
+    + 'Quick Start installs 6 specialized agents for planning, coding, testing, review, documentation, and PR creation.\n\n'
+    + 'You can always run this again from the Settings panel or Command Palette.',
+    { modal: true },
+    'Quick Start',
+  );
+
+  if (picked !== 'Quick Start') {
+    // User dismissed or declined — remember so we don't ask again
+    await context.workspaceState.update('quickStartDismissed', true);
+    return;
+  }
+
+  // Install ironarch/workflow
+  await client.setConfig({ manifest: 'ironarch', tier: 'workflow', scope: 'project' });
+  await client.repoAdd();
 }
 
 /**
@@ -856,5 +912,6 @@ async function deactivate() {
 module.exports = {
   activate, deactivate, buildDownloadHeaders, performCliUpdate,
   verifyBinary, resolveBinPath, verifyChecksum, downloadFile,
+  showQuickStartPrompt,
   POLL_INTERVAL_MS, POST_DETECT_DELAY_MS, POLL_TIMEOUT_MS,
 };

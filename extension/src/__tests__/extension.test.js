@@ -10,6 +10,10 @@ const EventEmitter = require('events');
 const registeredCommands = new Map();
 const subscriptions = [];
 let quickPickResult = null;
+let quickPickAcceptValue = null;
+let infoMessageResults = [];
+let lastQuickPickItems = null;
+let lastQuickPickPlaceholder = null;
 let authSession = null;
 let shownMessages = [];
 let warningMessages = [];
@@ -18,10 +22,24 @@ let webviewProviders = {};
 let outputLines = [];
 let appliedEdits = [];
 
+/** Simple per-workspace state store mock. */
+function createWorkspaceState() {
+  const store = new Map();
+  return {
+    get(key) { return store.get(key); },
+    async update(key, value) { store.set(key, value); },
+    _store: store,
+  };
+}
+
 function resetVscodeMock() {
   registeredCommands.clear();
   subscriptions.length = 0;
   quickPickResult = null;
+  quickPickAcceptValue = null;
+  infoMessageResults = [];
+  lastQuickPickItems = null;
+  lastQuickPickPlaceholder = null;
   authSession = null;
   shownMessages = [];
   warningMessages = [];
@@ -52,13 +70,45 @@ const vscodeMock = {
       return buttons[0]; // auto-confirm
     },
     showErrorMessage: (msg) => { errorMessages.push(msg); },
-    showInformationMessage: (msg) => { shownMessages.push(msg); },
+    showInformationMessage: (msg, ...rest) => {
+      shownMessages.push(msg);
+      // Strip options objects (e.g. { modal: true }) to find button labels
+      const buttons = rest.filter((r) => typeof r === 'string');
+      if (buttons.length > 0 && infoMessageResults.length > 0) {
+        return Promise.resolve(infoMessageResults.shift());
+      }
+      return Promise.resolve(undefined);
+    },
     createOutputChannel: () => ({
       appendLine: (line) => outputLines.push(line),
       clear: () => { outputLines.length = 0; },
       show: () => {},
       dispose: () => {},
     }),
+    createQuickPick: () => {
+      let _onAccept = () => {};
+      let _onHide = () => {};
+      const qp = {
+        items: [],
+        activeItems: [],
+        placeholder: '',
+        onDidAccept: (fn) => { _onAccept = fn; },
+        onDidHide: (fn) => { _onHide = fn; },
+        show: () => {
+          lastQuickPickItems = [...qp.items];
+          lastQuickPickPlaceholder = qp.placeholder;
+          if (quickPickAcceptValue !== null) {
+            const match = qp.items.find((i) => i.value === quickPickAcceptValue);
+            qp.activeItems = match ? [match] : [];
+            _onAccept();
+          } else {
+            _onHide();
+          }
+        },
+        dispose: () => {},
+      };
+      return qp;
+    },
     registerWebviewViewProvider: (viewType, provider) => {
       webviewProviders[viewType] = provider;
       return { dispose: () => {} };
@@ -73,6 +123,7 @@ const vscodeMock = {
   },
   authentication: {
     getSession: async () => authSession,
+    onDidChangeSessions: () => ({ dispose: () => {} }),
   },
   Uri: {
     file: (p) => ({ fsPath: p, scheme: 'file' }),
@@ -112,7 +163,7 @@ class MockClient extends EventEmitter {
   }
 
   async getState() { return this._record('getState'); }
-  async getConfig() { return this._record('getConfig'); }
+  async getConfig(scope) { this.calls.push(['getConfig', scope]); return this._mockResults[`config_${scope}`] || this._mockResults.getConfig || {}; }
   async setConfig(p) { return this._record('setConfig', p); }
   async listFiles(p) { return this._record('listFiles', p); }
   async repoAdd(p) { return this._record('repoAdd', p); }
@@ -194,7 +245,7 @@ describe('extension.js', () => {
     };
 
     mockClient._mockResults.getState = {
-      state: 'installed',
+      state: { hasInstallMarker: true, hasGlobalConfig: false, hasProjectConfig: false },
       config: { tier: 'standard', manifest: 'activate-framework' },
       files: [],
     };
@@ -224,6 +275,7 @@ describe('extension.js', () => {
       'activate-framework.diffFile',
       'activate-framework.skipFileUpdate',
       'activate-framework.telemetryRunNow',
+      'activate-framework.quickStart',
     ];
 
     for (const cmd of expectedCommands) {
@@ -233,7 +285,7 @@ describe('extension.js', () => {
 
   it('changeTier command calls setConfig and sync', async () => {
     mockClient._mockResults.getState = {
-      state: 'installed',
+      state: { hasInstallMarker: true, hasGlobalConfig: false, hasProjectConfig: false },
       config: { tier: 'standard', manifest: 'test' },
       files: [],
     };
@@ -259,7 +311,7 @@ describe('extension.js', () => {
   it('showStatus writes to output channel', async () => {
     mockClient._mockResults.getState = {
       projectDir: '/test/project',
-      state: 'installed',
+      state: { hasInstallMarker: true, hasGlobalConfig: false, hasProjectConfig: false },
       config: { tier: 'standard', manifest: 'activate-framework' },
       files: [{ dest: 'a.md' }, { dest: 'b.md' }],
     };
@@ -269,7 +321,7 @@ describe('extension.js', () => {
     channel.clear();
     channel.appendLine('=== Activate Framework Status ===');
     channel.appendLine(`Project:  ${state.projectDir}`);
-    channel.appendLine(`State:    ${state.state}`);
+    channel.appendLine(`State:    ${state.state.hasInstallMarker ? 'installed' : 'not_installed'}`);
     channel.appendLine(`Manifest: ${state.config.manifest}`);
     channel.appendLine(`Tier:     ${state.config.tier}`);
     channel.appendLine(`Files:    ${state.files.length}`);
@@ -341,13 +393,13 @@ describe('extension.js', () => {
 
   it('auto-setup calls repoAdd when state is none', async () => {
     mockClient._mockResults.getState = {
-      state: 'none',
+      state: { hasInstallMarker: false, hasGlobalConfig: false, hasProjectConfig: false },
       config: { tier: 'standard', manifest: 'test' },
       files: [],
     };
 
     const state = await mockClient.getState();
-    if (state.state === 'none' || state.state === 'not_installed') {
+    if (!state.state.hasInstallMarker) {
       await mockClient.repoAdd();
     }
 
@@ -357,14 +409,14 @@ describe('extension.js', () => {
 
   it('auto-setup calls sync when already installed', async () => {
     mockClient._mockResults.getState = {
-      state: 'installed',
+      state: { hasInstallMarker: true, hasGlobalConfig: false, hasProjectConfig: false },
       config: { tier: 'standard', manifest: 'test' },
       files: [],
     };
     mockClient._mockResults.sync = { action: 'none' };
 
     const state = await mockClient.getState();
-    if (state.state === 'none' || state.state === 'not_installed') {
+    if (!state.state.hasInstallMarker) {
       await mockClient.repoAdd();
     } else {
       await mockClient.sync();
@@ -395,7 +447,7 @@ describe('extension.js', () => {
     };
 
     mockClient._mockResults.getState = {
-      state: 'installed',
+      state: { hasInstallMarker: true, hasGlobalConfig: false, hasProjectConfig: false },
       config: { tier: 'standard', manifest: 'activate-framework' },
       files: [],
     };
@@ -429,7 +481,7 @@ describe('extension.js', () => {
     };
 
     mockClient._mockResults.getState = {
-      state: 'installed',
+      state: { hasInstallMarker: true, hasGlobalConfig: false, hasProjectConfig: false },
       config: { tier: 'standard', manifest: 'activate-framework' },
       files: [],
     };
@@ -461,7 +513,7 @@ describe('extension.js', () => {
     };
 
     mockClient._mockResults.getState = {
-      state: 'installed',
+      state: { hasInstallMarker: true, hasGlobalConfig: false, hasProjectConfig: false },
       config: { tier: 'standard', manifest: 'activate-framework' },
       files: [],
     };
@@ -508,7 +560,7 @@ describe('extension.js', () => {
     };
 
     mockClient._mockResults.getState = {
-      state: 'installed',
+      state: { hasInstallMarker: true, hasGlobalConfig: false, hasProjectConfig: false },
       config: { tier: 'standard', manifest: 'activate-framework' },
       files: [],
     };
@@ -536,5 +588,314 @@ describe('extension.js', () => {
     assert.equal(edit._ops[0].type, 'delete');
     assert.ok(edit._ops[0].uri.fsPath.includes('copilot/agents/test.agent.md'));
     assert.ok(edit._ops[0].opts.ignoreIfNotExists);
+  });
+});
+
+// ── Quick Start prompt tests ─────────────────────────────────
+
+describe('showQuickStartPrompt', () => {
+  let mockClient;
+
+  beforeEach(() => {
+    resetVscodeMock();
+    mockClient = new MockClient();
+    uninstallMocks();
+    installMocks(mockClient);
+  });
+
+  /**
+   * Helper: load the extension module fresh and extract showQuickStartPrompt.
+   * Sets up fs mocks so resolveBinPath can find the CLI binary.
+   */
+  function loadExtension() {
+    Module._load = function (request, parent, isMain) {
+      if (request === 'fs') {
+        const realFs = origLoad.call(this, 'fs', parent, isMain);
+        return { ...realFs, existsSync: (p) => p.includes('bin/activate') ? true : realFs.existsSync(p) };
+      }
+      if (request === 'vscode') return vscodeMock;
+      if (request === './client' || request.endsWith('/client')) {
+        return { ActivateClient: function (opts) { mockClient.constructorOpts = opts; mockClient._token = opts?.token || ''; return mockClient; } };
+      }
+      return origLoad.call(this, request, parent, isMain);
+    };
+    return require('../extension');
+  }
+
+  /**
+   * Helper: activate the extension with a mock context that includes workspaceState.
+   */
+  async function activateWithState(ext, wsState) {
+    mockClient._mockResults.sync = { action: 'none' };
+    const context = {
+      extensionUri: { fsPath: '/ext' },
+      extension: { packageJSON: { version: '1.0.0' } },
+      subscriptions: subscriptions,
+      workspaceState: wsState || createWorkspaceState(),
+    };
+    await ext.activate(context);
+    return context;
+  }
+
+  it('Quick Start: sets ironarch/workflow and calls repoAdd', async () => {
+    const ext = loadExtension();
+
+    // State: first run, no files installed
+    mockClient._mockResults.getState = {
+      state: { hasInstallMarker: false, hasGlobalConfig: false, hasProjectConfig: false },
+      config: { tier: 'standard', manifest: 'activate-framework' },
+      files: [],
+    };
+    // Global config: no manifest set
+    mockClient._mockResults.config_global = {};
+
+    // User picks "Quick Start"
+    infoMessageResults = ['Quick Start'];
+
+    await activateWithState(ext);
+
+    // Should have called setConfig with ironarch/workflow
+    const setCalls = mockClient.calls.filter(([m]) => m === 'setConfig');
+    assert.ok(setCalls.length >= 1, 'should call setConfig at least once');
+    const projectSet = setCalls.find(([, p]) => p?.manifest === 'ironarch');
+    assert.ok(projectSet, 'should set manifest to ironarch');
+    assert.equal(projectSet[1].tier, 'workflow');
+    assert.equal(projectSet[1].scope, 'project');
+
+    // Should have called repoAdd
+    const addCalls = mockClient.calls.filter(([m]) => m === 'repoAdd');
+    assert.ok(addCalls.length >= 1, 'should call repoAdd');
+  });
+
+  it('Cancel: skips install, sets workspaceState flag', async () => {
+    const ext = loadExtension();
+
+    mockClient._mockResults.getState = {
+      state: { hasInstallMarker: false, hasGlobalConfig: false, hasProjectConfig: false },
+      config: { tier: 'standard', manifest: 'activate-framework' },
+      files: [],
+    };
+    mockClient._mockResults.config_global = {};
+
+    // User cancels (no results in queue → undefined)
+
+    const wsState = createWorkspaceState();
+    await activateWithState(ext, wsState);
+
+    // Should NOT call repoAdd
+    const addCalls = mockClient.calls.filter(([m]) => m === 'repoAdd');
+    assert.equal(addCalls.length, 0, 'should not call repoAdd on cancel');
+
+    // Should set workspaceState dismiss flag
+    assert.equal(wsState.get('quickStartDismissed'), true, 'should persist dismiss flag');
+  });
+
+  it('skips prompt when global config has manifest set', async () => {
+    const ext = loadExtension();
+
+    mockClient._mockResults.getState = {
+      state: { hasInstallMarker: false, hasGlobalConfig: true, hasProjectConfig: false },
+      config: { tier: 'workflow', manifest: 'ironarch' },
+      files: [],
+    };
+    // Global config HAS manifest set
+    mockClient._mockResults.config_global = { manifest: 'ironarch', tier: 'workflow' };
+
+    // Should never reach the prompt
+
+    await activateWithState(ext);
+
+    // Should auto-install without prompt
+    const addCalls = mockClient.calls.filter(([m]) => m === 'repoAdd');
+    assert.ok(addCalls.length >= 1, 'should auto-install with global defaults');
+
+    // Should NOT show the modal prompt
+    assert.ok(
+      !shownMessages.some((m) => m.includes('Set up Activate')),
+      'should not show prompt when global manifest is set',
+    );
+  });
+
+  it('skips prompt when workspaceState has dismiss flag', async () => {
+    const ext = loadExtension();
+
+    mockClient._mockResults.getState = {
+      state: { hasInstallMarker: false, hasGlobalConfig: false, hasProjectConfig: false },
+      config: { tier: 'standard', manifest: 'activate-framework' },
+      files: [],
+    };
+    mockClient._mockResults.config_global = {};
+
+    const wsState = createWorkspaceState();
+    await wsState.update('quickStartDismissed', true);
+
+    await activateWithState(ext, wsState);
+
+    // Should NOT call repoAdd
+    const addCalls = mockClient.calls.filter(([m]) => m === 'repoAdd');
+    assert.equal(addCalls.length, 0, 'should not install when dismissed');
+
+    // Should NOT show prompt
+    assert.ok(
+      !shownMessages.some((m) => m.includes('Set up Activate')),
+      'should not show prompt when dismissed',
+    );
+  });
+
+  it('modal prompt shows correct message content', async () => {
+    const ext = loadExtension();
+
+    mockClient._mockResults.getState = {
+      state: { hasInstallMarker: false, hasGlobalConfig: false, hasProjectConfig: false },
+      config: { tier: 'standard', manifest: 'activate-framework' },
+      files: [],
+    };
+    mockClient._mockResults.config_global = {};
+
+    // User picks Quick Start
+    infoMessageResults = ['Quick Start'];
+
+    await activateWithState(ext);
+
+    // Should have shown a modal with setup info
+    assert.ok(
+      shownMessages.some((m) => m.includes('6 specialized agents')),
+      'should mention specialized agents in prompt',
+    );
+    assert.ok(
+      shownMessages.some((m) => m.includes('Settings panel')),
+      'should mention Settings panel for re-trigger',
+    );
+  });
+
+  it('does not show prompt for already-installed workspaces', async () => {
+    const ext = loadExtension();
+
+    mockClient._mockResults.getState = {
+      state: { hasInstallMarker: true, hasGlobalConfig: false, hasProjectConfig: false },
+      config: { tier: 'standard', manifest: 'activate-framework' },
+      files: [],
+    };
+    mockClient._mockResults.sync = { action: 'none' };
+
+    await activateWithState(ext);
+
+    // Should call sync, not repoAdd
+    const syncCalls = mockClient.calls.filter(([m]) => m === 'sync');
+    assert.ok(syncCalls.length >= 1, 'should sync for installed workspaces');
+
+    // Should NOT show quick-start prompt
+    assert.ok(
+      !shownMessages.some((m) => m.includes('Set up Activate')),
+      'should not show prompt for installed workspace',
+    );
+  });
+
+  it('shows prompt when global config returns empty manifest string', async () => {
+    const ext = loadExtension();
+
+    // Daemon returns {manifest: "", tier: ""} when no global config file exists
+    mockClient._mockResults.getState = {
+      state: { hasInstallMarker: false, hasGlobalConfig: false, hasProjectConfig: false },
+      config: { tier: 'standard', manifest: 'activate-framework' },
+      files: [],
+    };
+    mockClient._mockResults.config_global = { manifest: '', tier: '' };
+
+    infoMessageResults = ['Quick Start'];
+
+    await activateWithState(ext);
+
+    // Empty-string manifest should be treated as "no preference" — prompt should appear
+    assert.ok(
+      shownMessages.some((m) => m.includes('Set up Activate')),
+      'should show prompt when global manifest is empty string',
+    );
+    const addCalls = mockClient.calls.filter(([m]) => m === 'repoAdd');
+    assert.ok(addCalls.length >= 1, 'should call repoAdd after picking');
+  });
+
+  it('calls getConfig with global scope to check for existing preferences', async () => {
+    const ext = loadExtension();
+
+    mockClient._mockResults.getState = {
+      state: { hasInstallMarker: false, hasGlobalConfig: false, hasProjectConfig: false },
+      config: { tier: 'standard', manifest: 'activate-framework' },
+      files: [],
+    };
+    mockClient._mockResults.config_global = {};
+
+    infoMessageResults = ['Quick Start'];
+
+    await activateWithState(ext);
+
+    // Verify getConfig was called with 'global' scope
+    const configCalls = mockClient.calls.filter(([m]) => m === 'getConfig');
+    assert.ok(configCalls.length >= 1, 'should call getConfig');
+    assert.ok(
+      configCalls.some(([, scope]) => scope === 'global'),
+      'should call getConfig with global scope',
+    );
+  });
+
+  it('quickStart command skips guards and shows prompt even when global config is set', async () => {
+    const ext = loadExtension();
+
+    mockClient._mockResults.getState = {
+      state: { hasInstallMarker: true, hasGlobalConfig: true, hasProjectConfig: false },
+      config: { tier: 'workflow', manifest: 'ironarch' },
+      files: [],
+    };
+    mockClient._mockResults.config_global = { manifest: 'ironarch', tier: 'workflow' };
+    mockClient._mockResults.sync = { action: 'none' };
+
+    // User picks Quick Start from the re-trigger
+    infoMessageResults = ['Quick Start'];
+
+    await activateWithState(ext);
+
+    // Execute the quickStart command manually
+    const handler = registeredCommands.get('activate-framework.quickStart');
+    assert.ok(handler, 'quickStart command should be registered');
+    await handler();
+
+    // Should show the modal even though global config is set
+    assert.ok(
+      shownMessages.some((m) => m.includes('Set up Activate')),
+      'should show prompt when triggered via command',
+    );
+  });
+
+  it('quickStart command clears dismiss flag before showing prompt', async () => {
+    const ext = loadExtension();
+
+    mockClient._mockResults.getState = {
+      state: { hasInstallMarker: true, hasGlobalConfig: false, hasProjectConfig: false },
+      config: { tier: 'standard', manifest: 'activate-framework' },
+      files: [],
+    };
+    mockClient._mockResults.config_global = {};
+    mockClient._mockResults.sync = { action: 'none' };
+
+    const wsState = createWorkspaceState();
+    await wsState.update('quickStartDismissed', true);
+
+    // User picks Quick Start from the re-trigger
+    infoMessageResults = ['Quick Start'];
+
+    const context = await activateWithState(ext, wsState);
+
+    // Execute the quickStart command
+    const handler = registeredCommands.get('activate-framework.quickStart');
+    await handler();
+
+    // Dismiss flag should have been cleared
+    assert.equal(wsState.get('quickStartDismissed'), false, 'dismiss flag should be cleared by command');
+
+    // Should show prompt
+    assert.ok(
+      shownMessages.some((m) => m.includes('Set up Activate')),
+      'should show prompt after clearing dismiss flag',
+    );
   });
 });
