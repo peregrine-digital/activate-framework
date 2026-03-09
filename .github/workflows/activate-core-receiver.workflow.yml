@@ -18,7 +18,7 @@ jobs:
     if: github.event.client_payload.artifact_url != ''
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Check source token configuration
         id: source_token_config
