@@ -24,7 +24,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
           go-version-file: cli/go.mod
           cache-dependency-path: cli/go.sum
@@ -55,7 +55,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
           go-version-file: cli/go.mod
           cache-dependency-path: cli/go.sum
