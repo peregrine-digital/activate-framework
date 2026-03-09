@@ -83,6 +83,7 @@ Security-first guidance that applies to all code contributions. These guardrails
 - Prefer OIDC for cloud provider credentials; avoid long-lived secrets in workflows.
 - Avoid `pull_request_target` for running untrusted code; use `pull_request` and restrict dangerous steps.
 - Limit `workflow_call` and `workflow_dispatch` to trusted callers; review inherited secrets usage.
+- When adding workflow-level `permissions: contents: read`, split release attachment steps (e.g., `softprops/action-gh-release`) into a separate job with job-level `permissions: contents: write`. Keeping them in the build job will 403 at release time. See `cli.yml` `release-publish` job for the established pattern.
 
 ## Federal Compliance
 
