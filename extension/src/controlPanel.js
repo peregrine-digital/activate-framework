@@ -1371,7 +1371,7 @@ class ControlPanelProvider {
   <div class="section-label">Global Defaults</div>
   <div class="path-display">${esc(state?.projectDir ? '~/.activate/config.json' : '')}</div>
   <div style="padding: 4px 0;">
-    <button class="secondary" onclick="send('setGlobalDefault', { updates: { manifest: '${esc(resolved.manifest || '')}', tier: '${esc(resolved.tier || '')}' } })">
+    <button class="secondary" onclick="send('setGlobalDefault', { updates: ${esc(JSON.stringify({ manifest: resolved.manifest || '', tier: resolved.tier || '' }))} })">
       Save Current Setup as Global Default
     </button>
     <button class="secondary" onclick="send('resetGlobalDefaults')" style="margin-left: 4px;">

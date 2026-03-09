@@ -131,4 +131,4 @@ let infoMessageResult = 'Quick Start';
 |---------|-------|-----|
 | Tests pass but `autoSetup` assertions fail (e.g., "setConfig never called") | `vscode.authentication.onDidChangeSessions` missing from mock — `startDaemon()` throws, caught silently | Add `onDidChangeSessions: () => ({ dispose: () => {} })` to auth mock |
 | `sync()` returns "not installed" on first activation | Wrong RPC — `sync` requires existing sidecar | Use `repoAdd()` for first-time install |
-| Config mock returns same data for global and project scope | Using unscopd `_mockResults.getConfig` | Use `_mockResults.config_global` / `_mockResults.config_project` keys |
+| Config mock returns same data for global and project scope | Using unscoped `_mockResults.getConfig` | Use `_mockResults.config_global` / `_mockResults.config_project` keys |

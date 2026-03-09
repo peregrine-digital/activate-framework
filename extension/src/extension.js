@@ -499,8 +499,7 @@ async function activate(context) {
       if (!requireClient()) return;
       try {
         await context.workspaceState.update('quickStartDismissed', false);
-        const state = await client.getState();
-        await showQuickStartPrompt(context, state, { skipGuards: true });
+        await showQuickStartPrompt(context, { skipGuards: true });
         controlPanel.refresh();
         refreshWorkspace('bulk');
       } catch (err) {
@@ -603,7 +602,7 @@ async function autoSetup(controlPanel, context) {
     const state = await client.getState();
 
     if (!state.state.hasInstallMarker) {
-      await showQuickStartPrompt(context, state);
+      await showQuickStartPrompt(context);
     } else {
       // Sync to pick up version changes
       const result = await client.sync();
@@ -633,7 +632,7 @@ async function autoSetup(controlPanel, context) {
  *  1. If global config already has a manifest → auto-install silently.
  *  2. If user previously dismissed in this workspace → do nothing.
  */
-async function showQuickStartPrompt(context, state, { skipGuards = false } = {}) {
+async function showQuickStartPrompt(context, { skipGuards = false } = {}) {
   if (!skipGuards) {
     // 1. Global preference already set → auto-install silently
     const globalCfg = await client.getConfig('global');
