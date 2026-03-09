@@ -35,7 +35,7 @@ jobs:
       - name: Generate source access token
         id: source_token
         if: ${{ steps.source_token_config.outputs.enabled == 'true' }}
-        uses: actions/create-github-app-token@v1
+        uses: actions/create-github-app-token@v2
         with:
           app-id: ${{ secrets.ACTIVATE_CORE_APP_ID }}
           private-key: ${{ secrets.ACTIVATE_CORE_APP_PRIVATE_KEY }}
