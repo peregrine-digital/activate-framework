@@ -41,7 +41,7 @@ jobs:
         run: npm run package
 
       - name: Upload VSIX artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: github.event_name == 'release' || github.ref == 'refs/heads/main'
         with:
           name: activate-framework-vsix
