@@ -1371,6 +1371,9 @@ class ControlPanelProvider {
   <div class="section-label">Global Defaults</div>
   <div class="path-display">${esc(state?.projectDir ? '~/.activate/config.json' : '')}</div>
   <div style="padding: 4px 0;">
+    <!-- JSON.stringify produces double-quoted strings; esc() HTML-encodes them.
+         The browser decodes entities before evaluating onclick JS, so the
+         JSON object arrives intact without breaking on special chars. -->
     <button class="secondary" onclick="send('setGlobalDefault', { updates: ${esc(JSON.stringify({ manifest: resolved.manifest || '', tier: resolved.tier || '' }))} })">
       Save Current Setup as Global Default
     </button>

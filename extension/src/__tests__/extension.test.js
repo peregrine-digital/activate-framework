@@ -10,10 +10,7 @@ const EventEmitter = require('events');
 const registeredCommands = new Map();
 const subscriptions = [];
 let quickPickResult = null;
-let quickPickAcceptValue = null;
 let infoMessageResults = [];
-let lastQuickPickItems = null;
-let lastQuickPickPlaceholder = null;
 let authSession = null;
 let shownMessages = [];
 let warningMessages = [];
@@ -36,10 +33,7 @@ function resetVscodeMock() {
   registeredCommands.clear();
   subscriptions.length = 0;
   quickPickResult = null;
-  quickPickAcceptValue = null;
   infoMessageResults = [];
-  lastQuickPickItems = null;
-  lastQuickPickPlaceholder = null;
   authSession = null;
   shownMessages = [];
   warningMessages = [];
@@ -85,30 +79,6 @@ const vscodeMock = {
       show: () => {},
       dispose: () => {},
     }),
-    createQuickPick: () => {
-      let _onAccept = () => {};
-      let _onHide = () => {};
-      const qp = {
-        items: [],
-        activeItems: [],
-        placeholder: '',
-        onDidAccept: (fn) => { _onAccept = fn; },
-        onDidHide: (fn) => { _onHide = fn; },
-        show: () => {
-          lastQuickPickItems = [...qp.items];
-          lastQuickPickPlaceholder = qp.placeholder;
-          if (quickPickAcceptValue !== null) {
-            const match = qp.items.find((i) => i.value === quickPickAcceptValue);
-            qp.activeItems = match ? [match] : [];
-            _onAccept();
-          } else {
-            _onHide();
-          }
-        },
-        dispose: () => {},
-      };
-      return qp;
-    },
     registerWebviewViewProvider: (viewType, provider) => {
       webviewProviders[viewType] = provider;
       return { dispose: () => {} };
