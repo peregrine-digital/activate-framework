@@ -124,6 +124,16 @@ let infoMessageResult = 'Quick Start';
 
 - ❌ **Calling `sync()` for first-time installs** — `sync()` short-circuits with "not installed" when no sidecar (`.github/.activate-installed.json`) exists. Use `repoAdd()` for first install, `sync()` only for already-installed repos. Mixing them up produces silent no-ops.
 - ❌ **Using `_mockResults.getConfig` for scope-specific tests** — Returns same data for all scopes. Use `config_global` / `config_project` keys instead (see Testing Shortcuts above).
+- ❌ **Interpolating values into onclick with single-quoted strings** — `'${esc(value)}'` breaks when values contain `'` because HTML entities are decoded before JS evaluation. Use `${esc(JSON.stringify(obj))}` to produce a safe JSON literal instead. The browser decodes `&quot;` back to `"` before evaluating the onclick handler, so the JSON arrives intact.
+
+  ```js
+  // ✅ Safe — JSON.stringify + esc
+  onclick="send('setGlobalDefault', { updates: ${esc(JSON.stringify({ manifest: value }))} })"
+  
+  // ❌ Fragile — single quotes break on apostrophes
+  onclick="send('setGlobalDefault', { updates: { manifest: '${esc(value)}' } })"
+  ```
+  *Surfaced in: PR #17 review — copilot-pull-request-reviewer flagged injection risk.*
 
 ## Troubleshooting
 
