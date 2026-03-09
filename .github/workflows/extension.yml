@@ -9,6 +9,9 @@ on:
   release:
     types: [published]
 
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -18,6 +21,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - uses: actions/setup-node@v4
         with:
@@ -26,6 +31,10 @@ jobs:
           cache-dependency-path: extension/package-lock.json
 
       - run: npm ci
+
+      - name: Audit dependencies
+        run: npm audit --omit=dev
+
       - run: npm test
 
       - name: Package VSIX
@@ -38,8 +47,21 @@ jobs:
           name: activate-framework-vsix
           path: extension/*.vsix
 
+  release-publish:
+    if: github.event_name == 'release'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download VSIX artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: activate-framework-vsix
+          path: dist
+
       - name: Attach VSIX to Release
-        if: github.event_name == 'release'
         uses: softprops/action-gh-release@v2
         with:
-          files: extension/*.vsix
+          files: dist/*.vsix
