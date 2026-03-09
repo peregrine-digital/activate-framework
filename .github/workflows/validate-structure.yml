@@ -3,9 +3,9 @@ name: Validate Plugin Structure
 on:
   push:
     branches: [main, 'feat/**']
-    paths: ['plugins/**', 'manifests/**', 'skills/**', 'framework/**']
+    paths: ['plugins/**', 'manifests/**', 'framework/**']
   pull_request:
-    paths: ['plugins/**', 'manifests/**', 'skills/**', 'framework/**']
+    paths: ['plugins/**', 'manifests/**', 'framework/**']
 
 permissions:
   contents: read
