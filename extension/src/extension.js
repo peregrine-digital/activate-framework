@@ -651,7 +651,7 @@ async function showQuickStartPrompt(context, { skipGuards = false } = {}) {
   const picked = await vscode.window.showInformationMessage(
     'Set up Activate with a pre-configured workflow?\n\n'
     + 'Quick Start installs 6 specialized agents for planning, coding, testing, review, documentation, and PR creation.\n\n'
-    + 'You can always run this again from the Settings panel or Command Palette.',
+    + 'If you skip this, no files will be installed. You can configure your setup manually from the Settings panel, or run Quick Start later from the Command Palette.',
     { modal: true },
     'Quick Start',
   );
