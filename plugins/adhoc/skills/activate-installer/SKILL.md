@@ -125,7 +125,7 @@ unzip -q activate-copilot-*.zip -d "$TEMP_DIR"
 
 # Show bundle layout and plugin payload
 ls -la "$TEMP_DIR"
-ls -la "$TEMP_DIR"/activate-copilot-*/plugins/activate-framework
+ls -la "$TEMP_DIR"/activate-copilot-*/plugins/adhoc
 ```
 
 Show user the file list:
@@ -136,7 +136,7 @@ Bundle includes:
 ✓ install.mjs (root shim)
 ✓ framework/install.mjs (CLI engine)
 ✓ docs/README.md
-✓ manifests/activate-framework.json
+✓ manifests/adhoc.json
 ```
 
 ### Step 5: Install Files
@@ -164,27 +164,27 @@ mv AGENTS.md AGENTS.md.backup-$(date +%Y%m%d)
 
 ```bash
 # Install core files
-cp "$TEMP_DIR"/activate-copilot-*/plugins/activate-framework/AGENTS.md AGENTS.md
-cp "$TEMP_DIR"/activate-copilot-*/plugins/activate-framework/instructions/security.instructions.md .github/instructions/
-cp "$TEMP_DIR"/activate-copilot-*/plugins/activate-framework/instructions/general.instructions.md .github/instructions/
-cp "$TEMP_DIR"/activate-copilot-*/plugins/activate-framework/prompts/*.prompt.md .github/prompts/
+cp "$TEMP_DIR"/activate-copilot-*/plugins/adhoc/AGENTS.md AGENTS.md
+cp "$TEMP_DIR"/activate-copilot-*/plugins/adhoc/instructions/security.instructions.md .github/instructions/
+cp "$TEMP_DIR"/activate-copilot-*/plugins/adhoc/instructions/general.instructions.md .github/instructions/
+cp "$TEMP_DIR"/activate-copilot-*/plugins/adhoc/prompts/*.prompt.md .github/prompts/
 
 # Install ad-hoc files for standard tier
-cp "$TEMP_DIR"/activate-copilot-*/plugins/activate-framework/instructions/code-review.instructions.md .github/instructions/
+cp "$TEMP_DIR"/activate-copilot-*/plugins/adhoc/instructions/code-review.instructions.md .github/instructions/
 if [[ -f pyproject.toml ]]; then
-    cp "$TEMP_DIR"/activate-copilot-*/plugins/activate-framework/instructions/python.instructions.md .github/instructions/
+    cp "$TEMP_DIR"/activate-copilot-*/plugins/adhoc/instructions/python.instructions.md .github/instructions/
 fi
 
 if [[ -f package.json ]]; then
-    cp "$TEMP_DIR"/activate-copilot-*/plugins/activate-framework/instructions/typescript.instructions.md .github/instructions/
+    cp "$TEMP_DIR"/activate-copilot-*/plugins/adhoc/instructions/typescript.instructions.md .github/instructions/
 fi
 
 # Install advanced extras when requested
-cp -r "$TEMP_DIR"/activate-copilot-*/plugins/activate-framework/skills .github/
-cp -r "$TEMP_DIR"/activate-copilot-*/plugins/activate-framework/agents .github/
+cp -r "$TEMP_DIR"/activate-copilot-*/plugins/adhoc/skills .github/
+cp -r "$TEMP_DIR"/activate-copilot-*/plugins/adhoc/agents .github/
 
 # Write version marker
-cp "$TEMP_DIR"/activate-copilot-*/plugins/activate-framework/.activate-version .github/.activate-version
+cp "$TEMP_DIR"/activate-copilot-*/plugins/adhoc/.activate-version .github/.activate-version
 ```
 
 ### Step 6: Customize AGENTS.md

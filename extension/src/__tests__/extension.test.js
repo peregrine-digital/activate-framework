@@ -195,7 +195,7 @@ describe('extension.js', () => {
 
     mockClient._mockResults.getState = {
       state: 'installed',
-      config: { tier: 'standard', manifest: 'activate-framework' },
+      config: { tier: 'standard', manifest: 'adhoc' },
       files: [],
     };
     mockClient._mockResults.sync = { action: 'none' };
@@ -260,7 +260,7 @@ describe('extension.js', () => {
     mockClient._mockResults.getState = {
       projectDir: '/test/project',
       state: 'installed',
-      config: { tier: 'standard', manifest: 'activate-framework' },
+      config: { tier: 'standard', manifest: 'adhoc' },
       files: [{ dest: 'a.md' }, { dest: 'b.md' }],
     };
 
@@ -396,7 +396,7 @@ describe('extension.js', () => {
 
     mockClient._mockResults.getState = {
       state: 'installed',
-      config: { tier: 'standard', manifest: 'activate-framework' },
+      config: { tier: 'standard', manifest: 'adhoc' },
       files: [],
     };
     mockClient._mockResults.sync = { action: 'none' };
@@ -430,7 +430,7 @@ describe('extension.js', () => {
 
     mockClient._mockResults.getState = {
       state: 'installed',
-      config: { tier: 'standard', manifest: 'activate-framework' },
+      config: { tier: 'standard', manifest: 'adhoc' },
       files: [],
     };
     mockClient._mockResults.sync = { action: 'none' };
@@ -462,7 +462,7 @@ describe('extension.js', () => {
 
     mockClient._mockResults.getState = {
       state: 'installed',
-      config: { tier: 'standard', manifest: 'activate-framework' },
+      config: { tier: 'standard', manifest: 'adhoc' },
       files: [],
     };
     mockClient._mockResults.sync = { action: 'none' };
@@ -509,7 +509,7 @@ describe('extension.js', () => {
 
     mockClient._mockResults.getState = {
       state: 'installed',
-      config: { tier: 'standard', manifest: 'activate-framework' },
+      config: { tier: 'standard', manifest: 'adhoc' },
       files: [],
     };
     mockClient._mockResults.sync = { action: 'none' };

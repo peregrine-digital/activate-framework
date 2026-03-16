@@ -1,7 +1,7 @@
 package model
 
 const (
-	DefaultManifest = "activate-framework"
+	DefaultManifest = "adhoc"
 	DefaultTier     = "standard"
 
 	// ClearValue is a sentinel passed via configSet to unset a string field.

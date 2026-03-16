@@ -36,7 +36,7 @@ Two-layer JSON config, same schema everywhere:
 **Schema:**
 ```json
 {
-  "manifest": "activate-framework",
+  "manifest": "adhoc",
   "tier": "standard",
   "repo": "peregrine-digital/activate-framework",
   "branch": "main",

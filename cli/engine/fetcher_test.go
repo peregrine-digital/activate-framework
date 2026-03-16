@@ -77,8 +77,8 @@ func TestDiscoverRemoteManifestsViaIndex(t *testing.T) {
 
 func TestDiscoverRemoteManifestsFallback(t *testing.T) {
 	manifest := manifestJSON{
-		Name:    "Activate Framework",
-		Files:   []model.ManifestFile{{Src: "b.md", Dest: ".github/b.md", Tier: "standard"}},
+		Name:  "Activate Framework",
+		Files: []model.ManifestFile{{Src: "b.md", Dest: ".github/b.md", Tier: "standard"}},
 	}
 	manifestPayload, _ := json.Marshal(manifest)
 
@@ -86,7 +86,7 @@ func TestDiscoverRemoteManifestsFallback(t *testing.T) {
 		switch {
 		case strings.HasSuffix(r.URL.Path, "manifests/index.json"):
 			w.WriteHeader(http.StatusNotFound)
-		case strings.HasSuffix(r.URL.Path, "manifests/activate-framework.json"):
+		case strings.HasSuffix(r.URL.Path, "manifests/adhoc.json"):
 			w.Write(manifestPayload)
 		default:
 			w.WriteHeader(http.StatusNotFound)
