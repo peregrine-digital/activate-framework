@@ -25,9 +25,7 @@ The extension provides a sidebar control panel for switching manifests, changing
 ### CLI Only
 
 ```bash
-url -fsSL -H "Authorization: Bearer $GITHUB_TOKEN" \
-"https://raw.githubusercontent.com/peregrine-digital/activate-framework/main/install-cli.sh" \
-| GITHUB_TOKEN="$GITHUB_TOKEN" sh
+url -fsSL -H "Authorization: Bearer $GITHUB_TOKEN" "https://raw.githubusercontent.com/peregrine-digital/activate-framework/main/install-cli.sh" | GITHUB_TOKEN="$GITHUB_TOKEN" sh
 ```
 
 Then run the interactive installer:
