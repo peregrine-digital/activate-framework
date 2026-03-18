@@ -21,10 +21,11 @@
     exists: boolean;
   }
 
-  let view = $state<'welcome' | 'workspace'>('welcome');
+  let view = $state<'welcome' | 'loading' | 'workspace'>('welcome');
   let appState = $state<AppState | null>(null);
   let workspaces = $state<WorkspaceInfo[]>([]);
   let loading = $state(true);
+  let loadingName = $state('');
 
   // Listen for native menu events from Wails
   if (typeof window !== 'undefined') {
@@ -49,26 +50,41 @@
   }
 
   async function selectWorkspace(path: string) {
-    if (wailsApp?.InitWorkspace) {
-      await wailsApp.InitWorkspace(path);
+    loadingName = path.split('/').pop() || path;
+    view = 'loading';
+    try {
+      if (wailsApp?.InitWorkspace) {
+        await wailsApp.InitWorkspace(path);
+      }
+      appState = await api.getState();
+      view = 'workspace';
+      nav.reset();
+      wailsApp?.SetWorkspaceMenuVisible(true);
+    } catch (e) {
+      console.error('Failed to open workspace:', e);
+      view = 'welcome';
     }
-    appState = await api.getState();
-    view = 'workspace';
-    nav.reset();
-    wailsApp?.SetWorkspaceMenuVisible(true);
   }
 
   async function browseWorkspace() {
     if (wailsApp?.SelectWorkspace) {
-      const state = await wailsApp.SelectWorkspace();
-      if (state?.projectDir) {
-        appState = await api.getState();
-        view = 'workspace';
-        nav.reset();
-        wailsApp?.SetWorkspaceMenuVisible(true);
-        loadWorkspaces();
-        return;
+      loadingName = 'workspace';
+      view = 'loading';
+      try {
+        const state = await wailsApp.SelectWorkspace();
+        if (state?.projectDir) {
+          loadingName = state.projectDir.split('/').pop() || state.projectDir;
+          appState = await api.getState();
+          view = 'workspace';
+          nav.reset();
+          wailsApp?.SetWorkspaceMenuVisible(true);
+          loadWorkspaces();
+          return;
+        }
+      } catch (e) {
+        console.error('Failed to open workspace:', e);
       }
+      view = 'welcome';
     }
   }
 
@@ -91,7 +107,9 @@
 </script>
 
 <div class="bg-activate-bg text-activate-fg h-screen w-screen overflow-hidden font-sans text-sm flex flex-col">
-  {#if nav.page === 'settings' && view !== 'workspace'}
+  {#if view === 'loading'}
+    <!-- No header during loading -->
+  {:else if nav.page === 'settings' && view !== 'workspace'}
     <header class="shrink-0 px-4 pt-3 pb-1"></header>
   {:else if view === 'workspace'}
     <header class="shrink-0 px-4 pt-3 pb-1 flex items-center">
@@ -110,7 +128,15 @@
   {/if}
 
   <main class="flex-1 overflow-y-auto overflow-x-hidden px-4 pb-4">
-  {#if nav.page === 'settings' && view !== 'workspace'}
+  {#if view === 'loading'}
+    <div class="flex flex-col items-center justify-center h-full gap-4 animate-in">
+      <div class="loading-spinner"></div>
+      <div class="text-center">
+        <p class="text-sm font-medium opacity-80">Opening workspace</p>
+        <p class="text-xs opacity-40 mt-1">{loadingName}</p>
+      </div>
+    </div>
+  {:else if nav.page === 'settings' && view !== 'workspace'}
     <!-- Global settings accessible from welcome screen -->
     {#await api.getState() then mockState}
       <WorkspaceView
@@ -142,3 +168,17 @@
   {/if}
   </main>
 </div>
+
+<style>
+  .loading-spinner {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    border: 2.5px solid rgba(63, 63, 70, 0.4);
+    border-top-color: var(--color-activate-btn-primary-bg);
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+</style>

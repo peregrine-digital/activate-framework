@@ -4,6 +4,8 @@
   import StatusBar from './StatusBar.svelte';
   import ButtonRow from './ButtonRow.svelte';
   import CategoryList from './CategoryList.svelte';
+  import SelectModal from './SelectModal.svelte';
+  import type { SelectOption } from './SelectModal.svelte';
 
   interface Props {
     state: AppState;
@@ -26,13 +28,68 @@
   let outsideTierFiles = $derived(files.filter((f) => !f.installed && !f.inTier && f.override !== 'excluded'));
   let excludedFiles = $derived(files.filter((f) => f.override === 'excluded'));
 
+  // Select modal state
+  let selectModal = $state<{ title: string; options: SelectOption[]; onSelect: (id: string) => void } | null>(null);
+
   function handleInstall(file: FileStatus) { api.installFile(file); }
   function handleUninstall(file: FileStatus) { api.uninstallFile(file); }
   function handleDiff(file: FileStatus) { api.diffFile(file); }
   function handleSkipUpdate(file: FileStatus) { api.skipUpdate(file); }
   function handleOpen(file: FileStatus) { api.openFile(file); }
   function handleSetOverride(dest: string, override: '' | 'pinned' | 'excluded') { api.setFileOverride(dest, override); }
+
+  function handleChangeTier() {
+    if (api.platform === 'vscode') {
+      api.changeTier();
+      return;
+    }
+    const options: SelectOption[] = tiers.map((t) => ({
+      id: t.id,
+      label: t.label,
+      description: t.description,
+      active: t.id === config.tier,
+    }));
+    selectModal = {
+      title: 'Select Tier',
+      options,
+      onSelect: async (id) => {
+        selectModal = null;
+        await api.setConfig({ scope: 'project', tier: id });
+      },
+    };
+  }
+
+  async function handleChangeManifest() {
+    if (api.platform === 'vscode') {
+      api.changeManifest();
+      return;
+    }
+    const manifests = await api.listManifests();
+    const options: SelectOption[] = manifests.map((m) => ({
+      id: m.id,
+      label: m.name,
+      description: m.description,
+      active: m.id === config.manifest,
+    }));
+    selectModal = {
+      title: 'Select Manifest',
+      options,
+      onSelect: async (id) => {
+        selectModal = null;
+        await api.setConfig({ scope: 'project', manifest: id });
+      },
+    };
+  }
 </script>
+
+{#if selectModal}
+  <SelectModal
+    title={selectModal.title}
+    options={selectModal.options}
+    onSelect={selectModal.onSelect}
+    onClose={() => (selectModal = null)}
+  />
+{/if}
 
 <StatusBar
   tier={config.tier}
@@ -48,8 +105,8 @@
   {isActive}
   manifestCount={state.manifests.length}
   platform={api.platform}
-  onChangeTier={() => api.changeTier()}
-  onChangeManifest={() => api.changeManifest()}
+  onChangeTier={handleChangeTier}
+  onChangeManifest={handleChangeManifest}
   onToggleWorkspace={() => isActive ? api.removeFromWorkspace() : api.addToWorkspace()}
   onUpdateAll={() => api.updateAll()}
   onShowUsage={() => onNavigate('usage')}
