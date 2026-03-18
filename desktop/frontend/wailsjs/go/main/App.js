@@ -14,6 +14,10 @@ export function CloseWorkspace() {
   return window['go']['main']['App']['CloseWorkspace']();
 }
 
+export function DebugLog(arg1) {
+  return window['go']['main']['App']['DebugLog'](arg1);
+}
+
 export function DiffFile(arg1) {
   return window['go']['main']['App']['DiffFile'](arg1);
 }

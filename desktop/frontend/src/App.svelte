@@ -1,5 +1,6 @@
 <script lang="ts">
   import '../../../ui/src/app.css';
+  import { flushSync } from 'svelte';
   import { createWailsAPI } from '$lib/adapters/wails';
   import { createNavigation } from '$lib/navigation.svelte';
   import type { AppState } from '$lib/types';
@@ -46,65 +47,89 @@
   async function loadWorkspaces() {
     try {
       if (wailsApp?.ListWorkspaces) {
-        workspaces = (await wailsApp.ListWorkspaces()) ?? [];
-        console.log('[activate] Loaded workspaces:', workspaces.length);
+        const result = (await wailsApp.ListWorkspaces()) ?? [];
+        flushSync(() => {
+          workspaces = result;
+          loading = false;
+        });
+        return;
       }
     } catch (e) {
       console.error('[activate] loadWorkspaces failed:', e);
     }
-    loading = false;
+    flushSync(() => { loading = false; });
+  }
+
+  function flog(msg: string) {
+    console.log('[activate]', msg);
+    wailsApp?.DebugLog?.(msg);
   }
 
   async function selectWorkspace(path: string) {
-    loadingName = path.split('/').pop() || path;
-    loadingError = '';
-    view = 'loading';
+    flushSync(() => {
+      loadingName = path.split('/').pop() || path;
+      loadingError = '';
+      view = 'loading';
+    });
     try {
-      console.log('[activate] InitWorkspace:', path);
+      flog('selectWorkspace: calling InitWorkspace path=' + path);
       if (wailsApp?.InitWorkspace) {
         await wailsApp.InitWorkspace(path);
       }
-      console.log('[activate] InitWorkspace done, fetching state…');
+      flog('selectWorkspace: InitWorkspace done, calling getState');
       const state = await api.getState();
-      console.log('[activate] getState done:', state?.projectDir);
-      appState = state;
-      view = 'workspace';
+      flog('selectWorkspace: getState returned, keys=' + Object.keys(state || {}).join(','));
+      flushSync(() => {
+        appState = state;
+        view = 'workspace';
+      });
       nav.reset();
       wailsApp?.SetWorkspaceMenuVisible(true);
+      flog('selectWorkspace: DONE');
     } catch (e: any) {
-      console.error('[activate] selectWorkspace failed:', e);
-      loadingError = e?.message || String(e);
+      flog('selectWorkspace: ERROR ' + (e?.message || String(e)));
+      flushSync(() => {
+        loadingError = e?.message || String(e);
+      });
     }
   }
 
   async function browseWorkspace() {
     if (!wailsApp?.SelectWorkspace) return;
     try {
-      console.log('[activate] Opening directory picker…');
+      flog('browseWorkspace: opening picker');
       const state = await wailsApp.SelectWorkspace();
       if (!state?.projectDir) return; // cancelled
-      console.log('[activate] Directory selected:', state.projectDir);
-      loadingName = state.projectDir.split('/').pop() || state.projectDir;
-      loadingError = '';
-      view = 'loading';
+      flog('browseWorkspace: selected ' + state.projectDir);
+      flushSync(() => {
+        loadingName = state.projectDir.split('/').pop() || state.projectDir;
+        loadingError = '';
+        view = 'loading';
+      });
       const appData = await api.getState();
-      console.log('[activate] getState done:', appData?.projectDir);
-      appState = appData;
-      view = 'workspace';
+      flog('browseWorkspace: getState done');
+      flushSync(() => {
+        appState = appData;
+        view = 'workspace';
+      });
       nav.reset();
       wailsApp?.SetWorkspaceMenuVisible(true);
       loadWorkspaces();
     } catch (e: any) {
-      console.error('[activate] browseWorkspace failed:', e);
-      loadingError = e?.message || String(e);
-      if (view !== 'loading') view = 'loading';
+      flog('browseWorkspace: ERROR ' + (e?.message || String(e)));
+      flushSync(() => {
+        loadingError = e?.message || String(e);
+        if (view !== 'loading') view = 'loading';
+      });
     }
   }
 
   function backToWelcome() {
-    view = 'welcome';
+    flushSync(() => {
+      view = 'welcome';
+      appState = null;
+    });
     nav.reset();
-    appState = null;
     wailsApp?.CloseWorkspace();
     wailsApp?.SetWorkspaceMenuVisible(false);
     loadWorkspaces();
@@ -112,7 +137,10 @@
 
   api.onStateChanged(async () => {
     if (view === 'workspace') {
-      appState = await api.getState();
+      const newState = await api.getState();
+      flushSync(() => {
+        appState = newState;
+      });
     }
   });
 
@@ -159,6 +187,7 @@
           <p class="text-xs opacity-40 mt-1">{loadingName}</p>
         </div>
       {/if}
+      <div class="text-[10px] opacity-20 mt-4">view={view} appState={appState ? 'set' : 'null'} error={loadingError || 'none'}</div>
     </div>
   {:else if nav.page === 'settings' && view !== 'workspace'}
     <!-- Global settings accessible from welcome screen -->

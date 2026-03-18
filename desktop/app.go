@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -11,6 +12,17 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/menu"
 	wailsRuntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
+
+var dlog *log.Logger
+
+func init() {
+	f, err := os.OpenFile("/tmp/activate-desktop.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if err != nil {
+		dlog = log.New(os.Stderr, "[desktop] ", log.LstdFlags)
+	} else {
+		dlog = log.New(f, "[desktop] ", log.LstdFlags)
+	}
+}
 
 // App manages the daemon lifecycle and exposes RPC methods to the Wails frontend.
 type App struct {
@@ -57,42 +69,48 @@ func (a *App) SetWorkspaceMenuVisible(visible bool) {
 
 // InitWorkspace spawns a daemon for the given project directory.
 func (a *App) InitWorkspace(dir string) error {
+	dlog.Printf("InitWorkspace called: dir=%s", dir)
 	// Stop any existing daemon
 	if a.daemon != nil {
+		dlog.Println("Stopping existing daemon")
 		a.daemon.stop()
 		a.daemon = nil
 	}
 
 	bin := findBinary()
 	if bin == "" {
+		dlog.Println("ERROR: activate CLI not found")
 		return fmt.Errorf("activate CLI not found — install it first")
 	}
 
-	fmt.Printf("[activate-desktop] Starting daemon: %s serve --stdio (dir=%s)\n", bin, dir)
+	dlog.Printf("Starting daemon: %s serve --stdio (dir=%s)", bin, dir)
 
 	env := os.Environ()
 	dc, err := startDaemon(bin, dir, env)
 	if err != nil {
+		dlog.Printf("ERROR: start daemon: %v", err)
 		return fmt.Errorf("failed to start daemon: %w", err)
 	}
 
 	dc.onNotification = func(method string) {
+		dlog.Printf("Daemon notification: %s", method)
 		if method == "activate/stateChanged" {
 			wailsRuntime.EventsEmit(a.ctx, "stateChanged")
 		}
 	}
 
 	// Initialize the daemon with the project directory
-	fmt.Printf("[activate-desktop] Sending initialize RPC…\n")
+	dlog.Println("Sending initialize RPC…")
 	var initResult json.RawMessage
 	err = dc.callInto(&initResult, "activate/initialize", map[string]string{
 		"projectDir": dir,
 	})
 	if err != nil {
+		dlog.Printf("ERROR: initialize: %v", err)
 		dc.stop()
 		return fmt.Errorf("daemon initialize failed: %w", err)
 	}
-	fmt.Printf("[activate-desktop] Initialize complete: %s\n", string(initResult))
+	dlog.Printf("Initialize complete (len=%d)", len(initResult))
 
 	a.daemon = dc
 	a.projectDir = dir
@@ -132,13 +150,26 @@ func (a *App) requireDaemon() error {
 	return nil
 }
 
+// DebugLog allows the frontend to write debug messages to the log file.
+func (a *App) DebugLog(msg string) {
+	dlog.Printf("[frontend] %s", msg)
+}
+
 // ── RPC Forwarding Methods ─────────────────────────────────────
 
 func (a *App) GetState() (json.RawMessage, error) {
+	dlog.Println("GetState called")
 	if err := a.requireDaemon(); err != nil {
+		dlog.Printf("ERROR: GetState: %v", err)
 		return nil, err
 	}
-	return a.daemon.call("activate/state", nil)
+	result, err := a.daemon.call("activate/state", nil)
+	if err != nil {
+		dlog.Printf("ERROR: GetState RPC: %v", err)
+		return nil, err
+	}
+	dlog.Printf("GetState done (len=%d)", len(result))
+	return result, nil
 }
 
 func (a *App) GetConfig(scope string) (json.RawMessage, error) {
