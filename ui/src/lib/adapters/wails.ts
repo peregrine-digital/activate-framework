@@ -42,6 +42,11 @@ declare global {
           RunTelemetry(): Promise<any>;
           ReadTelemetryLog(): Promise<any>;
           CheckForUpdates(): Promise<any>;
+          UpdateCLI(): Promise<any>;
+          RestartDaemon(): Promise<void>;
+          InstallCLI(): Promise<void>;
+          Version(): Promise<string>;
+          CLIFound(): Promise<boolean>;
           SyncManifests(): Promise<any>;
           OpenFile(file: string): Promise<void>;
         };
@@ -153,7 +158,7 @@ export function createWailsAPI(): ActivateAPI {
     },
 
     async installCLI(): Promise<void> {
-      // Desktop users install CLI via shell script
+      await app.InstallCLI();
     },
 
     async checkForUpdates(): Promise<void> {

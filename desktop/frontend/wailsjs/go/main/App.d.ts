@@ -21,6 +21,8 @@ export function GetState():Promise<json.RawMessage>;
 
 export function InitWorkspace(arg1:string):Promise<void>;
 
+export function InstallCLI():Promise<void>;
+
 export function InstallFile(arg1:string):Promise<json.RawMessage>;
 
 export function ListBranches():Promise<json.RawMessage>;
@@ -34,6 +36,8 @@ export function OpenFile(arg1:string):Promise<void>;
 export function ReadTelemetryLog():Promise<json.RawMessage>;
 
 export function RemoveFromWorkspace():Promise<json.RawMessage>;
+
+export function RestartDaemon():Promise<void>;
 
 export function RunTelemetry():Promise<json.RawMessage>;
 
@@ -52,5 +56,7 @@ export function SyncManifests():Promise<json.RawMessage>;
 export function UninstallFile(arg1:string):Promise<json.RawMessage>;
 
 export function UpdateAll():Promise<json.RawMessage>;
+
+export function UpdateCLI():Promise<json.RawMessage>;
 
 export function Version():Promise<string>;

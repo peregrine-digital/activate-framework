@@ -294,7 +294,10 @@ func (a *App) CheckForUpdates() (json.RawMessage, error) {
 	if err := a.requireDaemon(); err != nil {
 		return nil, err
 	}
-	return a.daemon.call("activate/checkUpdate", map[string]interface{}{"force": true})
+	return a.daemon.call("activate/checkUpdate", map[string]interface{}{
+		"force":          true,
+		"desktopVersion": version,
+	})
 }
 
 func (a *App) SyncManifests() (json.RawMessage, error) {
@@ -314,4 +317,54 @@ func (a *App) OpenFile(file string) error {
 		return err
 	}
 	return open(fullPath)
+}
+
+// UpdateCLI tells the daemon to self-update its CLI binary.
+// The daemon process will die during binary replacement.
+// Returns the update result or error.
+func (a *App) UpdateCLI() (json.RawMessage, error) {
+	if err := a.requireDaemon(); err != nil {
+		return nil, err
+	}
+	// The daemon will die during self-update (binary replacement),
+	// so we expect a timeout or connection error. That's OK.
+	result, err := a.daemon.call("activate/selfUpdate", map[string]interface{}{
+		"token": os.Getenv("GITHUB_TOKEN"),
+	})
+	if err != nil {
+		dlog.Printf("UpdateCLI: daemon likely died during update (expected): %v", err)
+	}
+	// Stop old daemon reference
+	a.daemon.stop()
+	a.daemon = nil
+	return result, nil
+}
+
+// RestartDaemon re-spawns the daemon after a CLI update.
+func (a *App) RestartDaemon() error {
+	if a.projectDir == "" {
+		return fmt.Errorf("no workspace open")
+	}
+	return a.InitWorkspace(a.projectDir)
+}
+
+// InstallCLI runs the install script to install the CLI binary.
+func (a *App) InstallCLI() error {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return err
+	}
+	installDir := filepath.Join(home, ".activate", "bin")
+
+	// Download and run the install script
+	cmd := exec.Command("sh", "-c",
+		`curl -fsSL https://raw.githubusercontent.com/peregrine-digital/activate-framework/main/install-cli.sh | INSTALL_DIR="`+installDir+`" sh`)
+	cmd.Env = append(os.Environ(), "INSTALL_DIR="+installDir)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		dlog.Printf("InstallCLI failed: %s\n%s", err, string(out))
+		return fmt.Errorf("install failed: %w", err)
+	}
+	dlog.Printf("InstallCLI success: %s", string(out))
+	return nil
 }

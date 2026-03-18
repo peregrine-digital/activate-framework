@@ -38,6 +38,10 @@ export function InitWorkspace(arg1) {
   return window['go']['main']['App']['InitWorkspace'](arg1);
 }
 
+export function InstallCLI() {
+  return window['go']['main']['App']['InstallCLI']();
+}
+
 export function InstallFile(arg1) {
   return window['go']['main']['App']['InstallFile'](arg1);
 }
@@ -64,6 +68,10 @@ export function ReadTelemetryLog() {
 
 export function RemoveFromWorkspace() {
   return window['go']['main']['App']['RemoveFromWorkspace']();
+}
+
+export function RestartDaemon() {
+  return window['go']['main']['App']['RestartDaemon']();
 }
 
 export function RunTelemetry() {
@@ -100,6 +108,10 @@ export function UninstallFile(arg1) {
 
 export function UpdateAll() {
   return window['go']['main']['App']['UpdateAll']();
+}
+
+export function UpdateCLI() {
+  return window['go']['main']['App']['UpdateCLI']();
 }
 
 export function Version() {

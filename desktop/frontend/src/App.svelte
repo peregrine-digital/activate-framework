@@ -44,9 +44,48 @@
         browseWorkspace();
       }
     });
-    (window as any).runtime?.EventsOn('checkForUpdates', () => {
-      api.checkForUpdates();
+    (window as any).runtime?.EventsOn('checkForUpdates', async () => {
+      try {
+        const result = await wailsApp?.CheckForUpdates?.();
+        if (!result) return;
+        const msgs: string[] = [];
+        if (result.updateAvailable) {
+          msgs.push(`CLI: v${result.currentVersion} → v${result.latestVersion}`);
+        }
+        if (result.desktop?.available) {
+          msgs.push(`Desktop: v${version} → v${result.desktop.version}`);
+        }
+        if (msgs.length === 0) {
+          (window as any).runtime?.MessageDialog?.({
+            Type: 'InfoDialog',
+            Title: 'Up to Date',
+            Message: 'Everything is up to date.',
+          });
+        } else {
+          const yes = await (window as any).runtime?.MessageDialog?.({
+            Type: 'QuestionDialog',
+            Title: 'Updates Available',
+            Message: msgs.join('\n') + '\n\nUpdate now?',
+          });
+          if (yes === 'Yes') {
+            if (result.updateAvailable) {
+              await wailsApp?.UpdateCLI?.();
+              await wailsApp?.RestartDaemon?.();
+            }
+            if (result.desktop?.available && result.desktop.downloadUrl) {
+              (window as any).runtime?.BrowserOpenURL?.(result.desktop.downloadUrl);
+            }
+          }
+        }
+      } catch (e) {
+        console.error('[activate] checkForUpdates error:', e);
+      }
     });
+  }
+
+  let desktopVersion = '';
+  if (wailsApp?.Version) {
+    wailsApp.Version().then((v: string) => { desktopVersion = v; });
   }
 
   async function loadWorkspaces() {
@@ -218,7 +257,14 @@
     <div class="py-8 text-center opacity-50">Loading…</div>
   {:else if view === 'no-cli'}
     <NoCliPage onInstallCLI={async () => {
-      (window as any).runtime?.BrowserOpenURL?.('https://github.com/peregrine-digital/activate-framework#installation');
+      try {
+        await wailsApp?.InstallCLI?.();
+        // CLI installed — reload workspaces
+        flushSync(() => { view = 'welcome'; loading = true; });
+        loadWorkspaces();
+      } catch {
+        (window as any).runtime?.BrowserOpenURL?.('https://github.com/peregrine-digital/activate-framework#installation');
+      }
     }} />
   {:else if view === 'welcome'}
     <WelcomePage
