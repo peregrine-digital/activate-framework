@@ -80,28 +80,24 @@
       <button class="icon-btn" title="Show diff" onclick={(e) => { e.stopPropagation(); onDiff(file); }}>⇔</button>
       <button class="icon-btn" title="Skip update" onclick={(e) => { e.stopPropagation(); onSkipUpdate(file); }}>✓</button>
       <button class="icon-btn" title="Update" onclick={(e) => { e.stopPropagation(); onInstall(file); }}>↑</button>
-    {:else if installed}
-      <span class="icon-btn-spacer"></span>
-      <span class="icon-btn-spacer"></span>
-      <span class="icon-btn-spacer"></span>
-    {:else}
-      <span class="icon-btn-spacer"></span>
-      <span class="icon-btn-spacer"></span>
-      {#if file.override !== 'excluded'}
-        <button class="icon-btn" title="Install" onclick={(e) => { e.stopPropagation(); onInstall(file); }}>↓</button>
-      {:else}
-        <span class="icon-btn-spacer"></span>
-      {/if}
+    {:else if !installed && file.override !== 'excluded'}
+      <button class="icon-btn" title="Install" onclick={(e) => { e.stopPropagation(); onInstall(file); }}>↓</button>
     {/if}
 
     {#if file.override === 'pinned'}
-      <button class="icon-btn" title="Unpin" onclick={(e) => { e.stopPropagation(); onSetOverride(file.dest, ''); }}>✕</button>
-    {:else if file.override === 'excluded'}
-      <button class="icon-btn" title="Include" onclick={(e) => { e.stopPropagation(); onSetOverride(file.dest, ''); }}>✕</button>
-    {:else if installed}
+      <button class="icon-btn" title="Unpin" onclick={(e) => { e.stopPropagation(); onSetOverride(file.dest, ''); }}>📌</button>
+    {:else if file.override !== 'excluded'}
+      <button class="icon-btn" title="Pin — always include" onclick={(e) => { e.stopPropagation(); onSetOverride(file.dest, 'pinned'); }}>📌</button>
+    {/if}
+
+    {#if file.override === 'excluded'}
+      <button class="icon-btn" title="Include" onclick={(e) => { e.stopPropagation(); onSetOverride(file.dest, ''); }}>🚫</button>
+    {:else if !installed}
+      <button class="icon-btn" title="Exclude — never install" onclick={(e) => { e.stopPropagation(); onSetOverride(file.dest, 'excluded'); }}>🚫</button>
+    {/if}
+
+    {#if installed}
       <button class="icon-btn icon-btn-danger" title="Uninstall" onclick={(e) => { e.stopPropagation(); onUninstall(file); }}>✕</button>
-    {:else}
-      <span class="icon-btn-spacer"></span>
     {/if}
   </div>
 </div>
@@ -176,15 +172,13 @@
     gap: 3px;
   }
 
-  .icon-btn, .icon-btn-spacer {
+  .icon-btn {
     width: 28px;
     height: 28px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
-  }
-  .icon-btn {
     background: none;
     border: 1px solid transparent;
     color: var(--color-activate-fg);
