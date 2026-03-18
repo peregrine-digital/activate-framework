@@ -55,6 +55,10 @@ jobs:
         working-directory: desktop
         run: go test ./...
 
+      - name: Test UI
+        working-directory: ui
+        run: npx vitest run
+
   release-build:
     if: github.event_name == 'release'
     needs: build-and-test
