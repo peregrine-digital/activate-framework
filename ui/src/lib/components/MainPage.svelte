@@ -8,18 +8,18 @@
   import type { SelectOption } from './SelectModal.svelte';
 
   interface Props {
-    state: AppState;
+    appState: AppState;
     api: ActivateAPI;
     onNavigate: (page: 'usage' | 'settings' | 'workspace-settings') => void;
   }
 
-  let { state, api, onNavigate }: Props = $props();
+  let { appState, api, onNavigate }: Props = $props();
 
-  let config = $derived(state.config);
-  let tiers = $derived(state.tiers);
-  let files = $derived(state.files);
-  let categories = $derived(state.categories);
-  let isActive = $derived(state.state.hasInstallMarker);
+  let config = $derived(appState.config);
+  let tiers = $derived(appState.tiers);
+  let files = $derived(appState.files);
+  let categories = $derived(appState.categories);
+  let isActive = $derived(appState.state.hasInstallMarker);
   let tierLabel = $derived(tiers.find((t) => t.id === config.tier)?.label || config.tier || '—');
   let skippedVersions = $derived(config.skippedVersions || {});
 
@@ -96,14 +96,14 @@
   {tierLabel}
   manifestName={config.manifest}
   {isActive}
-  manifestCount={state.manifests.length}
+  manifestCount={appState.manifests.length}
   platform={api.platform}
   onShowSettings={() => onNavigate('workspace-settings')}
 />
 
 <ButtonRow
   {isActive}
-  manifestCount={state.manifests.length}
+  manifestCount={appState.manifests.length}
   platform={api.platform}
   onChangeTier={handleChangeTier}
   onChangeManifest={handleChangeManifest}

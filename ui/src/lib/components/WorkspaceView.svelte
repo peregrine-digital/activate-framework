@@ -28,5 +28,5 @@
 {:else if page === 'workspace-settings'}
   <SettingsPage {appState} {api} onBack={onBack} />
 {:else}
-  <MainPage state={appState} {api} onNavigate={onNavigate} />
+  <MainPage {appState} {api} onNavigate={onNavigate} />
 {/if}
