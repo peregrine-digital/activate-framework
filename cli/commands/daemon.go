@@ -16,6 +16,7 @@ type Daemon struct {
 	service   ActivateAPI
 	transport *transport.Transport
 	version   string
+	watcher   *configWatcher
 }
 
 // NewDaemon creates a daemon wired to the given service and transport.
@@ -25,6 +26,13 @@ func NewDaemon(service ActivateAPI, t *transport.Transport, version string) *Dae
 
 // Serve reads requests from the transport and dispatches them until EOF or shutdown.
 func (d *Daemon) Serve() error {
+	// Start file watcher for cross-process config change detection
+	if cw, err := newConfigWatcher(d.transport); err == nil {
+		d.watcher = cw
+		go cw.run()
+		defer cw.close()
+	}
+
 	for {
 		req, err := d.transport.ReadMessage()
 		if err != nil {
@@ -121,6 +129,9 @@ func (d *Daemon) handleInitialize(req *transport.Request) *transport.Response {
 	}
 	if params.ProjectDir != "" {
 		d.service.Initialize(params.ProjectDir)
+		if d.watcher != nil {
+			d.watcher.watchPaths(params.ProjectDir)
+		}
 	}
 
 	return transport.SuccessResponse(req.ID, transport.InitializeResult{
