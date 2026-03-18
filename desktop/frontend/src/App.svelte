@@ -24,6 +24,7 @@
 
   let view = $state<'welcome' | 'loading' | 'workspace'>('welcome');
   let appState = $state<AppState | null>(null);
+  let stateVersion = $state(0);
   let workspaces = $state<WorkspaceInfo[]>([]);
   let loading = $state(true);
   let loadingName = $state('');
@@ -136,12 +137,11 @@
   }
 
   api.onStateChanged(async () => {
-    flog('stateChanged fired, view=' + view);
     if (view === 'workspace') {
       const newState = await api.getState();
-      flog('stateChanged: got new state, refreshing UI');
       flushSync(() => {
         appState = newState;
+        stateVersion++;
       });
     }
   });
@@ -213,6 +213,7 @@
   {:else if !appState}
     <div class="py-8 text-center opacity-50">Loading workspace…</div>
   {:else}
+    {#key stateVersion}
     <WorkspaceView
       {appState}
       {api}
@@ -220,6 +221,7 @@
       onNavigate={nav.navigateTo}
       onBack={nav.navigateBack}
     />
+    {/key}
   {/if}
   </main>
 </div>

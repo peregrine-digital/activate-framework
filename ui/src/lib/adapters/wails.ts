@@ -62,13 +62,9 @@ export function createWailsAPI(): ActivateAPI {
   function setupEventListener() {
     if (typeof window !== 'undefined' && window.runtime?.EventsOn) {
       window.runtime.EventsOn('stateChanged', () => {
-        console.log('[activate:wails] stateChanged event received, notifying', listeners.size, 'listeners');
         listeners.forEach((cb) => cb());
       });
-      console.log('[activate:wails] EventsOn registered for stateChanged');
     } else {
-      // Runtime not ready yet, retry
-      console.log('[activate:wails] runtime not ready, retrying EventsOn in 100ms');
       setTimeout(setupEventListener, 100);
     }
   }
@@ -78,9 +74,7 @@ export function createWailsAPI(): ActivateAPI {
     platform: 'desktop',
 
     async getState(): Promise<AppState> {
-      const raw = await app.GetState();
-      console.log('[activate:wails] GetState returned:', typeof raw, raw);
-      return raw as AppState;
+      return (await app.GetState()) as AppState;
     },
 
     async getConfig(scope: 'global' | 'project' | 'resolved'): Promise<Config> {

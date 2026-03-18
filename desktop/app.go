@@ -180,10 +180,18 @@ func (a *App) GetConfig(scope string) (json.RawMessage, error) {
 }
 
 func (a *App) SetConfig(params json.RawMessage) (json.RawMessage, error) {
+	dlog.Printf("SetConfig called: %s", string(params))
 	if err := a.requireDaemon(); err != nil {
+		dlog.Printf("ERROR: SetConfig: %v", err)
 		return nil, err
 	}
-	return a.daemon.call("activate/configSet", params)
+	result, err := a.daemon.call("activate/configSet", params)
+	if err != nil {
+		dlog.Printf("ERROR: SetConfig RPC: %v", err)
+		return nil, err
+	}
+	dlog.Printf("SetConfig done: %s", string(result))
+	return result, nil
 }
 
 func (a *App) InstallFile(dest string) (json.RawMessage, error) {

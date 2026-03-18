@@ -23,9 +23,9 @@
   let tierLabel = $derived(tiers.find((t) => t.id === config.tier)?.label || config.tier || '—');
   let skippedVersions = $derived(config.skippedVersions || {});
 
-  let installedFiles = $derived(files.filter((f) => f.installed && f.override !== 'excluded'));
+  let installedFiles = $derived(files.filter((f) => f.installed && f.inTier && f.override !== 'excluded'));
   let availableFiles = $derived(files.filter((f) => !f.installed && f.inTier && f.override !== 'excluded'));
-  let outsideTierFiles = $derived(files.filter((f) => !f.installed && !f.inTier && f.override !== 'excluded'));
+  let outsideTierFiles = $derived(files.filter((f) => !f.inTier && f.override !== 'excluded'));
   let excludedFiles = $derived(files.filter((f) => f.override === 'excluded'));
 
   // Select modal state
