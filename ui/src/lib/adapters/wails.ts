@@ -69,7 +69,9 @@ export function createWailsAPI(): ActivateAPI {
     platform: 'desktop',
 
     async getState(): Promise<AppState> {
-      return app.GetState();
+      const raw = await app.GetState();
+      console.log('[activate:wails] GetState returned:', typeof raw, raw);
+      return raw as AppState;
     },
 
     async getConfig(scope: 'global' | 'project' | 'resolved'): Promise<Config> {

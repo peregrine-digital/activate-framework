@@ -65,13 +65,15 @@ func (a *App) InitWorkspace(dir string) error {
 
 	bin := findBinary()
 	if bin == "" {
-		return fmt.Errorf("activate CLI not found")
+		return fmt.Errorf("activate CLI not found — install it first")
 	}
+
+	fmt.Printf("[activate-desktop] Starting daemon: %s serve --stdio (dir=%s)\n", bin, dir)
 
 	env := os.Environ()
 	dc, err := startDaemon(bin, dir, env)
 	if err != nil {
-		return fmt.Errorf("start daemon: %w", err)
+		return fmt.Errorf("failed to start daemon: %w", err)
 	}
 
 	dc.onNotification = func(method string) {
@@ -81,14 +83,16 @@ func (a *App) InitWorkspace(dir string) error {
 	}
 
 	// Initialize the daemon with the project directory
+	fmt.Printf("[activate-desktop] Sending initialize RPC…\n")
 	var initResult json.RawMessage
 	err = dc.callInto(&initResult, "activate/initialize", map[string]string{
 		"projectDir": dir,
 	})
 	if err != nil {
 		dc.stop()
-		return fmt.Errorf("initialize: %w", err)
+		return fmt.Errorf("daemon initialize failed: %w", err)
 	}
+	fmt.Printf("[activate-desktop] Initialize complete: %s\n", string(initResult))
 
 	a.daemon = dc
 	a.projectDir = dir

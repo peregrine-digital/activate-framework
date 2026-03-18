@@ -28,13 +28,6 @@
   let loadingName = $state('');
   let loadingError = $state('');
 
-  function withTimeout<T>(fn: () => Promise<T>, ms: number, msg: string): Promise<T> {
-    return Promise.race([
-      fn(),
-      new Promise<never>((_, reject) => setTimeout(() => reject(new Error(msg)), ms)),
-    ]);
-  }
-
   // Listen for native menu events from Wails
   if (typeof window !== 'undefined') {
     (window as any).runtime?.EventsOn('navigate', (target: string) => {
@@ -51,47 +44,60 @@
   }
 
   async function loadWorkspaces() {
-    if (wailsApp?.ListWorkspaces) {
-      workspaces = (await wailsApp.ListWorkspaces()) ?? [];
+    try {
+      if (wailsApp?.ListWorkspaces) {
+        workspaces = (await wailsApp.ListWorkspaces()) ?? [];
+        console.log('[activate] Loaded workspaces:', workspaces.length);
+      }
+    } catch (e) {
+      console.error('[activate] loadWorkspaces failed:', e);
     }
     loading = false;
   }
 
   async function selectWorkspace(path: string) {
     loadingName = path.split('/').pop() || path;
+    loadingError = '';
     view = 'loading';
     try {
-      await withTimeout(async () => {
-        if (wailsApp?.InitWorkspace) {
-          await wailsApp.InitWorkspace(path);
-        }
-        appState = await api.getState();
-      }, 30_000, 'Workspace initialization timed out');
+      console.log('[activate] InitWorkspace:', path);
+      if (wailsApp?.InitWorkspace) {
+        await wailsApp.InitWorkspace(path);
+      }
+      console.log('[activate] InitWorkspace done, fetching state…');
+      const state = await api.getState();
+      console.log('[activate] getState done:', state?.projectDir);
+      appState = state;
       view = 'workspace';
       nav.reset();
       wailsApp?.SetWorkspaceMenuVisible(true);
-    } catch (e) {
-      console.error('Failed to open workspace:', e);
-      loadingError = String(e instanceof Error ? e.message : e);
+    } catch (e: any) {
+      console.error('[activate] selectWorkspace failed:', e);
+      loadingError = e?.message || String(e);
     }
   }
 
   async function browseWorkspace() {
     if (!wailsApp?.SelectWorkspace) return;
     try {
-      // Show dialog first — loading only after user picks a directory
+      console.log('[activate] Opening directory picker…');
       const state = await wailsApp.SelectWorkspace();
       if (!state?.projectDir) return; // cancelled
+      console.log('[activate] Directory selected:', state.projectDir);
       loadingName = state.projectDir.split('/').pop() || state.projectDir;
+      loadingError = '';
       view = 'loading';
-      appState = await api.getState();
+      const appData = await api.getState();
+      console.log('[activate] getState done:', appData?.projectDir);
+      appState = appData;
       view = 'workspace';
       nav.reset();
       wailsApp?.SetWorkspaceMenuVisible(true);
       loadWorkspaces();
-    } catch (e) {
-      console.error('Failed to open workspace:', e);
-      loadingError = String(e instanceof Error ? e.message : e);
+    } catch (e: any) {
+      console.error('[activate] browseWorkspace failed:', e);
+      loadingError = e?.message || String(e);
+      if (view !== 'loading') view = 'loading';
     }
   }
 
