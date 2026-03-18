@@ -26,19 +26,29 @@
 
   let view = $state<'welcome' | 'workspace'>('welcome');
   let page = $state<Page>('main');
+  let pageHistory = $state<Page[]>([]);
   let appState = $state<AppState | null>(null);
   let workspaces = $state<WorkspaceInfo[]>([]);
   let loading = $state(true);
+
+  function navigateTo(target: Page) {
+    pageHistory.push(page);
+    page = target;
+  }
+
+  function navigateBack() {
+    page = pageHistory.pop() ?? 'main';
+  }
 
   // Listen for native menu events from Wails
   if (typeof window !== 'undefined') {
     (window as any).runtime?.EventsOn('navigate', (target: string) => {
       if (target === 'settings') {
-        page = 'settings';
+        navigateTo('settings');
       } else if (target === 'workspace-settings' && view === 'workspace') {
-        page = 'workspace-settings';
+        navigateTo('workspace-settings');
       } else if (target === 'usage' && view === 'workspace') {
-        page = 'usage';
+        navigateTo('usage');
       } else if (target === 'browse') {
         browseWorkspace();
       }
@@ -79,13 +89,10 @@
   function backToWelcome() {
     view = 'welcome';
     page = 'main';
+    pageHistory = [];
     appState = null;
     wailsApp?.SetWorkspaceMenuVisible(false);
     loadWorkspaces();
-  }
-
-  function backToMain() {
-    page = 'main';
   }
 
   api.onStateChanged(async () => {
@@ -119,10 +126,7 @@
   <main class="flex-1 overflow-y-auto overflow-x-hidden px-4 pb-4">
 
   {#if page === 'settings'}
-    <GlobalSettingsPage {api} serverVersion="0.5.0" onBack={() => {
-      page = view === 'workspace' && appState ? 'main' : 'main';
-      if (view !== 'workspace') page = 'main';
-    }} />
+    <GlobalSettingsPage {api} serverVersion="0.5.0" onBack={navigateBack} />
   {:else if loading}
     <div class="py-8 text-center opacity-50">Loading…</div>
   {:else if view === 'welcome'}
@@ -136,11 +140,11 @@
   {:else if page === 'no-cli'}
     <NoCliPage onInstallCLI={() => api.installCLI()} />
   {:else if page === 'usage'}
-    <UsagePage {api} telemetryEnabled={appState.config.telemetryEnabled === true} onBack={backToMain} />
+    <UsagePage {api} telemetryEnabled={appState.config.telemetryEnabled === true} onBack={navigateBack} />
   {:else if page === 'workspace-settings'}
-    <SettingsPage {appState} {api} onBack={backToMain} />
+    <SettingsPage {appState} {api} onBack={navigateBack} />
   {:else}
-    <MainPage state={appState} {api} onNavigate={(p) => page = p} />
+    <MainPage state={appState} {api} onNavigate={navigateTo} />
   {/if}
   </main>
 </div>
