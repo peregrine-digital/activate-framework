@@ -20,24 +20,30 @@ func main() {
 
 	appMenu := menu.NewMenu()
 
-	// App menu (macOS)
-	appMenu.Append(menu.AppMenu())
+	// App menu (macOS) — built manually to include Settings
+	appSubMenu := appMenu.AddSubmenu("Activate")
+	appSubMenu.AddText("About Activate Framework", nil, nil)
+	appSubMenu.AddSeparator()
+	appSubMenu.AddText("Settings…", keys.CmdOrCtrl(","), func(_ *menu.CallbackData) {
+		runtime.EventsEmit(app.ctx, "navigate", "settings")
+	})
+	appSubMenu.AddSeparator()
+	appSubMenu.AddText("Hide Activate", keys.CmdOrCtrl("h"), func(_ *menu.CallbackData) {
+		runtime.Hide(app.ctx)
+	})
+	appSubMenu.AddSeparator()
+	appSubMenu.AddText("Quit Activate", keys.CmdOrCtrl("q"), func(_ *menu.CallbackData) {
+		runtime.Quit(app.ctx)
+	})
 
 	// File menu
 	fileMenu := appMenu.AddSubmenu("File")
 	fileMenu.AddText("Open Workspace…", keys.CmdOrCtrl("o"), func(_ *menu.CallbackData) {
 		runtime.EventsEmit(app.ctx, "navigate", "browse")
 	})
-	fileMenu.AddSeparator()
-	fileMenu.AddText("Quit", keys.CmdOrCtrl("q"), func(_ *menu.CallbackData) {
-		runtime.Quit(app.ctx)
-	})
 
 	// View menu
 	viewMenu := appMenu.AddSubmenu("View")
-	viewMenu.AddText("Settings", keys.CmdOrCtrl(","), func(_ *menu.CallbackData) {
-		runtime.EventsEmit(app.ctx, "navigate", "settings")
-	})
 	viewMenu.AddText("Usage", nil, func(_ *menu.CallbackData) {
 		runtime.EventsEmit(app.ctx, "navigate", "usage")
 	})
