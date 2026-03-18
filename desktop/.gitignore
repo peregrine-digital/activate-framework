@@ -1,6 +1,5 @@
-.task
-bin
+build/bin
+node_modules
 frontend/dist
 frontend/node_modules
-build/linux/appimage/build
-build/windows/nsis/MicrosoftEdgeWebview2Setup.exedesktop
+activate-desktop

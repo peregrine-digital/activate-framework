@@ -7,7 +7,6 @@ export default defineConfig({
   plugins: [svelte(), tailwindcss()],
   resolve: {
     alias: {
-      // Import shared UI components from the ui/ package
       "$lib": resolve(__dirname, "../../ui/src/lib"),
     },
   },

@@ -2,45 +2,39 @@ package main
 
 import (
 	"embed"
-	_ "embed"
-	"log"
 
-	"github.com/wailsapp/wails/v3/pkg/application"
+	"github.com/wailsapp/wails/v2"
+	"github.com/wailsapp/wails/v2/pkg/options"
+	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
+	"github.com/wailsapp/wails/v2/pkg/options/mac"
 )
 
 //go:embed all:frontend/dist
 var assets embed.FS
 
 func main() {
-	app := application.New(application.Options{
-		Name:        "Activate Framework",
-		Description: "Activate Framework Desktop",
-		Services: []application.Service{
-			// TODO: Bind ActivateService from cli/commands/service.go
-		},
-		Assets: application.AssetOptions{
-			Handler: application.AssetFileServerFS(assets),
-		},
-		Mac: application.MacOptions{
-			ApplicationShouldTerminateAfterLastWindowClosed: true,
-		},
-	})
+	app := NewApp()
 
-	app.Window.NewWithOptions(application.WebviewWindowOptions{
+	err := wails.Run(&options.App{
 		Title:  "Activate Framework",
 		Width:  480,
 		Height: 720,
-		Mac: application.MacWindow{
-			InvisibleTitleBarHeight: 50,
-			Backdrop:                application.MacBackdropTranslucent,
-			TitleBar:                application.MacTitleBarHiddenInset,
+		AssetServer: &assetserver.Options{
+			Assets: assets,
 		},
-		BackgroundColour: application.NewRGB(30, 30, 30),
-		URL:              "/",
+		BackgroundColour: &options.RGBA{R: 30, G: 30, B: 30, A: 1},
+		OnStartup:        app.startup,
+		Bind: []interface{}{
+			app,
+		},
+		Mac: &mac.Options{
+			TitleBar:             mac.TitleBarHiddenInset(),
+			WebviewIsTransparent: true,
+			WindowIsTranslucent:  true,
+		},
 	})
 
-	err := app.Run()
 	if err != nil {
-		log.Fatal(err)
+		println("Error:", err.Error())
 	}
 }
