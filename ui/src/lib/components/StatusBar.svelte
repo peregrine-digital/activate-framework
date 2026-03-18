@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { FileStatus } from '../types.js';
+  import type { Platform } from '../api.js';
 
   interface Props {
     tier: string;
@@ -7,10 +8,11 @@
     manifestName: string;
     isActive: boolean;
     manifestCount: number;
+    platform: Platform;
     onShowSettings: () => void;
   }
 
-  let { tier, tierLabel, manifestName, isActive, manifestCount, onShowSettings }: Props = $props();
+  let { tier, tierLabel, manifestName, isActive, manifestCount, platform, onShowSettings }: Props = $props();
 </script>
 
 <div class="glass flex items-center gap-3 px-4 py-3 mb-4 text-xs animate-in">
@@ -23,11 +25,13 @@
     <span class="text-xs {isActive ? 'text-activate-fg' : 'text-activate-fg-muted'}">{isActive ? 'Active' : 'Inactive'}</span>
   </span>
   <span class="grow"></span>
-  <button
-    class="cursor-pointer text-lg leading-none px-2 py-1.5 rounded-lg transition-all duration-150 opacity-60 hover:opacity-100 hover:bg-activate-bg-hover"
-    onclick={onShowSettings}
-    title="Settings"
-  >⚙</button>
+  {#if platform !== 'desktop'}
+    <button
+      class="cursor-pointer text-lg leading-none px-2 py-1.5 rounded-lg transition-all duration-150 opacity-60 hover:opacity-100 hover:bg-activate-bg-hover"
+      onclick={onShowSettings}
+      title="Settings"
+    >⚙</button>
+  {/if}
 </div>
 
 <style>

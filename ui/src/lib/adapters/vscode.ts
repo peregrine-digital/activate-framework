@@ -81,6 +81,7 @@ if (typeof window !== 'undefined') {
  */
 export function createVSCodeAPI(): ActivateAPI {
   return {
+    platform: 'vscode',
     getState: () => request<AppState>('getState'),
     getConfig: (scope) => request<Config>('getConfig', { scope }),
     setConfig: (updates) => request('setConfig', { updates }),

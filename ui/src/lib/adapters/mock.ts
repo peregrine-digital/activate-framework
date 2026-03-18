@@ -95,6 +95,7 @@ export function createMockAPI(): ActivateAPI {
     new Promise((resolve) => setTimeout(() => resolve(value), ms));
 
   return {
+    platform: 'dev',
     getState: () => delay(mockState()),
     getConfig: () => delay({ ...MOCK_CONFIG }),
 

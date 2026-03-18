@@ -7,6 +7,8 @@ import type {
   TelemetryEntry,
 } from './types.js';
 
+export type Platform = 'desktop' | 'vscode' | 'dev';
+
 /**
  * Platform-agnostic API interface for the Activate service.
  *
@@ -14,6 +16,9 @@ import type {
  * Methods match the ActivateService RPC surface used by the control panel.
  */
 export interface ActivateAPI {
+  /** Which platform this adapter is running on. */
+  readonly platform: Platform;
+
   // ── State ──
   getState(): Promise<AppState>;
   getConfig(scope: 'global' | 'project' | 'resolved'): Promise<Config>;

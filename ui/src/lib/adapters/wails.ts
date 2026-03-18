@@ -56,6 +56,8 @@ export function createWailsAPI(): ActivateAPI {
   const listeners: Array<() => void> = [];
 
   return {
+    platform: 'desktop',
+
     async getState(): Promise<AppState> {
       return app.GetState();
     },

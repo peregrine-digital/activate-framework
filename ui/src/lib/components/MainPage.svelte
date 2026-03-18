@@ -40,6 +40,7 @@
   manifestName={config.manifest}
   {isActive}
   manifestCount={state.manifests.length}
+  platform={api.platform}
   onShowSettings={() => onNavigate('settings')}
 />
 
