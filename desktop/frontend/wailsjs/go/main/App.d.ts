@@ -5,6 +5,8 @@ import {main} from '../models';
 
 export function AddToWorkspace():Promise<json.RawMessage>;
 
+export function CLIFound():Promise<boolean>;
+
 export function CheckForUpdates():Promise<json.RawMessage>;
 
 export function CloseWorkspace():Promise<void>;
@@ -50,3 +52,5 @@ export function SyncManifests():Promise<json.RawMessage>;
 export function UninstallFile(arg1:string):Promise<json.RawMessage>;
 
 export function UpdateAll():Promise<json.RawMessage>;
+
+export function Version():Promise<string>;

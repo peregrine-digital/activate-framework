@@ -335,9 +335,9 @@ func (d *Daemon) handleCheckUpdate(req *transport.Request) *transport.Response {
 	}
 	var entry *selfupdate.CacheEntry
 	if params.Force {
-		entry = selfupdate.CheckLive(d.version, params.ExtensionVersion, params.Token)
+		entry = selfupdate.CheckLive(d.version, params.ExtensionVersion, params.DesktopVersion, params.Token)
 	} else {
-		entry = selfupdate.CheckCached(d.version, params.ExtensionVersion, params.Token)
+		entry = selfupdate.CheckCached(d.version, params.ExtensionVersion, params.DesktopVersion, params.Token)
 	}
 	if entry == nil {
 		return transport.SuccessResponse(req.ID, selfupdate.CacheEntry{})

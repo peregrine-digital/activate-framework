@@ -155,6 +155,16 @@ func (a *App) DebugLog(msg string) {
 	dlog.Printf("[frontend] %s", msg)
 }
 
+// Version returns the desktop app version (set at build time).
+func (a *App) Version() string {
+	return version
+}
+
+// CLIFound returns true if the activate CLI binary is available.
+func (a *App) CLIFound() bool {
+	return findBinary() != ""
+}
+
 // ── RPC Forwarding Methods ─────────────────────────────────────
 
 func (a *App) GetState() (json.RawMessage, error) {

@@ -16,11 +16,12 @@ const (
 
 // CacheEntry stores the result of the most recent update check.
 type CacheEntry struct {
-	CheckedAt      time.Time `json:"checkedAt"`
-	LatestVersion  string    `json:"latestVersion"`
-	CurrentVersion string    `json:"currentVersion"`
-	UpdateAvail    bool      `json:"updateAvailable"`
-	Extension      VsixInfo  `json:"extension,omitempty"`
+	CheckedAt      time.Time    `json:"checkedAt"`
+	LatestVersion  string       `json:"latestVersion"`
+	CurrentVersion string       `json:"currentVersion"`
+	UpdateAvail    bool         `json:"updateAvailable"`
+	Extension      VsixInfo     `json:"extension,omitempty"`
+	Desktop        DesktopInfo  `json:"desktop,omitempty"`
 }
 
 func cachePath() (string, error) {
@@ -67,42 +68,33 @@ func WriteCache(entry *CacheEntry) error {
 // CheckCached returns a cached result if fresh (< CheckInterval), otherwise
 // performs a live check against GitHub and caches the result.
 // currentExtVersion is the VS Code extension version (pass "" from CLI).
+// currentDesktopVersion is the desktop app version (pass "" from CLI/extension).
 // Errors during the live check are silently swallowed and nil is returned,
 // so callers can safely use this for non-critical notifications.
-func CheckCached(currentVersion, currentExtVersion, token string) *CacheEntry {
+func CheckCached(currentVersion, currentExtVersion, currentDesktopVersion, token string) *CacheEntry {
 	if cached, err := ReadCache(); err == nil {
 		if time.Since(cached.CheckedAt) < CheckInterval && cached.CurrentVersion == currentVersion {
 			return cached
 		}
 	}
 
-	result, err := CheckUpdate(currentVersion, token)
-	if err != nil {
-		return nil
-	}
-
-	vsix := CheckVsix(currentExtVersion, token)
-
-	entry := &CacheEntry{
-		CheckedAt:      time.Now(),
-		LatestVersion:  result.LatestVersion,
-		CurrentVersion: currentVersion,
-		UpdateAvail:    result.LatestVersion != "" && result.LatestVersion != currentVersion && !isUpToDate(result),
-		Extension:      vsix,
-	}
-	_ = WriteCache(entry)
-	return entry
+	return checkLiveInternal(currentVersion, currentExtVersion, currentDesktopVersion, token)
 }
 
 // CheckLive always performs a live check against GitHub, ignoring the cache TTL.
 // The result is still written to cache for subsequent cached checks.
-func CheckLive(currentVersion, currentExtVersion, token string) *CacheEntry {
+func CheckLive(currentVersion, currentExtVersion, currentDesktopVersion, token string) *CacheEntry {
+	return checkLiveInternal(currentVersion, currentExtVersion, currentDesktopVersion, token)
+}
+
+func checkLiveInternal(currentVersion, currentExtVersion, currentDesktopVersion, token string) *CacheEntry {
 	result, err := CheckUpdate(currentVersion, token)
 	if err != nil {
 		return nil
 	}
 
 	vsix := CheckVsix(currentExtVersion, token)
+	desktop := CheckDesktop(currentDesktopVersion, token)
 
 	entry := &CacheEntry{
 		CheckedAt:      time.Now(),
@@ -110,6 +102,7 @@ func CheckLive(currentVersion, currentExtVersion, token string) *CacheEntry {
 		CurrentVersion: currentVersion,
 		UpdateAvail:    result.LatestVersion != "" && result.LatestVersion != currentVersion && !isUpToDate(result),
 		Extension:      vsix,
+		Desktop:        desktop,
 	}
 	_ = WriteCache(entry)
 	return entry

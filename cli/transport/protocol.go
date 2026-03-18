@@ -91,9 +91,10 @@ type BranchListParams struct {
 	Repo string `json:"repo,omitempty"`
 }
 
-// CheckUpdateParams optionally provides the current extension version.
+// CheckUpdateParams optionally provides the current extension/desktop versions.
 type CheckUpdateParams struct {
 	ExtensionVersion string `json:"extensionVersion,omitempty"`
+	DesktopVersion   string `json:"desktopVersion,omitempty"`
 	Force            bool   `json:"force,omitempty"`
 	Token            string `json:"token,omitempty"`
 }

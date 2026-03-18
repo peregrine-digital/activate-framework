@@ -6,6 +6,7 @@
   import type { AppState } from '$lib/types';
   import WelcomePage from '$lib/components/WelcomePage.svelte';
   import WorkspaceView from '$lib/components/WorkspaceView.svelte';
+  import NoCliPage from '$lib/components/NoCliPage.svelte';
 
   // Wails Go bindings
   const wailsApp = (window as any).go?.main?.App;
@@ -22,7 +23,7 @@
     exists: boolean;
   }
 
-  let view = $state<'welcome' | 'loading' | 'workspace'>('welcome');
+  let view = $state<'welcome' | 'loading' | 'workspace' | 'no-cli'>('welcome');
   let appState = $state<AppState | null>(null);
   let stateVersion = $state(0);
   let workspaces = $state<WorkspaceInfo[]>([]);
@@ -50,6 +51,14 @@
 
   async function loadWorkspaces() {
     try {
+      // Check if CLI binary is available
+      if (wailsApp?.CLIFound) {
+        const found = await wailsApp.CLIFound();
+        if (!found) {
+          flushSync(() => { view = 'no-cli'; loading = false; });
+          return;
+        }
+      }
       if (wailsApp?.ListWorkspaces) {
         const result = (await wailsApp.ListWorkspaces()) ?? [];
         flushSync(() => {
@@ -207,6 +216,10 @@
     {/await}
   {:else if loading}
     <div class="py-8 text-center opacity-50">Loading…</div>
+  {:else if view === 'no-cli'}
+    <NoCliPage onInstallCLI={async () => {
+      (window as any).runtime?.BrowserOpenURL?.('https://github.com/peregrine-digital/activate-framework#installation');
+    }} />
   {:else if view === 'welcome'}
     <WelcomePage
       {workspaces}

@@ -6,6 +6,10 @@ export function AddToWorkspace() {
   return window['go']['main']['App']['AddToWorkspace']();
 }
 
+export function CLIFound() {
+  return window['go']['main']['App']['CLIFound']();
+}
+
 export function CheckForUpdates() {
   return window['go']['main']['App']['CheckForUpdates']();
 }
@@ -96,4 +100,8 @@ export function UninstallFile(arg1) {
 
 export function UpdateAll() {
   return window['go']['main']['App']['UpdateAll']();
+}
+
+export function Version() {
+  return window['go']['main']['App']['Version']();
 }
