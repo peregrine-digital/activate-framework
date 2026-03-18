@@ -38,98 +38,168 @@
   );
 </script>
 
-<div
-  class="group flex items-center gap-1.5 px-2 py-1.5 pl-5 rounded-lg min-h-[34px] transition-all duration-150
-    hover:bg-activate-bg-hover
-    {outdated ? 'border-l-2 border-activate-warning' : ''}"
->
-  <!-- Main content -->
+<div class="file-row group" class:file-row--outdated={outdated}>
+  <!-- Status icon — fixed 20px column -->
+  <span class="file-status" class:text-activate-warning={installed && outdated} class:text-activate-success={installed && !outdated} class:opacity-30={!installed}>
+    {installed ? (outdated ? '⬆' : '✓') : '○'}
+  </span>
+
+  <!-- File info — flex fill -->
   <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
   <div
-    class="flex items-start gap-1.5 flex-1 min-w-0 {installed ? 'cursor-pointer' : ''}"
+    class="file-info"
+    class:cursor-pointer={installed}
     onclick={() => installed && onOpen(file)}
     role={installed ? 'button' : undefined}
     tabindex={installed ? 0 : -1}
     onkeydown={(e) => installed && e.key === 'Enter' && onOpen(file)}
   >
-    <!-- Status icon -->
-    <span class="shrink-0 w-3.5 text-center text-xs leading-[18px]
-      {installed ? (outdated ? 'text-activate-warning' : 'text-activate-success') : 'opacity-40'}">
-      {installed ? (outdated ? '⬆' : '✓') : '○'}
+    <span class="file-name">
+      {name}
+      {#if installed}
+        {#if outdated}
+          <span class="file-version file-version--outdated" title="Installed: {iv} → Available: {bv}">v{iv} → v{bv}</span>
+        {:else}
+          <span class="file-version" title="Version {iv}">v{iv}</span>
+        {/if}
+      {/if}
+      {#if file.override === 'pinned'}
+        <span class="file-badge" title="Pinned — always included">📌</span>
+      {:else if file.override === 'excluded'}
+        <span class="file-badge" title="Excluded — never installed">🚫</span>
+      {/if}
     </span>
-
-    <!-- File info -->
-    <div class="flex flex-col min-w-0">
-      <span class="text-xs font-medium whitespace-nowrap overflow-hidden text-ellipsis">
-        {name}
-
-        {#if installed}
-          {#if outdated}
-            <span class="text-[10px] text-activate-warning opacity-90 font-medium ml-1" title="Installed: {iv} → Available: {bv}">
-              v{iv} → v{bv}
-            </span>
-          {:else}
-            <span class="text-[10px] opacity-45 font-normal ml-1" title="Version {iv}">v{iv}</span>
-          {/if}
-        {/if}
-
-        {#if file.override === 'pinned'}
-          <span class="text-[10px] ml-1" title="Pinned — always included">📌</span>
-        {:else if file.override === 'excluded'}
-          <span class="text-[10px] ml-1" title="Excluded — never installed">🚫</span>
-        {/if}
-      </span>
-      <span class="text-[11px] opacity-65 leading-tight line-clamp-2">{desc}</span>
-    </div>
+    {#if desc}
+      <span class="file-desc">{desc}</span>
+    {/if}
   </div>
 
-  <!-- Actions -->
-  <div class="flex items-center gap-1 shrink-0">
-    <span class="text-[10px] opacity-40 whitespace-nowrap">{file.tier}</span>
-
-    <!-- File action buttons (visible on hover) -->
+  <!-- Actions — fixed right column, consistent width -->
+  <div class="file-actions">
     {#if installed && outdated}
       <button class="icon-btn" title="Show diff" onclick={(e) => { e.stopPropagation(); onDiff(file); }}>⇔</button>
-      <button class="icon-btn" title="Skip this update" onclick={(e) => { e.stopPropagation(); onSkipUpdate(file); }}>✓</button>
-      <button class="icon-btn" title="Update to latest" onclick={(e) => { e.stopPropagation(); onInstall(file); }}>↑</button>
-      <button class="icon-btn icon-btn-danger" title="Uninstall" onclick={(e) => { e.stopPropagation(); onUninstall(file); }}>✕</button>
+      <button class="icon-btn" title="Skip update" onclick={(e) => { e.stopPropagation(); onSkipUpdate(file); }}>✓</button>
+      <button class="icon-btn" title="Update" onclick={(e) => { e.stopPropagation(); onInstall(file); }}>↑</button>
     {:else if installed}
-      <button class="icon-btn icon-btn-danger" title="Uninstall" onclick={(e) => { e.stopPropagation(); onUninstall(file); }}>✕</button>
-    {:else if file.override !== 'excluded'}
-      <button class="icon-btn" title="Install" onclick={(e) => { e.stopPropagation(); onInstall(file); }}>↓</button>
+      <span class="icon-btn-spacer"></span>
+      <span class="icon-btn-spacer"></span>
+      <span class="icon-btn-spacer"></span>
+    {:else}
+      <span class="icon-btn-spacer"></span>
+      <span class="icon-btn-spacer"></span>
+      {#if file.override !== 'excluded'}
+        <button class="icon-btn" title="Install" onclick={(e) => { e.stopPropagation(); onInstall(file); }}>↓</button>
+      {:else}
+        <span class="icon-btn-spacer"></span>
+      {/if}
     {/if}
 
-    <!-- Override buttons -->
     {#if file.override === 'pinned'}
-      <button class="icon-btn" title="Remove pin" onclick={(e) => { e.stopPropagation(); onSetOverride(file.dest, ''); }}>📌✕</button>
+      <button class="icon-btn" title="Unpin" onclick={(e) => { e.stopPropagation(); onSetOverride(file.dest, ''); }}>✕</button>
     {:else if file.override === 'excluded'}
-      <button class="icon-btn" title="Remove exclusion" onclick={(e) => { e.stopPropagation(); onSetOverride(file.dest, ''); }}>🚫✕</button>
+      <button class="icon-btn" title="Include" onclick={(e) => { e.stopPropagation(); onSetOverride(file.dest, ''); }}>✕</button>
+    {:else if installed}
+      <button class="icon-btn icon-btn-danger" title="Uninstall" onclick={(e) => { e.stopPropagation(); onUninstall(file); }}>✕</button>
     {:else}
-      <button class="icon-btn" title="Pin (always include)" onclick={(e) => { e.stopPropagation(); onSetOverride(file.dest, 'pinned'); }}>📌</button>
-      <button class="icon-btn" title="Exclude (never install)" onclick={(e) => { e.stopPropagation(); onSetOverride(file.dest, 'excluded'); }}>🚫</button>
+      <span class="icon-btn-spacer"></span>
     {/if}
   </div>
 </div>
 
 <style>
+  .file-row {
+    display: grid;
+    grid-template-columns: 20px 1fr auto;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 8px;
+    border-radius: 0.5rem;
+    min-height: 36px;
+    transition: background 0.12s ease;
+  }
+  .file-row:hover {
+    background: var(--color-activate-bg-hover);
+  }
+  .file-row--outdated {
+    border-left: 2px solid var(--color-activate-warning);
+    padding-left: 6px;
+  }
+
+  .file-status {
+    font-size: 12px;
+    text-align: center;
+    line-height: 1;
+  }
+
+  .file-info {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+  }
+
+  .file-name {
+    font-size: 12px;
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .file-version {
+    font-size: 10px;
+    opacity: 0.4;
+    font-weight: 400;
+    margin-left: 4px;
+  }
+  .file-version--outdated {
+    color: var(--color-activate-warning);
+    opacity: 0.85;
+    font-weight: 500;
+  }
+  .file-badge {
+    font-size: 10px;
+    margin-left: 3px;
+  }
+  .file-desc {
+    font-size: 11px;
+    opacity: 0.5;
+    line-height: 1.3;
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-line-clamp: 1;
+    -webkit-box-orient: vertical;
+  }
+
+  .file-actions {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+  }
+
+  .icon-btn, .icon-btn-spacer {
+    width: 24px;
+    height: 24px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
   .icon-btn {
     background: none;
     border: 1px solid transparent;
     color: var(--color-activate-fg);
     cursor: pointer;
-    padding: 2px 5px;
     border-radius: 0.375rem;
-    font-size: 13px;
+    font-size: 12px;
     opacity: 0;
-    transition: all 0.15s ease;
+    transition: all 0.12s ease;
   }
   :global(.group):hover .icon-btn {
-    opacity: 0.5;
+    opacity: 0.4;
   }
   .icon-btn:hover {
     opacity: 1 !important;
     background: var(--color-activate-bg-hover);
-    transform: scale(1.1);
   }
   .icon-btn-danger:hover {
     color: var(--color-activate-error);

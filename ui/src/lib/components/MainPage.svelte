@@ -73,7 +73,7 @@
     onSetOverride={handleSetOverride}
   />
 {:else}
-  <div class="opacity-50 italic py-2 px-5 text-xs">No files installed</div>
+  <div class="text-activate-fg-muted italic py-3 pl-8 text-xs">No files installed</div>
 {/if}
 
 <div class="section-label">
@@ -94,14 +94,14 @@
     onSetOverride={handleSetOverride}
   />
 {:else}
-  <div class="opacity-50 italic py-2 px-5 text-xs">All tier files installed</div>
+  <div class="text-activate-fg-muted italic py-3 pl-8 text-xs">All tier files installed</div>
 {/if}
 
 {#if outsideTierFiles.length > 0}
   <div class="section-label">
     Outside Tier · {outsideTierFiles.length}
   </div>
-  <div class="text-[11px] text-activate-fg-muted italic pb-1.5">Switch to a higher tier to access these files</div>
+  <div class="text-[11px] text-activate-fg-muted italic pb-1 pl-3">Switch to a higher tier to access these files</div>
   <CategoryList
     files={outsideTierFiles}
     {categories}
@@ -121,7 +121,7 @@
   <div class="section-label">
     Excluded · {excludedFiles.length}
   </div>
-  <div class="text-[11px] text-activate-fg-muted italic pb-1.5">These files are excluded and will not be installed</div>
+  <div class="text-[11px] text-activate-fg-muted italic pb-1 pl-3">These files are excluded and will not be installed</div>
   <CategoryList
     files={excludedFiles}
     {categories}
