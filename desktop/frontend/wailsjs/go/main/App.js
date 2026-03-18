@@ -34,6 +34,10 @@ export function ListManifests() {
   return window['go']['main']['App']['ListManifests']();
 }
 
+export function ListWorkspaces() {
+  return window['go']['main']['App']['ListWorkspaces']();
+}
+
 export function OpenFile(arg1) {
   return window['go']['main']['App']['OpenFile'](arg1);
 }
