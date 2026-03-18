@@ -1,4 +1,5 @@
 import type { ActivateAPI } from '../api.js';
+import type { Platform } from '../api.js';
 import type {
   AppState,
   Config,
@@ -86,7 +87,7 @@ function mockState(): AppState {
  * Mock adapter for standalone development.
  * Returns realistic static data without requiring a running daemon.
  */
-export function createMockAPI(): ActivateAPI {
+export function createMockAPI(platformOverride?: Platform): ActivateAPI {
   const listeners = new Set<() => void>();
 
   const notify = () => listeners.forEach((cb) => cb());
@@ -95,7 +96,7 @@ export function createMockAPI(): ActivateAPI {
     new Promise((resolve) => setTimeout(() => resolve(value), ms));
 
   return {
-    platform: 'dev',
+    platform: platformOverride ?? 'dev',
     getState: () => delay(mockState()),
     getConfig: () => delay({ ...MOCK_CONFIG }),
 

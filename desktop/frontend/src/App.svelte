@@ -12,7 +12,33 @@
   const wailsApp = (window as any).go?.main?.App;
 
   // TODO: Replace mock with createWailsAPI() once fully wired
-  const api = createMockAPI();
+  const api = createMockAPI('desktop');
+
+  interface WorkspaceInfo {
+    path: string;
+    name: string;
+    manifest?: string;
+    tier?: string;
+    fileCount: number;
+    exists: boolean;
+  }
+
+  let view = $state<'welcome' | 'workspace'>('welcome');
+  let page = $state<Page>('main');
+  let appState = $state<AppState | null>(null);
+  let workspaces = $state<WorkspaceInfo[]>([]);
+  let loading = $state(true);
+
+  // Listen for native menu events from Wails
+  if (typeof window !== 'undefined') {
+    (window as any).runtime?.EventsOn('navigate', (target: string) => {
+      if (target === 'settings' && view === 'workspace') {
+        page = 'settings';
+      } else if (target === 'usage' && view === 'workspace') {
+        page = 'usage';
+      }
+    });
+  }
 
   interface WorkspaceInfo {
     path: string;

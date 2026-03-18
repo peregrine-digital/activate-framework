@@ -4,9 +4,12 @@ import (
 	"embed"
 
 	"github.com/wailsapp/wails/v2"
+	"github.com/wailsapp/wails/v2/pkg/menu"
+	"github.com/wailsapp/wails/v2/pkg/menu/keys"
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
 	"github.com/wailsapp/wails/v2/pkg/options/mac"
+	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 //go:embed all:frontend/dist
@@ -15,10 +18,38 @@ var assets embed.FS
 func main() {
 	app := NewApp()
 
+	appMenu := menu.NewMenu()
+
+	// App menu (macOS)
+	appMenu.Append(menu.AppMenu())
+
+	// File menu
+	fileMenu := appMenu.AddSubmenu("File")
+	fileMenu.AddText("Open Workspace…", keys.CmdOrCtrl("o"), func(_ *menu.CallbackData) {
+		runtime.EventsEmit(app.ctx, "navigate", "browse")
+	})
+	fileMenu.AddSeparator()
+	fileMenu.AddText("Quit", keys.CmdOrCtrl("q"), func(_ *menu.CallbackData) {
+		runtime.Quit(app.ctx)
+	})
+
+	// View menu
+	viewMenu := appMenu.AddSubmenu("View")
+	viewMenu.AddText("Settings", keys.CmdOrCtrl(","), func(_ *menu.CallbackData) {
+		runtime.EventsEmit(app.ctx, "navigate", "settings")
+	})
+	viewMenu.AddText("Usage", nil, func(_ *menu.CallbackData) {
+		runtime.EventsEmit(app.ctx, "navigate", "usage")
+	})
+
+	// Edit menu (standard copy/paste/undo)
+	appMenu.Append(menu.EditMenu())
+
 	err := wails.Run(&options.App{
 		Title:  "Activate Framework",
 		Width:  480,
 		Height: 720,
+		Menu:   appMenu,
 		AssetServer: &assetserver.Options{
 			Assets: assets,
 		},
