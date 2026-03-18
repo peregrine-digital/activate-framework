@@ -74,18 +74,21 @@
 </script>
 
 <div class="bg-activate-bg text-activate-fg h-screen w-screen overflow-hidden font-sans text-sm flex flex-col">
-  <header class="shrink-0 px-4 pt-4 pb-2 flex items-center gap-2">
-    {#if view === 'workspace'}
+  {#if view === 'workspace'}
+    <header class="shrink-0 px-4 pt-3 pb-1 flex items-center">
       <button
-        class="opacity-60 hover:opacity-100 cursor-pointer text-xs"
+        class="opacity-50 hover:opacity-100 cursor-pointer text-xs flex items-center gap-1 transition-opacity duration-150"
         onclick={backToWelcome}
         title="Back to workspaces"
       >
-        ←
+        ← <span class="text-[11px]">Workspaces</span>
       </button>
-    {/if}
-    <h1 class="text-lg font-bold">Activate Framework</h1>
-  </header>
+    </header>
+  {:else}
+    <header class="shrink-0 px-4 pt-4 pb-2">
+      <h1 class="text-lg font-bold">Activate Framework</h1>
+    </header>
+  {/if}
 
   <main class="flex-1 overflow-y-auto overflow-x-hidden px-4 pb-4">
 

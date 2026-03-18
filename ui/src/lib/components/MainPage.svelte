@@ -101,7 +101,7 @@
   <div class="section-label">
     Outside Tier · {outsideTierFiles.length}
   </div>
-  <div class="text-[11px] text-activate-fg-muted italic pb-1 pl-3">Switch to a higher tier to access these files</div>
+  <p class="text-[10px] text-activate-fg-muted italic pb-1 pl-3 opacity-60">Switch to a higher tier to access these files</p>
   <CategoryList
     files={outsideTierFiles}
     {categories}
@@ -121,7 +121,7 @@
   <div class="section-label">
     Excluded · {excludedFiles.length}
   </div>
-  <div class="text-[11px] text-activate-fg-muted italic pb-1 pl-3">These files are excluded and will not be installed</div>
+  <p class="text-[10px] text-activate-fg-muted italic pb-1 pl-3 opacity-60">These files are excluded and will not be installed</p>
   <CategoryList
     files={excludedFiles}
     {categories}
