@@ -40,21 +40,6 @@
     });
   }
 
-  interface WorkspaceInfo {
-    path: string;
-    name: string;
-    manifest?: string;
-    tier?: string;
-    fileCount: number;
-    exists: boolean;
-  }
-
-  let view = $state<'welcome' | 'workspace'>('welcome');
-  let page = $state<Page>('main');
-  let appState = $state<AppState | null>(null);
-  let workspaces = $state<WorkspaceInfo[]>([]);
-  let loading = $state(true);
-
   async function loadWorkspaces() {
     if (wailsApp?.ListWorkspaces) {
       workspaces = (await wailsApp.ListWorkspaces()) ?? [];
