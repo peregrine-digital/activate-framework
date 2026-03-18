@@ -73,8 +73,8 @@
   loadWorkspaces();
 </script>
 
-<div class="bg-activate-bg text-activate-fg min-h-screen font-sans text-sm p-4">
-  <header class="mb-4 flex items-center gap-2">
+<div class="bg-activate-bg text-activate-fg h-screen w-screen overflow-hidden font-sans text-sm flex flex-col">
+  <header class="shrink-0 px-4 pt-4 pb-2 flex items-center gap-2">
     {#if view === 'workspace'}
       <button
         class="opacity-60 hover:opacity-100 cursor-pointer text-xs"
@@ -86,6 +86,8 @@
     {/if}
     <h1 class="text-lg font-bold">Activate Framework</h1>
   </header>
+
+  <main class="flex-1 overflow-y-auto overflow-x-hidden px-4 pb-4">
 
   {#if loading}
     <div class="py-8 text-center opacity-50">Loading…</div>
@@ -106,4 +108,5 @@
   {:else}
     <MainPage state={appState} {api} onNavigate={(p) => page = p} />
   {/if}
+  </main>
 </div>

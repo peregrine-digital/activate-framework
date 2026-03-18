@@ -17,11 +17,11 @@
   let { workspaces, onSelect, onBrowse }: Props = $props();
 </script>
 
-<div class="flex flex-col h-full">
-  <div class="flex items-center justify-between mb-6">
-    <h2 class="text-base font-semibold">Workspaces</h2>
+<div class="flex flex-col h-full min-w-0">
+  <div class="flex items-center justify-between mb-4 gap-2">
+    <h2 class="text-base font-semibold shrink-0">Workspaces</h2>
     <button
-      class="bg-activate-btn-bg text-activate-btn-fg px-3 py-1.5 rounded text-xs font-medium hover:opacity-90 cursor-pointer"
+      class="bg-activate-btn-primary-bg text-activate-btn-primary-fg px-3 py-1.5 rounded text-xs font-medium hover:bg-activate-btn-primary-hover cursor-pointer shrink-0"
       onclick={onBrowse}
     >
       Open Directory…
@@ -36,7 +36,7 @@
         <p class="text-xs">Open a directory to get started with Activate.</p>
       </div>
       <button
-        class="bg-activate-btn-bg text-activate-btn-fg px-4 py-2 rounded text-sm font-medium hover:opacity-90 cursor-pointer"
+        class="bg-activate-btn-primary-bg text-activate-btn-primary-fg px-4 py-2 rounded text-sm font-medium hover:bg-activate-btn-primary-hover cursor-pointer"
         onclick={onBrowse}
       >
         Open Directory…
@@ -46,29 +46,29 @@
     <div class="flex flex-col gap-1">
       {#each workspaces as ws}
         <button
-          class="flex items-start gap-3 p-3 rounded text-left hover:bg-activate-bg-hover transition-colors w-full cursor-pointer"
+          class="flex items-start gap-3 p-3 rounded-lg text-left hover:bg-activate-bg-hover transition-colors w-full cursor-pointer min-w-0 border border-transparent hover:border-activate-border"
           class:opacity-40={!ws.exists}
           onclick={() => ws.exists && onSelect(ws.path)}
           disabled={!ws.exists}
         >
-          <div class="text-lg mt-0.5">{ws.exists ? '📁' : '⚠️'}</div>
-          <div class="flex-1 min-w-0">
+          <div class="text-base mt-0.5 shrink-0">{ws.exists ? '📁' : '⚠️'}</div>
+          <div class="flex-1 min-w-0 overflow-hidden">
             <div class="font-medium text-sm truncate">{ws.name}</div>
-            <div class="text-xs opacity-60 truncate">{ws.path}</div>
+            <div class="text-xs opacity-50 truncate">{ws.path}</div>
             {#if ws.manifest || ws.fileCount > 0}
-              <div class="flex items-center gap-2 mt-1">
+              <div class="flex flex-wrap items-center gap-1.5 mt-1.5">
                 {#if ws.manifest}
-                  <span class="text-[10px] px-1.5 py-0.5 rounded bg-activate-badge-bg text-activate-badge-fg">
+                  <span class="text-[10px] px-1.5 py-0.5 rounded bg-activate-badge-bg text-activate-badge-fg whitespace-nowrap">
                     {ws.manifest}
                   </span>
                 {/if}
                 {#if ws.tier}
-                  <span class="text-[10px] px-1.5 py-0.5 rounded bg-activate-badge-bg text-activate-badge-fg">
+                  <span class="text-[10px] px-1.5 py-0.5 rounded bg-activate-badge-bg text-activate-badge-fg whitespace-nowrap">
                     {ws.tier}
                   </span>
                 {/if}
                 {#if ws.fileCount > 0}
-                  <span class="text-[10px] opacity-50">
+                  <span class="text-[10px] opacity-50 whitespace-nowrap">
                     {ws.fileCount} file{ws.fileCount === 1 ? '' : 's'}
                   </span>
                 {/if}
