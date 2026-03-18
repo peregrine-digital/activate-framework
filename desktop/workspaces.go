@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 )
 
 // WorkspaceInfo describes a known Activate workspace for the welcome page.
@@ -51,6 +52,11 @@ func (a *App) ListWorkspaces() []WorkspaceInfo {
 			Name: filepath.Base(meta.Path),
 		}
 
+		// Skip test/temp directories that leaked into the store
+		if isTestPath(meta.Path) {
+			continue
+		}
+
 		// Check if directory still exists
 		if _, err := os.Stat(meta.Path); err == nil {
 			ws.Exists = true
@@ -83,4 +89,17 @@ func (a *App) ListWorkspaces() []WorkspaceInfo {
 	})
 
 	return workspaces
+}
+
+// isTestPath returns true for paths that look like test temp directories.
+func isTestPath(p string) bool {
+	// macOS temp dirs from Go tests
+	if strings.HasPrefix(p, "/var/folders/") || strings.HasPrefix(p, "/private/var/folders/") {
+		return true
+	}
+	// Linux/generic temp dirs
+	if strings.HasPrefix(p, "/tmp/") {
+		return true
+	}
+	return false
 }
