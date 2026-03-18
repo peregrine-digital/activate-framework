@@ -26,6 +26,14 @@
   let workspaces = $state<WorkspaceInfo[]>([]);
   let loading = $state(true);
   let loadingName = $state('');
+  let loadingError = $state('');
+
+  function withTimeout<T>(fn: () => Promise<T>, ms: number, msg: string): Promise<T> {
+    return Promise.race([
+      fn(),
+      new Promise<never>((_, reject) => setTimeout(() => reject(new Error(msg)), ms)),
+    ]);
+  }
 
   // Listen for native menu events from Wails
   if (typeof window !== 'undefined') {
@@ -53,38 +61,37 @@
     loadingName = path.split('/').pop() || path;
     view = 'loading';
     try {
-      if (wailsApp?.InitWorkspace) {
-        await wailsApp.InitWorkspace(path);
-      }
-      appState = await api.getState();
+      await withTimeout(async () => {
+        if (wailsApp?.InitWorkspace) {
+          await wailsApp.InitWorkspace(path);
+        }
+        appState = await api.getState();
+      }, 30_000, 'Workspace initialization timed out');
       view = 'workspace';
       nav.reset();
       wailsApp?.SetWorkspaceMenuVisible(true);
     } catch (e) {
       console.error('Failed to open workspace:', e);
-      view = 'welcome';
+      loadingError = String(e instanceof Error ? e.message : e);
     }
   }
 
   async function browseWorkspace() {
-    if (wailsApp?.SelectWorkspace) {
-      loadingName = 'workspace';
+    if (!wailsApp?.SelectWorkspace) return;
+    try {
+      // Show dialog first — loading only after user picks a directory
+      const state = await wailsApp.SelectWorkspace();
+      if (!state?.projectDir) return; // cancelled
+      loadingName = state.projectDir.split('/').pop() || state.projectDir;
       view = 'loading';
-      try {
-        const state = await wailsApp.SelectWorkspace();
-        if (state?.projectDir) {
-          loadingName = state.projectDir.split('/').pop() || state.projectDir;
-          appState = await api.getState();
-          view = 'workspace';
-          nav.reset();
-          wailsApp?.SetWorkspaceMenuVisible(true);
-          loadWorkspaces();
-          return;
-        }
-      } catch (e) {
-        console.error('Failed to open workspace:', e);
-      }
-      view = 'welcome';
+      appState = await api.getState();
+      view = 'workspace';
+      nav.reset();
+      wailsApp?.SetWorkspaceMenuVisible(true);
+      loadWorkspaces();
+    } catch (e) {
+      console.error('Failed to open workspace:', e);
+      loadingError = String(e instanceof Error ? e.message : e);
     }
   }
 
@@ -130,11 +137,22 @@
   <main class="flex-1 overflow-y-auto overflow-x-hidden px-4 pb-4">
   {#if view === 'loading'}
     <div class="flex flex-col items-center justify-center h-full gap-4 animate-in">
-      <div class="loading-spinner"></div>
-      <div class="text-center">
-        <p class="text-sm font-medium opacity-80">Opening workspace</p>
-        <p class="text-xs opacity-40 mt-1">{loadingName}</p>
-      </div>
+      {#if loadingError}
+        <div class="text-2xl">⚠️</div>
+        <div class="text-center max-w-xs">
+          <p class="text-sm font-medium mb-1">Failed to open workspace</p>
+          <p class="text-xs opacity-50 break-words">{loadingError}</p>
+        </div>
+        <button class="btn btn-primary text-xs" onclick={() => { loadingError = ''; view = 'welcome'; }}>
+          ← Back
+        </button>
+      {:else}
+        <div class="loading-spinner"></div>
+        <div class="text-center">
+          <p class="text-sm font-medium opacity-80">Opening workspace</p>
+          <p class="text-xs opacity-40 mt-1">{loadingName}</p>
+        </div>
+      {/if}
     </div>
   {:else if nav.page === 'settings' && view !== 'workspace'}
     <!-- Global settings accessible from welcome screen -->
