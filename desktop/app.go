@@ -2,30 +2,45 @@ package main
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 
-	"github.com/peregrine-digital/activate-framework/cli/commands"
-	"github.com/peregrine-digital/activate-framework/cli/model"
 	"github.com/wailsapp/wails/v2/pkg/menu"
 	wailsRuntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
-// App wraps the CLI's ActivateService for desktop use.
+// App manages the daemon lifecycle and exposes RPC methods to the Wails frontend.
 type App struct {
-	ctx               context.Context
-	svc               *commands.ActivateService
+	ctx                context.Context
+	daemon             *daemonClient
+	projectDir         string
 	workspaceMenuItems []*menu.MenuItem
 }
 
 func NewApp() *App {
-	return &App{
-		svc: commands.NewService("", nil, model.Config{}),
-	}
+	return &App{}
 }
 
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
+}
+
+// findBinary locates the activate CLI binary.
+func findBinary() string {
+	// Check standard install location first
+	home, _ := os.UserHomeDir()
+	standard := filepath.Join(home, ".activate", "bin", "activate")
+	if _, err := os.Stat(standard); err == nil {
+		return standard
+	}
+	// Fall back to PATH
+	if p, err := exec.LookPath("activate"); err == nil {
+		return p
+	}
+	return ""
 }
 
 // SetWorkspaceMenuVisible shows or hides workspace-only menu items.
@@ -40,104 +55,208 @@ func (a *App) SetWorkspaceMenuVisible(visible bool) {
 	wailsRuntime.MenuUpdateApplicationMenu(a.ctx)
 }
 
-// SelectWorkspace opens a native directory picker and initializes the service.
-func (a *App) SelectWorkspace() (commands.StateResult, error) {
+// InitWorkspace spawns a daemon for the given project directory.
+func (a *App) InitWorkspace(dir string) error {
+	// Stop any existing daemon
+	if a.daemon != nil {
+		a.daemon.stop()
+		a.daemon = nil
+	}
+
+	bin := findBinary()
+	if bin == "" {
+		return fmt.Errorf("activate CLI not found")
+	}
+
+	env := os.Environ()
+	dc, err := startDaemon(bin, dir, env)
+	if err != nil {
+		return fmt.Errorf("start daemon: %w", err)
+	}
+
+	dc.onNotification = func(method string) {
+		if method == "activate/stateChanged" {
+			wailsRuntime.EventsEmit(a.ctx, "stateChanged")
+		}
+	}
+
+	// Initialize the daemon with the project directory
+	var initResult json.RawMessage
+	err = dc.callInto(&initResult, "activate/initialize", map[string]string{
+		"projectDir": dir,
+	})
+	if err != nil {
+		dc.stop()
+		return fmt.Errorf("initialize: %w", err)
+	}
+
+	a.daemon = dc
+	a.projectDir = dir
+	return nil
+}
+
+// CloseWorkspace stops the daemon for the current workspace.
+func (a *App) CloseWorkspace() {
+	if a.daemon != nil {
+		a.daemon.stop()
+		a.daemon = nil
+	}
+	a.projectDir = ""
+}
+
+// SelectWorkspace opens a native directory picker and spawns a daemon.
+func (a *App) SelectWorkspace() (map[string]interface{}, error) {
 	dir, err := wailsRuntime.OpenDirectoryDialog(a.ctx, wailsRuntime.OpenDialogOptions{
 		Title: "Select Workspace",
 	})
 	if err != nil {
-		return commands.StateResult{}, err
+		return nil, err
 	}
 	if dir == "" {
-		return a.svc.GetState(), nil
+		return nil, nil
 	}
-	a.svc.Initialize(dir)
-	return a.svc.GetState(), nil
+	if err := a.InitWorkspace(dir); err != nil {
+		return nil, err
+	}
+	return map[string]interface{}{"projectDir": dir}, nil
 }
 
-func (a *App) InitWorkspace(dir string) {
-	a.svc.Initialize(dir)
+func (a *App) requireDaemon() error {
+	if a.daemon == nil {
+		return fmt.Errorf("no workspace open")
+	}
+	return nil
 }
 
-func (a *App) GetState() commands.StateResult {
-	return a.svc.GetState()
+// ── RPC Forwarding Methods ─────────────────────────────────────
+
+func (a *App) GetState() (json.RawMessage, error) {
+	if err := a.requireDaemon(); err != nil {
+		return nil, err
+	}
+	return a.daemon.call("activate/state", nil)
 }
 
-func (a *App) GetConfig(scope string) (*model.Config, error) {
-	return a.svc.GetConfig(scope)
+func (a *App) GetConfig(scope string) (json.RawMessage, error) {
+	if err := a.requireDaemon(); err != nil {
+		return nil, err
+	}
+	return a.daemon.call("activate/configGet", map[string]string{"scope": scope})
 }
 
-func (a *App) SetConfig(scope string, updates *model.Config) (*commands.SetConfigResult, error) {
-	return a.svc.SetConfig(scope, updates)
+func (a *App) SetConfig(params json.RawMessage) (json.RawMessage, error) {
+	if err := a.requireDaemon(); err != nil {
+		return nil, err
+	}
+	return a.daemon.call("activate/configSet", params)
 }
 
-func (a *App) RefreshConfig() {
-	a.svc.RefreshConfig()
+func (a *App) InstallFile(dest string) (json.RawMessage, error) {
+	if err := a.requireDaemon(); err != nil {
+		return nil, err
+	}
+	return a.daemon.call("activate/fileInstall", map[string]string{"file": dest})
 }
 
-func (a *App) ListManifests() []model.Manifest {
-	return a.svc.ListManifests()
+func (a *App) UninstallFile(dest string) (json.RawMessage, error) {
+	if err := a.requireDaemon(); err != nil {
+		return nil, err
+	}
+	return a.daemon.call("activate/fileUninstall", map[string]string{"file": dest})
 }
 
-func (a *App) ListFiles(manifestID, tierID, category string) (*commands.ListFilesResult, error) {
-	return a.svc.ListFiles(manifestID, tierID, category)
+func (a *App) DiffFile(dest string) (json.RawMessage, error) {
+	if err := a.requireDaemon(); err != nil {
+		return nil, err
+	}
+	return a.daemon.call("activate/fileDiff", map[string]string{"file": dest})
 }
 
-func (a *App) InstallFile(file string) (*commands.FileResult, error) {
-	return a.svc.InstallFile(file)
+func (a *App) SkipUpdate(dest string) (json.RawMessage, error) {
+	if err := a.requireDaemon(); err != nil {
+		return nil, err
+	}
+	return a.daemon.call("activate/fileSkip", map[string]string{"file": dest})
 }
 
-func (a *App) UninstallFile(file string) (*commands.FileResult, error) {
-	return a.svc.UninstallFile(file)
+func (a *App) SetOverride(dest, override string) (json.RawMessage, error) {
+	if err := a.requireDaemon(); err != nil {
+		return nil, err
+	}
+	return a.daemon.call("activate/fileOverride", map[string]interface{}{
+		"file": dest, "override": override,
+	})
 }
 
-func (a *App) DiffFile(file string) (*commands.DiffResult, error) {
-	return a.svc.DiffFile(file)
+func (a *App) UpdateAll() (json.RawMessage, error) {
+	if err := a.requireDaemon(); err != nil {
+		return nil, err
+	}
+	return a.daemon.call("activate/update", nil)
 }
 
-func (a *App) SkipUpdate(file string) (*commands.FileResult, error) {
-	return a.svc.SkipUpdate(file)
+func (a *App) AddToWorkspace() (json.RawMessage, error) {
+	if err := a.requireDaemon(); err != nil {
+		return nil, err
+	}
+	return a.daemon.call("activate/repoAdd", nil)
 }
 
-func (a *App) SetOverride(file, override string) (*commands.FileResult, error) {
-	return a.svc.SetOverride(file, override)
+func (a *App) RemoveFromWorkspace() (json.RawMessage, error) {
+	if err := a.requireDaemon(); err != nil {
+		return nil, err
+	}
+	return a.daemon.call("activate/repoRemove", nil)
 }
 
-func (a *App) Sync() (*commands.SyncResult, error) {
-	return a.svc.Sync()
+func (a *App) ListManifests() (json.RawMessage, error) {
+	if err := a.requireDaemon(); err != nil {
+		return nil, err
+	}
+	return a.daemon.call("activate/manifestList", nil)
 }
 
-func (a *App) Update() (*commands.UpdateResult, error) {
-	return a.svc.Update()
+func (a *App) ListBranches() (json.RawMessage, error) {
+	if err := a.requireDaemon(); err != nil {
+		return nil, err
+	}
+	return a.daemon.call("activate/branchList", nil)
 }
 
-func (a *App) RepoAdd() (*commands.RepoAddResult, error) {
-	return a.svc.RepoAdd()
+func (a *App) RunTelemetry() (json.RawMessage, error) {
+	if err := a.requireDaemon(); err != nil {
+		return nil, err
+	}
+	return a.daemon.call("activate/telemetryRun", map[string]string{"token": ""})
 }
 
-func (a *App) RepoRemove() error {
-	return a.svc.RepoRemove()
+func (a *App) ReadTelemetryLog() (json.RawMessage, error) {
+	if err := a.requireDaemon(); err != nil {
+		return nil, err
+	}
+	return a.daemon.call("activate/telemetryLog", nil)
 }
 
-func (a *App) ListBranches(repo string) ([]string, error) {
-	return a.svc.ListBranches(repo)
+func (a *App) CheckForUpdates() (json.RawMessage, error) {
+	if err := a.requireDaemon(); err != nil {
+		return nil, err
+	}
+	return a.daemon.call("activate/checkUpdate", map[string]interface{}{"force": true})
 }
 
-func (a *App) RunTelemetry(token string) (*commands.TelemetryRunResult, error) {
-	return a.svc.RunTelemetry(token)
-}
-
-func (a *App) ReadTelemetryLog() ([]model.TelemetryEntry, error) {
-	return a.svc.ReadTelemetryLog()
+func (a *App) SyncManifests() (json.RawMessage, error) {
+	if err := a.requireDaemon(); err != nil {
+		return nil, err
+	}
+	return a.daemon.call("activate/sync", nil)
 }
 
 // OpenFile opens a file in the OS default application.
 func (a *App) OpenFile(file string) error {
-	projectDir := a.svc.CurrentProjectDir()
-	if projectDir == "" {
+	if a.projectDir == "" {
 		return nil
 	}
-	fullPath := filepath.Join(projectDir, file)
+	fullPath := filepath.Join(a.projectDir, file)
 	if _, err := os.Stat(fullPath); err != nil {
 		return err
 	}

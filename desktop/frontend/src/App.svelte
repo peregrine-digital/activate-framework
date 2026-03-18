@@ -1,6 +1,6 @@
 <script lang="ts">
   import '../../../ui/src/app.css';
-  import { createMockAPI } from '$lib/adapters/mock';
+  import { createWailsAPI } from '$lib/adapters/wails';
   import { createNavigation } from '$lib/navigation.svelte';
   import type { AppState } from '$lib/types';
   import WelcomePage from '$lib/components/WelcomePage.svelte';
@@ -9,8 +9,7 @@
   // Wails Go bindings
   const wailsApp = (window as any).go?.main?.App;
 
-  // TODO: Replace mock with createWailsAPI() once fully wired
-  const api = createMockAPI('desktop');
+  const api = createWailsAPI();
   const nav = createNavigation();
 
   interface WorkspaceInfo {
@@ -77,6 +76,7 @@
     view = 'welcome';
     nav.reset();
     appState = null;
+    wailsApp?.CloseWorkspace();
     wailsApp?.SetWorkspaceMenuVisible(false);
     loadWorkspaces();
   }

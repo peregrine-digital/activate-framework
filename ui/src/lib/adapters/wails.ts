@@ -1,21 +1,18 @@
 /**
- * Wails adapter — bridges Go bindings to the shared ActivateAPI interface.
+ * Wails adapter — bridges Go daemon-backed methods to the shared ActivateAPI.
  *
- * In Wails v2, Go methods bound via `Bind: []interface{}{app}` are available
- * in the frontend as `window.go.main.App.MethodName(args)`.
- *
- * This adapter wraps those calls into the shared ActivateAPI contract so the
- * same Svelte components work across VS Code, desktop, and dev preview.
+ * The Go backend spawns `activate serve --stdio` and forwards JSON-RPC calls.
+ * Go methods return raw JSON which we parse here. Daemon stateChanged
+ * notifications are forwarded as Wails 'stateChanged' events.
  */
 import type { ActivateAPI } from '../api';
 import type {
   AppState,
   Config,
+  DiffResult,
   FileStatus,
   Manifest,
   TelemetryEntry,
-  UsageSummary,
-  DailyUsage,
 } from '../types';
 
 // Wails v2 injects Go bindings at `window.go.main.App`
@@ -24,36 +21,49 @@ declare global {
     go: {
       main: {
         App: {
-          SelectWorkspace(): Promise<any>;
           InitWorkspace(dir: string): Promise<void>;
+          CloseWorkspace(): Promise<void>;
+          SelectWorkspace(): Promise<any>;
+          SetWorkspaceMenuVisible(visible: boolean): Promise<void>;
+          ListWorkspaces(): Promise<any[]>;
           GetState(): Promise<any>;
           GetConfig(scope: string): Promise<any>;
-          SetConfig(scope: string, updates: any): Promise<any>;
-          RefreshConfig(): Promise<void>;
-          ListManifests(): Promise<any[]>;
-          ListFiles(manifestID: string, tierID: string, category: string): Promise<any>;
-          InstallFile(file: string): Promise<any>;
-          UninstallFile(file: string): Promise<any>;
-          DiffFile(file: string): Promise<any>;
-          SkipUpdate(file: string): Promise<any>;
-          SetOverride(file: string, override: string): Promise<any>;
-          Sync(): Promise<any>;
-          Update(): Promise<any>;
-          RepoAdd(): Promise<any>;
-          RepoRemove(): Promise<void>;
-          ListBranches(repo: string): Promise<string[]>;
-          RunTelemetry(token: string): Promise<any>;
-          ReadTelemetryLog(): Promise<any[]>;
+          SetConfig(params: any): Promise<any>;
+          InstallFile(dest: string): Promise<any>;
+          UninstallFile(dest: string): Promise<any>;
+          DiffFile(dest: string): Promise<any>;
+          SkipUpdate(dest: string): Promise<any>;
+          SetOverride(dest: string, override: string): Promise<any>;
+          UpdateAll(): Promise<any>;
+          AddToWorkspace(): Promise<any>;
+          RemoveFromWorkspace(): Promise<any>;
+          ListManifests(): Promise<any>;
+          ListBranches(): Promise<any>;
+          RunTelemetry(): Promise<any>;
+          ReadTelemetryLog(): Promise<any>;
+          CheckForUpdates(): Promise<any>;
+          SyncManifests(): Promise<any>;
           OpenFile(file: string): Promise<void>;
         };
       };
+    };
+    runtime: {
+      EventsOn(event: string, callback: (...args: any[]) => void): () => void;
+      EventsOff(event: string): void;
     };
   }
 }
 
 export function createWailsAPI(): ActivateAPI {
   const app = window.go.main.App;
-  const listeners: Array<() => void> = [];
+  const listeners = new Set<() => void>();
+
+  // Listen for stateChanged events from the Go backend (forwarded from daemon)
+  if (typeof window !== 'undefined' && window.runtime) {
+    window.runtime.EventsOn('stateChanged', () => {
+      listeners.forEach((cb) => cb());
+    });
+  }
 
   return {
     platform: 'desktop',
@@ -62,131 +72,92 @@ export function createWailsAPI(): ActivateAPI {
       return app.GetState();
     },
 
-    async getConfig(scope: string): Promise<Config> {
+    async getConfig(scope: 'global' | 'project' | 'resolved'): Promise<Config> {
       return app.GetConfig(scope);
     },
 
-    async setConfig(scope: string, updates: Partial<Config>): Promise<void> {
-      await app.SetConfig(scope, updates as any);
+    async setConfig(updates: Partial<Config> & { scope: 'global' | 'project' }): Promise<void> {
+      const { scope, ...rest } = updates;
+      await app.SetConfig({ scope, updates: rest });
     },
 
     async refreshConfig(): Promise<void> {
-      await app.RefreshConfig();
-      listeners.forEach((fn) => fn());
+      // Re-fetch state triggers a config reload in the daemon
+      listeners.forEach((cb) => cb());
     },
 
-    async listManifests(): Promise<Manifest[]> {
-      return app.ListManifests() ?? [];
+    async installFile(file: FileStatus): Promise<void> {
+      await app.InstallFile(file.dest);
     },
 
-    async installFile(file: string): Promise<void> {
-      await app.InstallFile(file);
-      listeners.forEach((fn) => fn());
+    async uninstallFile(file: FileStatus): Promise<void> {
+      await app.UninstallFile(file.dest);
     },
 
-    async uninstallFile(file: string): Promise<void> {
-      await app.UninstallFile(file);
-      listeners.forEach((fn) => fn());
+    async diffFile(file: FileStatus): Promise<DiffResult> {
+      const result = await app.DiffFile(file.dest);
+      return result ?? { file: file.dest, diff: '' };
     },
 
-    async diffFile(file: string): Promise<string> {
-      const result = await app.DiffFile(file);
-      return result?.diff ?? '';
+    async skipUpdate(file: FileStatus): Promise<void> {
+      await app.SkipUpdate(file.dest);
     },
 
-    async skipUpdate(file: string): Promise<void> {
-      await app.SkipUpdate(file);
-      listeners.forEach((fn) => fn());
-    },
-
-    async setFileOverride(file: string, override: string): Promise<void> {
-      await app.SetOverride(file, override);
-      listeners.forEach((fn) => fn());
+    async setFileOverride(dest: string, override: '' | 'pinned' | 'excluded'): Promise<void> {
+      await app.SetOverride(dest, override);
     },
 
     async updateAll(): Promise<void> {
-      await app.Update();
-      listeners.forEach((fn) => fn());
+      await app.UpdateAll();
     },
 
     async addToWorkspace(): Promise<void> {
-      await app.RepoAdd();
-      listeners.forEach((fn) => fn());
+      await app.AddToWorkspace();
     },
 
     async removeFromWorkspace(): Promise<void> {
-      await app.RepoRemove();
-      listeners.forEach((fn) => fn());
+      await app.RemoveFromWorkspace();
     },
 
-    async changeTier(tier: string): Promise<void> {
-      await app.SetConfig('project', { tier } as any);
-      listeners.forEach((fn) => fn());
-    },
-
-    async changeManifest(manifest: string): Promise<void> {
-      await app.SetConfig('project', { manifest } as any);
-      listeners.forEach((fn) => fn());
+    async listManifests(): Promise<Manifest[]> {
+      return (await app.ListManifests()) ?? [];
     },
 
     async listBranches(): Promise<string[]> {
-      const state = await app.GetState();
-      const repo = state?.config?.repo ?? '';
-      if (!repo) return [];
-      return app.ListBranches(repo);
-    },
-
-    async openFile(file: string): Promise<void> {
-      await app.OpenFile(file);
-    },
-
-    async installCLI(): Promise<void> {
-      // Desktop doesn't auto-install CLI — direct user to docs
-    },
-
-    async checkForUpdates(): Promise<void> {
-      await app.Sync();
-      listeners.forEach((fn) => fn());
-    },
-
-    async getUsageSummary(): Promise<UsageSummary> {
-      const entries = await app.ReadTelemetryLog();
-      if (!entries || entries.length === 0) {
-        return {
-          premiumEntitlement: 0,
-          premiumUsed: 0,
-          premiumRemaining: 0,
-          quotaResetDate: '',
-          daysTracked: 0,
-        };
-      }
-      const latest = entries[entries.length - 1];
-      return {
-        premiumEntitlement: latest.premium_entitlement ?? 0,
-        premiumUsed: latest.premium_used ?? 0,
-        premiumRemaining: latest.premium_remaining ?? 0,
-        quotaResetDate: latest.quota_reset_date_utc ?? '',
-        daysTracked: entries.length,
-      };
-    },
-
-    async getDailyUsage(): Promise<DailyUsage[]> {
-      const entries = await app.ReadTelemetryLog();
-      if (!entries) return [];
-      return entries.map((e: any) => ({
-        date: e.date,
-        premiumUsed: e.premium_used ?? 0,
-        premiumEntitlement: e.premium_entitlement ?? 0,
-      }));
+      return (await app.ListBranches()) ?? [];
     },
 
     async runTelemetry(): Promise<void> {
-      await app.RunTelemetry('');
-      listeners.forEach((fn) => fn());
+      await app.RunTelemetry();
     },
 
-    onStateChanged(callback: () => void): void {
-      listeners.push(callback);
+    async readTelemetryLog(): Promise<TelemetryEntry[]> {
+      return (await app.ReadTelemetryLog()) ?? [];
+    },
+
+    async openFile(file: FileStatus): Promise<void> {
+      await app.OpenFile(file.dest);
+    },
+
+    async changeTier(): Promise<void> {
+      // TODO: show tier picker dialog
+    },
+
+    async changeManifest(): Promise<void> {
+      // TODO: show manifest picker dialog
+    },
+
+    async installCLI(): Promise<void> {
+      // Desktop users install CLI via shell script
+    },
+
+    async checkForUpdates(): Promise<void> {
+      await app.CheckForUpdates();
+    },
+
+    onStateChanged(callback: () => void): () => void {
+      listeners.add(callback);
+      return () => listeners.delete(callback);
     },
   };
 }

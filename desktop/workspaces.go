@@ -5,8 +5,6 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
-
-	"github.com/peregrine-digital/activate-framework/cli/storage"
 )
 
 // WorkspaceInfo describes a known Activate workspace for the welcome page.
@@ -21,7 +19,8 @@ type WorkspaceInfo struct {
 
 // ListWorkspaces scans ~/.activate/repos/ for known workspaces.
 func (a *App) ListWorkspaces() []WorkspaceInfo {
-	reposDir := filepath.Join(storage.StoreBase(), "repos")
+	home, _ := os.UserHomeDir()
+	reposDir := filepath.Join(home, ".activate", "repos")
 	entries, err := os.ReadDir(reposDir)
 	if err != nil {
 		return nil
