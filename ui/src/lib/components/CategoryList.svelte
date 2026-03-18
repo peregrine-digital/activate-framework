@@ -61,13 +61,13 @@
 </script>
 
 {#each groups as group}
-  <details class="mb-0.5">
-    <summary class="cursor-pointer py-1.5 px-1 font-semibold text-xs rounded select-none hover:bg-activate-bg-hover
+  <details class="mb-0.5" open>
+    <summary class="cursor-pointer py-2 px-2 font-semibold text-xs rounded-lg select-none transition-colors duration-150 hover:bg-activate-bg-hover
       [&::-webkit-details-marker]:hidden list-none
-      before:content-['▸\_'] before:text-[10px] before:inline
+      before:content-['▸\_'] before:text-[10px] before:inline before:opacity-50
       [details[open]>&]:before:content-['▾\_']">
       {CATEGORY_ICONS[group.category] || '📄'} {group.label}
-      <span class="opacity-50 font-normal ml-1">{group.files.length}</span>
+      <span class="text-activate-fg-muted font-normal ml-1">{group.files.length}</span>
     </summary>
     {#each group.files as file}
       <FileCard

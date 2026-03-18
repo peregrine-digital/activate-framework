@@ -38,14 +38,14 @@
   }
 </script>
 
-<div class="flex gap-1.5 my-2 flex-wrap">
+<div class="flex gap-2 my-2 flex-wrap items-center">
   <button class="btn btn-secondary" onclick={onBack}>← Back</button>
   <h2 class="text-sm font-semibold flex-1 my-0">⚙ Settings</h2>
 </div>
 
-<hr class="border-none border-t border-activate-border my-2.5" />
+<hr class="divider" />
 
-<div class="text-[11px] uppercase tracking-wider opacity-60 mt-3.5 mb-1">Configuration</div>
+<div class="section-label">Configuration</div>
 
 <div class="setting-row">
   <span class="font-semibold text-xs">Manifest</span>
@@ -91,9 +91,9 @@
   </span>
 </div>
 
-<hr class="border-none border-t border-activate-border my-2.5" />
+<hr class="divider" />
 
-<div class="text-[11px] uppercase tracking-wider opacity-60 mt-3.5 mb-1">Global Defaults</div>
+<div class="section-label">Global Defaults</div>
 
 {#if globalCfg}
   {#each ['manifest', 'tier', 'repo', 'branch'] as field}
@@ -110,9 +110,9 @@
   </div>
 {/if}
 
-<hr class="border-none border-t border-activate-border my-2.5" />
+<hr class="divider" />
 
-<div class="text-[11px] uppercase tracking-wider opacity-60 mt-3.5 mb-1">Project Overrides</div>
+<div class="section-label">Project Overrides</div>
 
 {#if projectCfg}
   {#each ['manifest', 'tier', 'repo', 'branch'] as field}
@@ -128,9 +128,9 @@
   {/each}
 {/if}
 
-<hr class="border-none border-t border-activate-border my-2.5" />
+<hr class="divider" />
 
-<div class="text-[11px] uppercase tracking-wider opacity-60 mt-3.5 mb-1">Updates</div>
+<div class="section-label">Updates</div>
 <div class="setting-row">
   <span class="font-semibold text-xs">CLI Version</span>
   <span class="text-xs">{serverVersion || '—'}</span>
@@ -148,14 +148,22 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 6px 0;
-    border-bottom: 1px solid color-mix(in srgb, var(--color-activate-border), transparent 60%);
+    padding: 8px 0;
+    border-bottom: 1px solid color-mix(in srgb, var(--color-activate-border), transparent 50%);
+    transition: background 0.15s ease;
+  }
+  .setting-row:hover {
+    background: var(--color-activate-bg-hover);
+    margin: 0 -0.5rem;
+    padding-left: 0.5rem;
+    padding-right: 0.5rem;
+    border-radius: 0.5rem;
   }
   .source-badge {
     font-size: 10px;
-    padding: 1px 5px;
-    border-radius: 3px;
-    opacity: 0.8;
+    padding: 1px 6px;
+    border-radius: 0.25rem;
+    font-weight: 500;
   }
   .source-badge.project {
     background: var(--color-activate-badge-bg);
@@ -172,34 +180,19 @@
   .toggle-btn {
     font-size: 11px;
     padding: 2px 8px;
-    border-radius: 3px;
+    border-radius: 0.375rem;
     cursor: pointer;
     border: 1px solid transparent;
     background: var(--color-activate-btn-secondary-bg);
     color: var(--color-activate-btn-secondary-fg);
+    transition: all 0.15s ease;
+  }
+  .toggle-btn:hover {
+    background: var(--color-activate-btn-secondary-hover);
   }
   .toggle-btn.active {
     background: var(--color-activate-btn-primary-bg);
     color: var(--color-activate-btn-primary-fg);
+    box-shadow: 0 0 8px var(--color-activate-glow);
   }
-  .btn {
-    border: 1px solid transparent;
-    border-radius: 3px;
-    cursor: pointer;
-    font-family: inherit;
-    font-size: 12px;
-    line-height: 20px;
-    padding: 4px 10px;
-    white-space: nowrap;
-  }
-  .btn-primary {
-    background: var(--color-activate-btn-primary-bg);
-    color: var(--color-activate-btn-primary-fg);
-  }
-  .btn-primary:hover { background: var(--color-activate-btn-primary-hover); }
-  .btn-secondary {
-    background: var(--color-activate-btn-secondary-bg);
-    color: var(--color-activate-btn-secondary-fg);
-  }
-  .btn-secondary:hover { background: var(--color-activate-btn-secondary-hover); }
 </style>

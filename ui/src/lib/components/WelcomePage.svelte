@@ -46,7 +46,8 @@
     <div class="flex flex-col gap-1">
       {#each workspaces as ws}
         <button
-          class="flex items-start gap-3 p-3 rounded-lg text-left hover:bg-activate-bg-hover transition-colors w-full cursor-pointer min-w-0 border border-transparent hover:border-activate-border"
+          class="glass flex items-start gap-3 p-3.5 text-left transition-all duration-150 w-full cursor-pointer min-w-0
+            hover:border-activate-btn-primary-bg/30 hover:shadow-[0_0_15px_var(--color-activate-glow)]"
           class:opacity-40={!ws.exists}
           onclick={() => ws.exists && onSelect(ws.path)}
           disabled={!ws.exists}

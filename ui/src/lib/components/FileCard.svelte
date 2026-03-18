@@ -39,7 +39,8 @@
 </script>
 
 <div
-  class="group flex items-center gap-1.5 px-1.5 py-1 pl-5 rounded min-h-[32px] hover:bg-activate-bg-hover
+  class="group flex items-center gap-1.5 px-2 py-1.5 pl-5 rounded-lg min-h-[34px] transition-all duration-150
+    hover:bg-activate-bg-hover
     {outdated ? 'border-l-2 border-activate-warning' : ''}"
 >
   <!-- Main content -->
@@ -117,17 +118,18 @@
     color: var(--color-activate-fg);
     cursor: pointer;
     padding: 2px 5px;
-    border-radius: 3px;
+    border-radius: 0.375rem;
     font-size: 13px;
     opacity: 0;
-    transition: opacity 0.1s;
+    transition: all 0.15s ease;
   }
   :global(.group):hover .icon-btn {
-    opacity: 0.6;
+    opacity: 0.5;
   }
   .icon-btn:hover {
     opacity: 1 !important;
     background: var(--color-activate-bg-hover);
+    transform: scale(1.1);
   }
   .icon-btn-danger:hover {
     color: var(--color-activate-error);

@@ -7,24 +7,129 @@
  * VS Code webview: an adapter layer remaps these to var(--vscode-*) values.
  */
 @theme {
-  --color-activate-fg: #cccccc;
-  --color-activate-fg-muted: #999999;
-  --color-activate-bg: #1e1e1e;
-  --color-activate-bg-surface: #252526;
-  --color-activate-bg-hover: #2a2d2e;
+  --color-activate-fg: #d4d4d8;
+  --color-activate-fg-muted: #71717a;
+  --color-activate-bg: #18181b;
+  --color-activate-bg-surface: rgba(39, 39, 42, 0.7);
+  --color-activate-bg-hover: rgba(63, 63, 70, 0.4);
 
-  --color-activate-btn-primary-bg: #0078d4;
+  --color-activate-btn-primary-bg: #2563eb;
   --color-activate-btn-primary-fg: #ffffff;
-  --color-activate-btn-primary-hover: #026ec1;
-  --color-activate-btn-secondary-bg: #3a3d41;
-  --color-activate-btn-secondary-fg: #cccccc;
-  --color-activate-btn-secondary-hover: #45494e;
+  --color-activate-btn-primary-hover: #3b82f6;
+  --color-activate-btn-secondary-bg: rgba(63, 63, 70, 0.5);
+  --color-activate-btn-secondary-fg: #d4d4d8;
+  --color-activate-btn-secondary-hover: rgba(82, 82, 91, 0.6);
 
-  --color-activate-badge-bg: #4d4d4d;
-  --color-activate-badge-fg: #cccccc;
+  --color-activate-badge-bg: rgba(63, 63, 70, 0.6);
+  --color-activate-badge-fg: #a1a1aa;
 
-  --color-activate-border: #333333;
-  --color-activate-success: #73c991;
-  --color-activate-warning: #cca700;
-  --color-activate-error: #f48771;
+  --color-activate-border: rgba(63, 63, 70, 0.5);
+  --color-activate-success: #4ade80;
+  --color-activate-warning: #facc15;
+  --color-activate-error: #f87171;
+
+  --color-activate-glow: rgba(37, 99, 235, 0.15);
+}
+
+/*
+ * Global base styles — performance-safe transitions,
+ * typography, and glassmorphism primitives.
+ */
+@layer base {
+  * {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  ::selection {
+    background: rgba(37, 99, 235, 0.3);
+    color: #fff;
+  }
+}
+
+@layer components {
+  /* Glassmorphic surface */
+  .glass {
+    background: var(--color-activate-bg-surface);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid var(--color-activate-border);
+    border-radius: 0.75rem;
+  }
+
+  /* Shared button styles */
+  .btn {
+    border: 1px solid transparent;
+    border-radius: 0.5rem;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 500;
+    line-height: 20px;
+    padding: 5px 12px;
+    white-space: nowrap;
+    transition: all 0.15s ease;
+  }
+  .btn:active {
+    transform: scale(0.97);
+  }
+  .btn-primary {
+    background: var(--color-activate-btn-primary-bg);
+    color: var(--color-activate-btn-primary-fg);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2), 0 0 12px var(--color-activate-glow);
+  }
+  .btn-primary:hover {
+    background: var(--color-activate-btn-primary-hover);
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3), 0 0 20px var(--color-activate-glow);
+  }
+  .btn-secondary {
+    background: var(--color-activate-btn-secondary-bg);
+    color: var(--color-activate-btn-secondary-fg);
+    border-color: var(--color-activate-border);
+  }
+  .btn-secondary:hover {
+    background: var(--color-activate-btn-secondary-hover);
+    border-color: rgba(82, 82, 91, 0.7);
+  }
+
+  /* Section headers */
+  .section-label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-weight: 600;
+    color: var(--color-activate-fg-muted);
+    margin-top: 1rem;
+    margin-bottom: 0.375rem;
+  }
+
+  /* Divider */
+  .divider {
+    border: none;
+    height: 1px;
+    background: linear-gradient(
+      to right,
+      transparent,
+      var(--color-activate-border),
+      transparent
+    );
+    margin: 0.75rem 0;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .animate-in {
+    animation: fadeSlideIn 0.3s ease-out both;
+  }
+
+  @keyframes fadeSlideIn {
+    from {
+      opacity: 0;
+      transform: translateY(6px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
 }

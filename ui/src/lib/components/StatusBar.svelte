@@ -13,21 +13,22 @@
   let { tier, tierLabel, manifestName, isActive, manifestCount, onShowSettings }: Props = $props();
 </script>
 
-<div class="flex items-center gap-2 py-2 text-xs opacity-85 flex-wrap">
-  <span class="bg-activate-badge-bg text-activate-badge-fg rounded-full px-2 py-0.5 text-[11px]">
+<div class="glass flex items-center gap-2.5 px-3.5 py-2.5 mb-3 text-xs animate-in">
+  <span class="bg-activate-badge-bg text-activate-badge-fg rounded-full px-2.5 py-0.5 text-[11px] font-medium">
     {tierLabel}
   </span>
-  <span class="opacity-40">·</span>
-  <span class="bg-activate-badge-bg text-activate-badge-fg rounded-full px-2 py-0.5 text-[11px]">
+  <span class="w-px h-3 bg-activate-border"></span>
+  <span class="bg-activate-badge-bg text-activate-badge-fg rounded-full px-2.5 py-0.5 text-[11px] font-medium">
     {manifestName}
   </span>
-  <span class="opacity-40">·</span>
-  <span class="inline-flex items-center gap-1">
-    {isActive ? '✓' : '○'} Installed
+  <span class="w-px h-3 bg-activate-border"></span>
+  <span class="inline-flex items-center gap-1 {isActive ? 'text-activate-success' : 'text-activate-fg-muted'}">
+    {isActive ? '●' : '○'}
+    <span class="text-activate-fg">{isActive ? 'Active' : 'Inactive'}</span>
   </span>
   <span class="grow"></span>
   <button
-    class="cursor-pointer opacity-60 text-xl px-1 py-0.5 rounded transition-opacity hover:opacity-100 hover:bg-activate-bg-hover"
+    class="cursor-pointer opacity-50 text-base px-1.5 py-1 rounded-lg transition-all duration-150 hover:opacity-100 hover:bg-activate-bg-hover hover:scale-110"
     onclick={onShowSettings}
     title="Settings"
   >⚙</button>

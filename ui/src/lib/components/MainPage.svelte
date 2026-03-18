@@ -53,9 +53,9 @@
   onShowUsage={() => onNavigate('usage')}
 />
 
-<hr class="border-none border-t border-activate-border my-0.5 mb-2" />
+<hr class="divider" />
 
-<div class="text-[11px] uppercase tracking-wider opacity-60 mt-2.5 mb-1 font-semibold">
+<div class="section-label">
   Installed · {installedFiles.length}
 </div>
 {#if installedFiles.length > 0}
@@ -76,7 +76,7 @@
   <div class="opacity-50 italic py-2 px-5 text-xs">No files installed</div>
 {/if}
 
-<div class="text-[11px] uppercase tracking-wider opacity-60 mt-2.5 mb-1 font-semibold">
+<div class="section-label">
   Available · {availableFiles.length}
 </div>
 {#if availableFiles.length > 0}
@@ -98,10 +98,10 @@
 {/if}
 
 {#if outsideTierFiles.length > 0}
-  <div class="text-[11px] uppercase tracking-wider opacity-50 mt-2.5 mb-1 font-semibold">
+  <div class="section-label">
     Outside Tier · {outsideTierFiles.length}
   </div>
-  <div class="text-[11px] opacity-40 italic pb-1.5">Switch to a higher tier to access these files</div>
+  <div class="text-[11px] text-activate-fg-muted italic pb-1.5">Switch to a higher tier to access these files</div>
   <CategoryList
     files={outsideTierFiles}
     {categories}
@@ -118,10 +118,10 @@
 {/if}
 
 {#if excludedFiles.length > 0}
-  <div class="text-[11px] uppercase tracking-wider opacity-50 mt-2.5 mb-1 font-semibold">
+  <div class="section-label">
     Excluded · {excludedFiles.length}
   </div>
-  <div class="text-[11px] opacity-40 italic pb-1.5">These files are excluded and will not be installed</div>
+  <div class="text-[11px] text-activate-fg-muted italic pb-1.5">These files are excluded and will not be installed</div>
   <CategoryList
     files={excludedFiles}
     {categories}

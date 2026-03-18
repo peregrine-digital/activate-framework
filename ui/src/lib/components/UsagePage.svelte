@@ -58,7 +58,7 @@
   <h2 class="text-sm font-semibold flex-1">📊 Copilot Usage</h2>
 </div>
 
-<div class="flex gap-1.5 pb-2.5 flex-wrap">
+<div class="flex gap-2 pb-3 flex-wrap">
   <button class="btn btn-secondary" onclick={onBack}>← Back</button>
   <button class="btn btn-primary" onclick={refresh} disabled={!telemetryEnabled}>↻ Refresh</button>
   <button class="btn btn-secondary" onclick={() => api.runTelemetry()}>📄 Open Log</button>
@@ -68,44 +68,46 @@
 </div>
 
 {#if !telemetryEnabled}
-  <div class="opacity-50 italic py-4 text-xs text-center">Telemetry is disabled. Click Enable to start tracking Copilot usage.</div>
+  <div class="text-activate-fg-muted italic py-4 text-xs text-center">Telemetry is disabled. Click Enable to start tracking Copilot usage.</div>
 {/if}
 
-<hr class="border-none border-t border-activate-border my-0.5 mb-2" />
+<hr class="divider" />
 
 {#if loading}
   <div class="opacity-50 italic py-4 text-xs text-center">Loading…</div>
 {:else if latest}
   <!-- Summary cards -->
-  <div class="flex gap-2.5">
-    <div class="flex-1 min-w-0 bg-activate-bg-surface border border-activate-border rounded-md p-3 mb-3">
-      <div class="text-[11px] uppercase tracking-wider opacity-60 mb-1.5 font-semibold">Used Today</div>
-      <div class="text-[28px] font-bold leading-tight" style:color={usageColor}>{latest.premium_used ?? '—'}</div>
-      <div class="text-xs opacity-70 mt-1">of {latest.premium_entitlement ?? '?'} premium requests</div>
+  <div class="flex gap-3 animate-in">
+    <div class="flex-1 min-w-0 glass p-4 mb-3">
+      <div class="section-label !mt-0">Used Today</div>
+      <div class="text-[28px] font-bold leading-tight tracking-tight" style:color={usageColor}>{latest.premium_used ?? '—'}</div>
+      <div class="text-xs text-activate-fg-muted mt-1">of {latest.premium_entitlement ?? '?'} premium requests</div>
       {#if pctUsed != null}
-        <div class="bg-activate-border rounded h-2 mt-2 overflow-hidden opacity-60">
-          <div class="h-full rounded transition-[width] duration-300" style:width="{Math.min(pctUsed, 100)}%" style:background={usageColor}></div>
+        <div class="bg-activate-border rounded-full h-1.5 mt-3 overflow-hidden">
+          <div class="h-full rounded-full transition-[width] duration-500 ease-out" style:width="{Math.min(pctUsed, 100)}%" style:background={usageColor}></div>
         </div>
       {/if}
     </div>
-    <div class="flex-1 min-w-0 bg-activate-bg-surface border border-activate-border rounded-md p-3 mb-3">
-      <div class="text-[11px] uppercase tracking-wider opacity-60 mb-1.5 font-semibold">Remaining</div>
-      <div class="text-[28px] font-bold leading-tight">{latest.premium_remaining ?? '—'}</div>
+    <div class="flex-1 min-w-0 glass p-4 mb-3">
+      <div class="section-label !mt-0">Remaining</div>
+      <div class="text-[28px] font-bold leading-tight tracking-tight">{latest.premium_remaining ?? '—'}</div>
       {#if latest.quota_reset_date_utc}
-        <div class="text-xs opacity-70 mt-1">Resets {latest.quota_reset_date_utc.split('T')[0]}</div>
+        <div class="text-xs text-activate-fg-muted mt-1">Resets {latest.quota_reset_date_utc.split('T')[0]}</div>
       {/if}
     </div>
   </div>
 
   <!-- Sparkline -->
   {#if sparkData.length > 1}
-    <div class="text-[11px] uppercase tracking-wider opacity-60 mt-2.5 mb-1 font-semibold">Last {sparkData.length} days</div>
+    <div class="section-label">Last {sparkData.length} days</div>
     <div class="flex items-end gap-0.5 h-10 my-2 mb-3">
       {#each sparkData as entry}
         {@const h = entry.premium_used != null ? Math.max(2, Math.round((entry.premium_used / maxUsed) * 40)) : 2}
         <div
-          class="flex-1 min-w-[3px] max-w-3 bg-activate-btn-primary-bg rounded-t opacity-70 hover:opacity-100 relative group/bar"
+          class="flex-1 min-w-[3px] max-w-3 rounded-t transition-all duration-150 hover:opacity-100 relative group/bar"
           style:height="{h}px"
+          style:background="var(--color-activate-btn-primary-bg)"
+          style:opacity="0.6"
           title="{entry.date}: {entry.premium_used ?? 0} used"
         ></div>
       {/each}
@@ -114,7 +116,7 @@
 
   <!-- Daily table -->
   {#if daily.length > 0}
-    <div class="text-[11px] uppercase tracking-wider opacity-60 mt-2.5 mb-1 font-semibold">Daily Log · {daily.length} entries</div>
+    <div class="section-label">Daily Log · {daily.length} entries</div>
     <table class="w-full border-collapse text-xs">
       <thead>
         <tr>
@@ -144,26 +146,3 @@
 {:else}
   <div class="opacity-50 italic py-4 text-xs text-center">No telemetry data yet. Click Refresh to log now.</div>
 {/if}
-
-<style>
-  .btn {
-    border: 1px solid transparent;
-    border-radius: 3px;
-    cursor: pointer;
-    font-family: inherit;
-    font-size: 12px;
-    line-height: 20px;
-    padding: 4px 10px;
-    white-space: nowrap;
-  }
-  .btn-primary {
-    background: var(--color-activate-btn-primary-bg);
-    color: var(--color-activate-btn-primary-fg);
-  }
-  .btn-primary:hover { background: var(--color-activate-btn-primary-hover); }
-  .btn-secondary {
-    background: var(--color-activate-btn-secondary-bg);
-    color: var(--color-activate-btn-secondary-fg);
-  }
-  .btn-secondary:hover { background: var(--color-activate-btn-secondary-hover); }
-</style>
