@@ -40,6 +40,8 @@ export function SetConfig(arg1:string,arg2:model.Config):Promise<commands.SetCon
 
 export function SetOverride(arg1:string,arg2:string):Promise<commands.FileResult>;
 
+export function SetWorkspaceMenuVisible(arg1:boolean):Promise<void>;
+
 export function SkipUpdate(arg1:string):Promise<commands.FileResult>;
 
 export function Sync():Promise<commands.SyncResult>;

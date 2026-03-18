@@ -59,6 +59,7 @@
     appState = await api.getState();
     view = 'workspace';
     page = 'main';
+    wailsApp?.SetWorkspaceMenuVisible(true);
   }
 
   async function browseWorkspace() {
@@ -68,6 +69,7 @@
         appState = await api.getState();
         view = 'workspace';
         page = 'main';
+        wailsApp?.SetWorkspaceMenuVisible(true);
         loadWorkspaces();
         return;
       }
@@ -76,7 +78,9 @@
 
   function backToWelcome() {
     view = 'welcome';
+    page = 'main';
     appState = null;
+    wailsApp?.SetWorkspaceMenuVisible(false);
     loadWorkspaces();
   }
 

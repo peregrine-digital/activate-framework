@@ -7,13 +7,15 @@ import (
 
 	"github.com/peregrine-digital/activate-framework/cli/commands"
 	"github.com/peregrine-digital/activate-framework/cli/model"
-	"github.com/wailsapp/wails/v2/pkg/runtime"
+	"github.com/wailsapp/wails/v2/pkg/menu"
+	wailsRuntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 // App wraps the CLI's ActivateService for desktop use.
 type App struct {
-	ctx context.Context
-	svc *commands.ActivateService
+	ctx                context.Context
+	svc                *commands.ActivateService
+	workspaceMenuItem  *menu.MenuItem
 }
 
 func NewApp() *App {
@@ -26,9 +28,22 @@ func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
 }
 
+// SetWorkspaceMenuVisible shows or hides the "Workspace Settings…" menu item.
+func (a *App) SetWorkspaceMenuVisible(visible bool) {
+	if a.workspaceMenuItem == nil {
+		return
+	}
+	if visible {
+		a.workspaceMenuItem.Show()
+	} else {
+		a.workspaceMenuItem.Hide()
+	}
+	wailsRuntime.MenuUpdateApplicationMenu(a.ctx)
+}
+
 // SelectWorkspace opens a native directory picker and initializes the service.
 func (a *App) SelectWorkspace() (commands.StateResult, error) {
-	dir, err := runtime.OpenDirectoryDialog(a.ctx, runtime.OpenDialogOptions{
+	dir, err := wailsRuntime.OpenDirectoryDialog(a.ctx, wailsRuntime.OpenDialogOptions{
 		Title: "Select Workspace",
 	})
 	if err != nil {

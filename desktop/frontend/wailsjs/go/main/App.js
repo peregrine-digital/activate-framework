@@ -74,6 +74,10 @@ export function SetOverride(arg1, arg2) {
   return window['go']['main']['App']['SetOverride'](arg1, arg2);
 }
 
+export function SetWorkspaceMenuVisible(arg1) {
+  return window['go']['main']['App']['SetWorkspaceMenuVisible'](arg1);
+}
+
 export function SkipUpdate(arg1) {
   return window['go']['main']['App']['SkipUpdate'](arg1);
 }
