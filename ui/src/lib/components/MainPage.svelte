@@ -47,6 +47,7 @@
 <ButtonRow
   {isActive}
   manifestCount={state.manifests.length}
+  platform={api.platform}
   onChangeTier={() => api.changeTier()}
   onChangeManifest={() => api.changeManifest()}
   onToggleWorkspace={() => isActive ? api.removeFromWorkspace() : api.addToWorkspace()}

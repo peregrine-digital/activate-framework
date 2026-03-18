@@ -1,7 +1,10 @@
 <script lang="ts">
+  import type { Platform } from '../api.js';
+
   interface Props {
     isActive: boolean;
     manifestCount: number;
+    platform: Platform;
     onChangeTier: () => void;
     onChangeManifest: () => void;
     onToggleWorkspace: () => void;
@@ -9,7 +12,7 @@
     onShowUsage: () => void;
   }
 
-  let { isActive, manifestCount, onChangeTier, onChangeManifest, onToggleWorkspace, onUpdateAll, onShowUsage }: Props = $props();
+  let { isActive, manifestCount, platform, onChangeTier, onChangeManifest, onToggleWorkspace, onUpdateAll, onShowUsage }: Props = $props();
 </script>
 
 <div class="flex gap-2.5 pb-4 flex-wrap animate-in" style="animation-delay: 50ms">
@@ -21,5 +24,7 @@
     {isActive ? '− Remove' : '+ Install'}
   </button>
   <button class="btn btn-primary" onclick={onUpdateAll}>↻ Update</button>
-  <button class="btn btn-secondary" onclick={onShowUsage}>📊 Usage</button>
+  {#if platform !== 'desktop'}
+    <button class="btn btn-secondary" onclick={onShowUsage}>📊 Usage</button>
+  {/if}
 </div>

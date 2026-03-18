@@ -13,9 +13,9 @@ import (
 
 // App wraps the CLI's ActivateService for desktop use.
 type App struct {
-	ctx                context.Context
-	svc                *commands.ActivateService
-	workspaceMenuItem  *menu.MenuItem
+	ctx               context.Context
+	svc               *commands.ActivateService
+	workspaceMenuItems []*menu.MenuItem
 }
 
 func NewApp() *App {
@@ -28,15 +28,14 @@ func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
 }
 
-// SetWorkspaceMenuVisible shows or hides the "Workspace Settings…" menu item.
+// SetWorkspaceMenuVisible shows or hides workspace-only menu items.
 func (a *App) SetWorkspaceMenuVisible(visible bool) {
-	if a.workspaceMenuItem == nil {
-		return
-	}
-	if visible {
-		a.workspaceMenuItem.Show()
-	} else {
-		a.workspaceMenuItem.Hide()
+	for _, item := range a.workspaceMenuItems {
+		if visible {
+			item.Show()
+		} else {
+			item.Hide()
+		}
 	}
 	wailsRuntime.MenuUpdateApplicationMenu(a.ctx)
 }

@@ -32,7 +32,6 @@ func main() {
 	})
 	wsSettingsItem.Hidden = true
 	appSubMenu.Append(wsSettingsItem)
-	app.workspaceMenuItem = wsSettingsItem
 	appSubMenu.AddSeparator()
 	appSubMenu.AddText("Hide Activate", keys.CmdOrCtrl("h"), func(_ *menu.CallbackData) {
 		runtime.Hide(app.ctx)
@@ -50,9 +49,14 @@ func main() {
 
 	// View menu
 	viewMenu := appMenu.AddSubmenu("View")
-	viewMenu.AddText("Usage", nil, func(_ *menu.CallbackData) {
+	usageItem := menu.Text("Usage", nil, func(_ *menu.CallbackData) {
 		runtime.EventsEmit(app.ctx, "navigate", "usage")
 	})
+	usageItem.Hidden = true
+	viewMenu.Append(usageItem)
+
+	// Track workspace-only menu items
+	app.workspaceMenuItems = []*menu.MenuItem{wsSettingsItem, usageItem}
 
 	// Edit menu (standard copy/paste/undo)
 	appMenu.Append(menu.EditMenu())
