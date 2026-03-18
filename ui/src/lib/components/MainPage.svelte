@@ -55,6 +55,7 @@
       onSelect: async (id) => {
         selectModal = null;
         await api.setConfig({ scope: 'project', tier: id });
+        await api.refreshConfig();
       },
     };
   }
@@ -77,6 +78,7 @@
       onSelect: async (id) => {
         selectModal = null;
         await api.setConfig({ scope: 'project', manifest: id });
+        await api.refreshConfig();
       },
     };
   }
