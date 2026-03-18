@@ -11,6 +11,7 @@
   const api = createVSCodeAPI();
 
   let page = $state<Page>('main');
+  let pageHistory = $state<Page[]>([]);
   let appState = $state<AppState | null>(null);
   let loading = $state(true);
 
@@ -18,6 +19,15 @@
   let extensionVersion = $state('');
   let serverVersion = $state('');
   let hasCli = $state(true);
+
+  function navigateTo(target: Page) {
+    pageHistory.push(page);
+    page = target;
+  }
+
+  function navigateBack() {
+    page = pageHistory.pop() ?? 'main';
+  }
 
   async function load() {
     try {
@@ -60,10 +70,10 @@
   {:else if page === 'no-cli' || !hasCli}
     <NoCliPage onInstallCLI={() => api.installCLI()} />
   {:else if appState && page === 'usage'}
-    <UsagePage {api} telemetryEnabled={appState.config.telemetryEnabled === true} onBack={() => page = 'main'} />
-  {:else if appState && page === 'settings'}
-    <SettingsPage {appState} {api} {extensionVersion} {serverVersion} onBack={() => page = 'main'} />
+    <UsagePage {api} telemetryEnabled={appState.config.telemetryEnabled === true} onBack={navigateBack} />
+  {:else if appState && (page === 'settings' || page === 'workspace-settings')}
+    <SettingsPage {appState} {api} onBack={navigateBack} />
   {:else if appState}
-    <MainPage state={appState} {api} onNavigate={(p) => page = p} />
+    <MainPage state={appState} {api} onNavigate={navigateTo} />
   {/if}
 </div>

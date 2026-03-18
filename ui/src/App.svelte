@@ -10,8 +10,18 @@
   const api = createMockAPI();
 
   let page = $state<Page>('main');
+  let pageHistory = $state<Page[]>([]);
   let state = $state<AppState | null>(null);
   let loading = $state(true);
+
+  function navigateTo(target: Page) {
+    pageHistory.push(page);
+    page = target;
+  }
+
+  function navigateBack() {
+    page = pageHistory.pop() ?? 'main';
+  }
 
   async function load() {
     state = await api.getState();
@@ -28,18 +38,18 @@
   {:else if page === 'no-cli'}
     <NoCliPage onInstallCLI={() => api.installCLI()} />
   {:else if page === 'usage'}
-    <UsagePage {api} telemetryEnabled={state.config.telemetryEnabled === true} onBack={() => page = 'main'} />
-  {:else if page === 'settings'}
-    <SettingsPage appState={state} {api} extensionVersion="0.2.5" serverVersion="0.5.0" onBack={() => page = 'main'} />
+    <UsagePage {api} telemetryEnabled={state.config.telemetryEnabled === true} onBack={navigateBack} />
+  {:else if page === 'settings' || page === 'workspace-settings'}
+    <SettingsPage appState={state} {api} onBack={navigateBack} />
   {:else}
-    <MainPage {state} {api} onNavigate={(p) => page = p} />
+    <MainPage {state} {api} onNavigate={navigateTo} />
   {/if}
 
   <!-- Dev nav (standalone only) -->
   <div class="fixed bottom-0 left-0 right-0 bg-activate-bg-surface border-t border-activate-border py-2 px-4 flex gap-2 text-xs">
-    <button class="opacity-60 hover:opacity-100 cursor-pointer" class:font-bold={page === 'main'} onclick={() => page = 'main'}>Main</button>
-    <button class="opacity-60 hover:opacity-100 cursor-pointer" class:font-bold={page === 'usage'} onclick={() => page = 'usage'}>Usage</button>
-    <button class="opacity-60 hover:opacity-100 cursor-pointer" class:font-bold={page === 'settings'} onclick={() => page = 'settings'}>Settings</button>
-    <button class="opacity-60 hover:opacity-100 cursor-pointer" class:font-bold={page === 'no-cli'} onclick={() => page = 'no-cli'}>No CLI</button>
+    <button class="opacity-60 hover:opacity-100 cursor-pointer" class:font-bold={page === 'main'} onclick={() => { pageHistory = []; page = 'main'; }}>Main</button>
+    <button class="opacity-60 hover:opacity-100 cursor-pointer" class:font-bold={page === 'usage'} onclick={() => navigateTo('usage')}>Usage</button>
+    <button class="opacity-60 hover:opacity-100 cursor-pointer" class:font-bold={page === 'settings'} onclick={() => navigateTo('settings')}>Settings</button>
+    <button class="opacity-60 hover:opacity-100 cursor-pointer" class:font-bold={page === 'no-cli'} onclick={() => navigateTo('no-cli')}>No CLI</button>
   </div>
 </div>
