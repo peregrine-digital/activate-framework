@@ -59,11 +59,20 @@ export function createWailsAPI(): ActivateAPI {
   const listeners = new Set<() => void>();
 
   // Listen for stateChanged events from the Go backend (forwarded from daemon)
-  if (typeof window !== 'undefined' && window.runtime) {
-    window.runtime.EventsOn('stateChanged', () => {
-      listeners.forEach((cb) => cb());
-    });
+  function setupEventListener() {
+    if (typeof window !== 'undefined' && window.runtime?.EventsOn) {
+      window.runtime.EventsOn('stateChanged', () => {
+        console.log('[activate:wails] stateChanged event received, notifying', listeners.size, 'listeners');
+        listeners.forEach((cb) => cb());
+      });
+      console.log('[activate:wails] EventsOn registered for stateChanged');
+    } else {
+      // Runtime not ready yet, retry
+      console.log('[activate:wails] runtime not ready, retrying EventsOn in 100ms');
+      setTimeout(setupEventListener, 100);
+    }
   }
+  setupEventListener();
 
   return {
     platform: 'desktop',

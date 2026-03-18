@@ -136,8 +136,10 @@
   }
 
   api.onStateChanged(async () => {
+    flog('stateChanged fired, view=' + view);
     if (view === 'workspace') {
       const newState = await api.getState();
+      flog('stateChanged: got new state, refreshing UI');
       flushSync(() => {
         appState = newState;
       });
