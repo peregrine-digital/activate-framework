@@ -12,7 +12,7 @@
   let { isActive, manifestCount, onChangeTier, onChangeManifest, onToggleWorkspace, onUpdateAll, onShowUsage }: Props = $props();
 </script>
 
-<div class="flex gap-2 pb-3 flex-wrap animate-in" style="animation-delay: 50ms">
+<div class="flex gap-2.5 pb-4 flex-wrap animate-in" style="animation-delay: 50ms">
   <button class="btn btn-secondary" onclick={onChangeTier}>◆ Tier</button>
   {#if manifestCount > 1}
     <button class="btn btn-secondary" onclick={onChangeManifest}>⇋ Manifest</button>

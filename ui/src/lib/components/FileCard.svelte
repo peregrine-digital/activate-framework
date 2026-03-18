@@ -111,10 +111,10 @@
     display: grid;
     grid-template-columns: 20px 1fr auto;
     align-items: center;
-    gap: 8px;
-    padding: 6px 8px;
+    gap: 10px;
+    padding: 8px 10px;
     border-radius: 0.5rem;
-    min-height: 36px;
+    min-height: 42px;
     transition: background 0.12s ease;
   }
   .file-row:hover {
@@ -122,11 +122,11 @@
   }
   .file-row--outdated {
     border-left: 2px solid var(--color-activate-warning);
-    padding-left: 6px;
+    padding-left: 8px;
   }
 
   .file-status {
-    font-size: 12px;
+    font-size: 14px;
     text-align: center;
     line-height: 1;
   }
@@ -135,18 +135,18 @@
     min-width: 0;
     display: flex;
     flex-direction: column;
-    gap: 1px;
+    gap: 2px;
   }
 
   .file-name {
-    font-size: 12px;
+    font-size: 13px;
     font-weight: 500;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
   }
   .file-version {
-    font-size: 10px;
+    font-size: 11px;
     opacity: 0.4;
     font-weight: 400;
     margin-left: 4px;
@@ -157,7 +157,7 @@
     font-weight: 500;
   }
   .file-badge {
-    font-size: 10px;
+    font-size: 11px;
     margin-left: 3px;
   }
   .file-desc {
@@ -173,12 +173,12 @@
   .file-actions {
     display: flex;
     align-items: center;
-    gap: 2px;
+    gap: 3px;
   }
 
   .icon-btn, .icon-btn-spacer {
-    width: 24px;
-    height: 24px;
+    width: 28px;
+    height: 28px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -190,16 +190,17 @@
     color: var(--color-activate-fg);
     cursor: pointer;
     border-radius: 0.375rem;
-    font-size: 12px;
+    font-size: 14px;
     opacity: 0;
     transition: all 0.12s ease;
   }
   :global(.group):hover .icon-btn {
-    opacity: 0.4;
+    opacity: 0.6;
   }
   .icon-btn:hover {
     opacity: 1 !important;
     background: var(--color-activate-bg-hover);
+    border-color: var(--color-activate-border);
   }
   .icon-btn-danger:hover {
     color: var(--color-activate-error);
