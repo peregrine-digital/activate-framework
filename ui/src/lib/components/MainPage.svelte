@@ -8,7 +8,7 @@
   interface Props {
     state: AppState;
     api: ActivateAPI;
-    onNavigate: (page: 'usage' | 'settings') => void;
+    onNavigate: (page: 'usage' | 'settings' | 'workspace-settings') => void;
   }
 
   let { state, api, onNavigate }: Props = $props();
@@ -41,7 +41,7 @@
   {isActive}
   manifestCount={state.manifests.length}
   platform={api.platform}
-  onShowSettings={() => onNavigate('settings')}
+  onShowSettings={() => onNavigate('workspace-settings')}
 />
 
 <ButtonRow

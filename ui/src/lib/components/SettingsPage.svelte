@@ -5,12 +5,10 @@
   interface Props {
     appState: AppState;
     api: ActivateAPI;
-    extensionVersion: string;
-    serverVersion: string;
     onBack: () => void;
   }
 
-  let { appState, api, extensionVersion, serverVersion, onBack }: Props = $props();
+  let { appState, api, onBack }: Props = $props();
 
   let globalCfg = $state<Config | null>(null);
   let projectCfg = $state<Config | null>(null);
@@ -24,7 +22,6 @@
 
   let resolved = $derived(appState.config);
   let tiers = $derived(appState.tiers);
-  let telemetryEnabled = $derived(resolved.telemetryEnabled === true);
   let tierLabel = $derived(tiers.find((t) => t.id === resolved.tier)?.label || resolved.tier || '—');
 
   function configSource(field: keyof Config): 'project' | 'global' | 'default' {
@@ -40,12 +37,12 @@
 
 <div class="flex gap-2 my-2 flex-wrap items-center">
   <button class="btn btn-secondary" onclick={onBack}>← Back</button>
-  <h2 class="text-sm font-semibold flex-1 my-0">⚙ Settings</h2>
+  <h2 class="text-sm font-semibold flex-1 my-0">Workspace Settings</h2>
 </div>
 
 <hr class="divider" />
 
-<div class="section-label">Configuration</div>
+<div class="section-label">Resolved Configuration</div>
 
 <div class="setting-row">
   <span class="font-semibold text-xs">Manifest</span>
@@ -79,37 +76,6 @@
   </span>
 </div>
 
-<div class="setting-row">
-  <span class="font-semibold text-xs">Telemetry</span>
-  <span class="text-xs flex items-center gap-1.5">
-    <button
-      class="toggle-btn {telemetryEnabled ? 'active' : ''}"
-      onclick={() => api.setConfig({ telemetryEnabled: !telemetryEnabled, scope: 'global' } as any)}
-    >
-      {telemetryEnabled ? '● Enabled' : '○ Disabled'}
-    </button>
-  </span>
-</div>
-
-<hr class="divider" />
-
-<div class="section-label">Global Defaults</div>
-
-{#if globalCfg}
-  {#each ['manifest', 'tier', 'repo', 'branch'] as field}
-    <div class="setting-row">
-      <span class="font-semibold text-xs capitalize">{field}</span>
-      <span class="text-xs">{(globalCfg as any)[field] || '(not set)'}</span>
-    </div>
-  {/each}
-  <div class="setting-row">
-    <span class="font-semibold text-xs">Telemetry</span>
-    <span class="text-xs">
-      {globalCfg.telemetryEnabled === true ? 'Enabled' : globalCfg.telemetryEnabled === false ? 'Disabled' : '(not set)'}
-    </span>
-  </div>
-{/if}
-
 <hr class="divider" />
 
 <div class="section-label">Project Overrides</div>
@@ -126,22 +92,24 @@
       </span>
     </div>
   {/each}
+{:else}
+  <div class="text-xs opacity-50 py-3 pl-2">Loading…</div>
 {/if}
 
-<hr class="divider" />
+{#if resolved.fileOverrides && Object.keys(resolved.fileOverrides).length > 0}
+  <hr class="divider" />
 
-<div class="section-label">Updates</div>
-<div class="setting-row">
-  <span class="font-semibold text-xs">CLI Version</span>
-  <span class="text-xs">{serverVersion || '—'}</span>
-</div>
-<div class="setting-row">
-  <span class="font-semibold text-xs">Extension Version</span>
-  <span class="text-xs">{extensionVersion || '—'}</span>
-</div>
-<div class="py-1">
-  <button class="btn btn-primary" onclick={() => api.checkForUpdates()}>🔄 Check for Updates</button>
-</div>
+  <div class="section-label">File Overrides</div>
+  {#each Object.entries(resolved.fileOverrides) as [dest, override]}
+    <div class="setting-row">
+      <span class="text-xs truncate flex-1 min-w-0">{dest.split('/').pop()}</span>
+      <span class="text-xs flex items-center gap-1.5">
+        <span class="source-badge project">{override}</span>
+        <button class="toggle-btn" onclick={() => api.setFileOverride(dest, '')}>✕</button>
+      </span>
+    </div>
+  {/each}
+{/if}
 
 <style>
   .setting-row {

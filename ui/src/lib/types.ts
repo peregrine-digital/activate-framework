@@ -85,4 +85,4 @@ export interface DiffResult {
 }
 
 /** The page currently displayed in the UI. */
-export type Page = 'main' | 'usage' | 'settings' | 'no-cli';
+export type Page = 'main' | 'usage' | 'settings' | 'workspace-settings' | 'no-cli';

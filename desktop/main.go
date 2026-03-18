@@ -27,6 +27,9 @@ func main() {
 	appSubMenu.AddText("Settings…", keys.CmdOrCtrl(","), func(_ *menu.CallbackData) {
 		runtime.EventsEmit(app.ctx, "navigate", "settings")
 	})
+	appSubMenu.AddText("Workspace Settings…", keys.Combo(",", keys.ShiftKey, keys.CmdOrCtrlKey), func(_ *menu.CallbackData) {
+		runtime.EventsEmit(app.ctx, "navigate", "workspace-settings")
+	})
 	appSubMenu.AddSeparator()
 	appSubMenu.AddText("Hide Activate", keys.CmdOrCtrl("h"), func(_ *menu.CallbackData) {
 		runtime.Hide(app.ctx)
