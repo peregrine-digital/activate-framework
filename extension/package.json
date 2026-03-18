@@ -125,8 +125,9 @@
     }
   },
   "scripts": {
+    "build:webview": "cd ../ui && npm run build:webview",
     "prepare-assets": "node scripts/prepare-assets.mjs",
-    "package": "npm run prepare-assets && vsce package --no-dependencies --allow-missing-repository --skip-license",
+    "package": "npm run build:webview && npm run prepare-assets && vsce package --no-dependencies --allow-missing-repository --skip-license",
     "test": "node --test src/__tests__/*.test.js"
   },
   "devDependencies": {

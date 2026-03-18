@@ -6,7 +6,12 @@ const fs = require('fs');
 const os = require('os');
 const https = require('https');
 const { ActivateClient, Method } = require('./client');
-const { ControlPanelProvider } = require('./controlPanel');
+
+// Use Svelte-based control panel if webview bundle exists, otherwise fall back
+const webviewBundlePath = path.join(__dirname, '..', 'webview-dist', 'webview.js');
+const { ControlPanelProvider } = fs.existsSync(webviewBundlePath)
+  ? require('./controlPanel.svelte')
+  : require('./controlPanel');
 
 /** @type {ActivateClient|null} */
 let client = null;

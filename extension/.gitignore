@@ -1,5 +1,6 @@
 # Build artifacts
 assets/
+webview-dist/
 *.vsix
 
 # Dependencies
