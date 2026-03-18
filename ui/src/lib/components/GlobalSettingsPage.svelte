@@ -71,9 +71,11 @@
   <span class="font-semibold text-xs">CLI Version</span>
   <span class="text-xs">{serverVersion || '—'}</span>
 </div>
+{#if api.platform !== 'desktop'}
 <div class="py-2">
   <button class="btn btn-primary" onclick={() => api.checkForUpdates()}>🔄 Check for Updates</button>
 </div>
+{/if}
 
 <style>
   .setting-row {

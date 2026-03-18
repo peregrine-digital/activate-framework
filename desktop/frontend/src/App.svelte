@@ -43,6 +43,9 @@
         browseWorkspace();
       }
     });
+    (window as any).runtime?.EventsOn('checkForUpdates', () => {
+      api.checkForUpdates();
+    });
   }
 
   async function loadWorkspaces() {

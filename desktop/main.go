@@ -33,6 +33,10 @@ func main() {
 	wsSettingsItem.Hidden = true
 	appSubMenu.Append(wsSettingsItem)
 	appSubMenu.AddSeparator()
+	appSubMenu.AddText("Check for Updates…", nil, func(_ *menu.CallbackData) {
+		runtime.EventsEmit(app.ctx, "checkForUpdates")
+	})
+	appSubMenu.AddSeparator()
 	appSubMenu.AddText("Hide Activate", keys.CmdOrCtrl("h"), func(_ *menu.CallbackData) {
 		runtime.Hide(app.ctx)
 	})
