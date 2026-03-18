@@ -1,1 +1,30 @@
 @import "tailwindcss";
+
+/*
+ * Activate theme tokens.
+ *
+ * Standalone / Wails: uses the defaults below.
+ * VS Code webview: an adapter layer remaps these to var(--vscode-*) values.
+ */
+@theme {
+  --color-activate-fg: #cccccc;
+  --color-activate-fg-muted: #999999;
+  --color-activate-bg: #1e1e1e;
+  --color-activate-bg-surface: #252526;
+  --color-activate-bg-hover: #2a2d2e;
+
+  --color-activate-btn-primary-bg: #0078d4;
+  --color-activate-btn-primary-fg: #ffffff;
+  --color-activate-btn-primary-hover: #026ec1;
+  --color-activate-btn-secondary-bg: #3a3d41;
+  --color-activate-btn-secondary-fg: #cccccc;
+  --color-activate-btn-secondary-hover: #45494e;
+
+  --color-activate-badge-bg: #4d4d4d;
+  --color-activate-badge-fg: #cccccc;
+
+  --color-activate-border: #333333;
+  --color-activate-success: #73c991;
+  --color-activate-warning: #cca700;
+  --color-activate-error: #f48771;
+}

@@ -1,0 +1,138 @@
+<script lang="ts">
+  import type { ActivateAPI } from '../api.js';
+  import type { AppState, FileStatus, Category } from '../types.js';
+  import StatusBar from './StatusBar.svelte';
+  import ButtonRow from './ButtonRow.svelte';
+  import CategoryList from './CategoryList.svelte';
+
+  interface Props {
+    state: AppState;
+    api: ActivateAPI;
+    onNavigate: (page: 'usage' | 'settings') => void;
+  }
+
+  let { state, api, onNavigate }: Props = $props();
+
+  let config = $derived(state.config);
+  let tiers = $derived(state.tiers);
+  let files = $derived(state.files);
+  let categories = $derived(state.categories);
+  let isActive = $derived(state.state.hasInstallMarker);
+  let tierLabel = $derived(tiers.find((t) => t.id === config.tier)?.label || config.tier || '—');
+  let skippedVersions = $derived(config.skippedVersions || {});
+
+  let installedFiles = $derived(files.filter((f) => f.installed && f.override !== 'excluded'));
+  let availableFiles = $derived(files.filter((f) => !f.installed && f.inTier && f.override !== 'excluded'));
+  let outsideTierFiles = $derived(files.filter((f) => !f.installed && !f.inTier && f.override !== 'excluded'));
+  let excludedFiles = $derived(files.filter((f) => f.override === 'excluded'));
+
+  function handleInstall(file: FileStatus) { api.installFile(file); }
+  function handleUninstall(file: FileStatus) { api.uninstallFile(file); }
+  function handleDiff(file: FileStatus) { api.diffFile(file); }
+  function handleSkipUpdate(file: FileStatus) { api.skipUpdate(file); }
+  function handleOpen(file: FileStatus) { api.openFile(file); }
+  function handleSetOverride(dest: string, override: '' | 'pinned' | 'excluded') { api.setFileOverride(dest, override); }
+</script>
+
+<StatusBar
+  tier={config.tier}
+  {tierLabel}
+  manifestName={config.manifest}
+  {isActive}
+  manifestCount={state.manifests.length}
+  onShowSettings={() => onNavigate('settings')}
+/>
+
+<ButtonRow
+  {isActive}
+  manifestCount={state.manifests.length}
+  onChangeTier={() => api.changeTier()}
+  onChangeManifest={() => api.changeManifest()}
+  onToggleWorkspace={() => isActive ? api.removeFromWorkspace() : api.addToWorkspace()}
+  onUpdateAll={() => api.updateAll()}
+  onShowUsage={() => onNavigate('usage')}
+/>
+
+<hr class="border-none border-t border-activate-border my-0.5 mb-2" />
+
+<div class="text-[11px] uppercase tracking-wider opacity-60 mt-2.5 mb-1 font-semibold">
+  Installed · {installedFiles.length}
+</div>
+{#if installedFiles.length > 0}
+  <CategoryList
+    files={installedFiles}
+    {categories}
+    installed={true}
+    sectionPrefix="installed"
+    {skippedVersions}
+    onInstall={handleInstall}
+    onUninstall={handleUninstall}
+    onDiff={handleDiff}
+    onSkipUpdate={handleSkipUpdate}
+    onOpen={handleOpen}
+    onSetOverride={handleSetOverride}
+  />
+{:else}
+  <div class="opacity-50 italic py-2 px-5 text-xs">No files installed</div>
+{/if}
+
+<div class="text-[11px] uppercase tracking-wider opacity-60 mt-2.5 mb-1 font-semibold">
+  Available · {availableFiles.length}
+</div>
+{#if availableFiles.length > 0}
+  <CategoryList
+    files={availableFiles}
+    {categories}
+    installed={false}
+    sectionPrefix="available"
+    {skippedVersions}
+    onInstall={handleInstall}
+    onUninstall={handleUninstall}
+    onDiff={handleDiff}
+    onSkipUpdate={handleSkipUpdate}
+    onOpen={handleOpen}
+    onSetOverride={handleSetOverride}
+  />
+{:else}
+  <div class="opacity-50 italic py-2 px-5 text-xs">All tier files installed</div>
+{/if}
+
+{#if outsideTierFiles.length > 0}
+  <div class="text-[11px] uppercase tracking-wider opacity-50 mt-2.5 mb-1 font-semibold">
+    Outside Tier · {outsideTierFiles.length}
+  </div>
+  <div class="text-[11px] opacity-40 italic pb-1.5">Switch to a higher tier to access these files</div>
+  <CategoryList
+    files={outsideTierFiles}
+    {categories}
+    installed={false}
+    sectionPrefix="outside"
+    {skippedVersions}
+    onInstall={handleInstall}
+    onUninstall={handleUninstall}
+    onDiff={handleDiff}
+    onSkipUpdate={handleSkipUpdate}
+    onOpen={handleOpen}
+    onSetOverride={handleSetOverride}
+  />
+{/if}
+
+{#if excludedFiles.length > 0}
+  <div class="text-[11px] uppercase tracking-wider opacity-50 mt-2.5 mb-1 font-semibold">
+    Excluded · {excludedFiles.length}
+  </div>
+  <div class="text-[11px] opacity-40 italic pb-1.5">These files are excluded and will not be installed</div>
+  <CategoryList
+    files={excludedFiles}
+    {categories}
+    installed={false}
+    sectionPrefix="excluded"
+    {skippedVersions}
+    onInstall={handleInstall}
+    onUninstall={handleUninstall}
+    onDiff={handleDiff}
+    onSkipUpdate={handleSkipUpdate}
+    onOpen={handleOpen}
+    onSetOverride={handleSetOverride}
+  />
+{/if}
