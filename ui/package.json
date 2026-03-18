@@ -1,0 +1,23 @@
+{
+  "name": "@activate-framework/ui",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Shared Svelte UI components for Activate Framework",
+  "type": "module",
+  "scripts": {
+    "dev": "vite dev",
+    "build": "vite build",
+    "preview": "vite preview",
+    "check": "svelte-check --tsconfig ./tsconfig.json"
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "@sveltejs/vite-plugin-svelte": "^7.0.0",
+    "@tailwindcss/vite": "^4.2.1",
+    "svelte": "^5.54.0",
+    "svelte-check": "^4.4.5",
+    "tailwindcss": "^4.2.1",
+    "typescript": "^5.9.3",
+    "vite": "^8.0.0"
+  }
+}
