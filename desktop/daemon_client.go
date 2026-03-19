@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"os"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -63,28 +62,10 @@ func startDaemon(binPath, projectDir string, env []string) (*daemonClient, error
 	if err != nil {
 		return nil, fmt.Errorf("stdout pipe: %w", err)
 	}
-	stderr, err := cmd.StderrPipe()
-	if err != nil {
-		return nil, fmt.Errorf("stderr pipe: %w", err)
-	}
 
 	if err := cmd.Start(); err != nil {
 		return nil, fmt.Errorf("start daemon: %w", err)
 	}
-
-	// Forward daemon stderr to desktop stderr for debugging
-	go func() {
-		buf := make([]byte, 4096)
-		for {
-			n, readErr := stderr.Read(buf)
-			if n > 0 {
-				fmt.Fprintf(os.Stderr, "[daemon-stderr] %s", buf[:n])
-			}
-			if readErr != nil {
-				return
-			}
-		}
-	}()
 
 	dc := &daemonClient{
 		cmd:    cmd,

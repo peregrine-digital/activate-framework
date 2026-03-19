@@ -112,11 +112,6 @@
     flushSync(() => { loading = false; });
   }
 
-  function flog(msg: string) {
-    console.log('[activate]', msg);
-    wailsApp?.DebugLog?.(msg);
-  }
-
   async function selectWorkspace(path: string) {
     flushSync(() => {
       loadingName = path.split('/').pop() || path;
@@ -124,22 +119,17 @@
       view = 'loading';
     });
     try {
-      flog('selectWorkspace: calling InitWorkspace path=' + path);
       if (wailsApp?.InitWorkspace) {
         await wailsApp.InitWorkspace(path);
       }
-      flog('selectWorkspace: InitWorkspace done, calling getState');
       const state = await api.getState();
-      flog('selectWorkspace: getState returned, keys=' + Object.keys(state || {}).join(','));
       flushSync(() => {
         appState = state;
         view = 'workspace';
       });
       nav.reset();
       wailsApp?.SetWorkspaceMenuVisible(true);
-      flog('selectWorkspace: DONE');
     } catch (e: any) {
-      flog('selectWorkspace: ERROR ' + (e?.message || String(e)));
       flushSync(() => {
         loadingError = e?.message || String(e);
       });
@@ -149,17 +139,14 @@
   async function browseWorkspace() {
     if (!wailsApp?.SelectWorkspace) return;
     try {
-      flog('browseWorkspace: opening picker');
       const state = await wailsApp.SelectWorkspace();
       if (!state?.projectDir) return; // cancelled
-      flog('browseWorkspace: selected ' + state.projectDir);
       flushSync(() => {
         loadingName = state.projectDir.split('/').pop() || state.projectDir;
         loadingError = '';
         view = 'loading';
       });
       const appData = await api.getState();
-      flog('browseWorkspace: getState done');
       flushSync(() => {
         appState = appData;
         view = 'workspace';
@@ -168,7 +155,6 @@
       wailsApp?.SetWorkspaceMenuVisible(true);
       loadWorkspaces();
     } catch (e: any) {
-      flog('browseWorkspace: ERROR ' + (e?.message || String(e)));
       flushSync(() => {
         loadingError = e?.message || String(e);
         if (view !== 'loading') view = 'loading';
@@ -240,7 +226,6 @@
           <p class="text-xs opacity-40 mt-1">{loadingName}</p>
         </div>
       {/if}
-      <div class="text-[10px] opacity-20 mt-4">view={view} appState={appState ? 'set' : 'null'} error={loadingError || 'none'}</div>
     </div>
   {:else if nav.page === 'settings' && view !== 'workspace'}
     <!-- Global settings accessible from welcome screen -->

@@ -4,3 +4,4 @@ frontend/dist
 frontend/node_modules
 activate-desktop
 package.json.md5
+desktop/desktop

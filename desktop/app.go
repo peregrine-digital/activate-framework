@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -12,17 +11,6 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/menu"
 	wailsRuntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
-
-var dlog *log.Logger
-
-func init() {
-	f, err := os.OpenFile("/tmp/activate-desktop.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
-	if err != nil {
-		dlog = log.New(os.Stderr, "[desktop] ", log.LstdFlags)
-	} else {
-		dlog = log.New(f, "[desktop] ", log.LstdFlags)
-	}
-}
 
 // App manages the daemon lifecycle and exposes RPC methods to the Wails frontend.
 type App struct {
@@ -69,48 +57,38 @@ func (a *App) SetWorkspaceMenuVisible(visible bool) {
 
 // InitWorkspace spawns a daemon for the given project directory.
 func (a *App) InitWorkspace(dir string) error {
-	dlog.Printf("InitWorkspace called: dir=%s", dir)
 	// Stop any existing daemon
 	if a.daemon != nil {
-		dlog.Println("Stopping existing daemon")
 		a.daemon.stop()
 		a.daemon = nil
 	}
 
 	bin := findBinary()
 	if bin == "" {
-		dlog.Println("ERROR: activate CLI not found")
 		return fmt.Errorf("activate CLI not found — install it first")
 	}
-
-	dlog.Printf("Starting daemon: %s serve --stdio (dir=%s)", bin, dir)
 
 	env := os.Environ()
 	dc, err := startDaemon(bin, dir, env)
 	if err != nil {
-		dlog.Printf("ERROR: start daemon: %v", err)
 		return fmt.Errorf("failed to start daemon: %w", err)
 	}
 
 	dc.onNotification = func(method string) {
-		dlog.Printf("Daemon notification: %s", method)
 		if method == "activate/stateChanged" {
 			wailsRuntime.EventsEmit(a.ctx, "stateChanged")
 		}
 	}
 
 	// Initialize the daemon with the project directory
-	dlog.Println("Sending initialize RPC…")
 	var initResult json.RawMessage
 	err = dc.callInto(&initResult, "activate/initialize", map[string]string{
 		"projectDir": dir,
 	})
 	if err != nil {
-		dlog.Printf("ERROR: initialize: %v", err)
 		dc.stop()
 		return fmt.Errorf("daemon initialize failed: %w", err)
 	}
-	dlog.Printf("Initialize complete (len=%d)", len(initResult))
 
 	a.daemon = dc
 	a.projectDir = dir
@@ -150,11 +128,6 @@ func (a *App) requireDaemon() error {
 	return nil
 }
 
-// DebugLog allows the frontend to write debug messages to the log file.
-func (a *App) DebugLog(msg string) {
-	dlog.Printf("[frontend] %s", msg)
-}
-
 // Version returns the desktop app version (set at build time).
 func (a *App) Version() string {
 	return version
@@ -168,17 +141,13 @@ func (a *App) CLIFound() bool {
 // ── RPC Forwarding Methods ─────────────────────────────────────
 
 func (a *App) GetState() (json.RawMessage, error) {
-	dlog.Println("GetState called")
 	if err := a.requireDaemon(); err != nil {
-		dlog.Printf("ERROR: GetState: %v", err)
 		return nil, err
 	}
 	result, err := a.daemon.call("activate/state", nil)
 	if err != nil {
-		dlog.Printf("ERROR: GetState RPC: %v", err)
 		return nil, err
 	}
-	dlog.Printf("GetState done (len=%d)", len(result))
 	return result, nil
 }
 
@@ -190,17 +159,13 @@ func (a *App) GetConfig(scope string) (json.RawMessage, error) {
 }
 
 func (a *App) SetConfig(params json.RawMessage) (json.RawMessage, error) {
-	dlog.Printf("SetConfig called: %s", string(params))
 	if err := a.requireDaemon(); err != nil {
-		dlog.Printf("ERROR: SetConfig: %v", err)
 		return nil, err
 	}
 	result, err := a.daemon.call("activate/configSet", params)
 	if err != nil {
-		dlog.Printf("ERROR: SetConfig RPC: %v", err)
 		return nil, err
 	}
-	dlog.Printf("SetConfig done: %s", string(result))
 	return result, nil
 }
 
@@ -331,9 +296,8 @@ func (a *App) UpdateCLI() (json.RawMessage, error) {
 	result, err := a.daemon.call("activate/selfUpdate", map[string]interface{}{
 		"token": os.Getenv("GITHUB_TOKEN"),
 	})
-	if err != nil {
-		dlog.Printf("UpdateCLI: daemon likely died during update (expected): %v", err)
-	}
+	// The daemon will die during self-update (binary replacement) — expected.
+	_ = err
 	// Stop old daemon reference
 	a.daemon.stop()
 	a.daemon = nil
@@ -362,9 +326,7 @@ func (a *App) InstallCLI() error {
 	cmd.Env = append(os.Environ(), "INSTALL_DIR="+installDir)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		dlog.Printf("InstallCLI failed: %s\n%s", err, string(out))
-		return fmt.Errorf("install failed: %w", err)
+		return fmt.Errorf("install failed: %w\n%s", err, string(out))
 	}
-	dlog.Printf("InstallCLI success: %s", string(out))
 	return nil
 }

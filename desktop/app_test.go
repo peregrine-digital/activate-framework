@@ -170,14 +170,6 @@ func TestOpenFile_NoProjectDir(t *testing.T) {
 	}
 }
 
-// ── DebugLog Tests ─────────────────────────────────────────────
-
-func TestDebugLog_DoesNotPanic(t *testing.T) {
-	app := NewApp()
-	// Should not panic even with default logger
-	app.DebugLog("test message")
-}
-
 // ── CloseWorkspace Tests ───────────────────────────────────────
 
 func TestCloseWorkspace_NoDaemon(t *testing.T) {

@@ -11,8 +11,6 @@ export function CheckForUpdates():Promise<json.RawMessage>;
 
 export function CloseWorkspace():Promise<void>;
 
-export function DebugLog(arg1:string):Promise<void>;
-
 export function DiffFile(arg1:string):Promise<json.RawMessage>;
 
 export function GetConfig(arg1:string):Promise<json.RawMessage>;
