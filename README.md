@@ -100,11 +100,11 @@ activate-framework/
 │   └── package.json                 #   Extension manifest + commands
 │
 ├── manifests/                       # Plugin registry (one JSON per plugin)
-│   ├── activate-framework.json      #   Core framework manifest
+│   ├── adhoc.json                   #   Core framework manifest
 │   └── ironarch.json                #   VA workflow manifest
 │
 ├── plugins/                         # Content plugins (deliverable assets)
-│   ├── activate-framework/          #   Core: instructions, prompts, skills, agents
+│   ├── adhoc/                       #   Core: instructions, prompts, skills, agents
 │   └── ironarch/                    #   VA: specialized workflow agents
 │
 ├── skills/                          # Shared skills (cross-plugin)
@@ -132,7 +132,7 @@ Each manifest defines **tiers** (e.g., core, standard, advanced) that let teams 
 
 | Plugin | Description | Tiers |
 |--------|-------------|-------|
-| **activate-framework** | Core AI dev framework — general instructions, prompts, skills, agents | core, ad-hoc, ad-hoc-advanced |
+| **adhoc** | Core AI dev framework — general instructions, prompts, skills, agents | core, ad-hoc, ad-hoc-advanced |
 | **ironarch** | VA-oriented workflow — planning, implementing, testing, reviewing, documenting | core, skills, workflow |
 
 ### Creating a Plugin
