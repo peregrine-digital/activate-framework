@@ -23,7 +23,7 @@ func TestDetectInstallState(t *testing.T) {
 	if err := os.MkdirAll(filepath.Dir(globalPath), 0755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(globalPath, []byte(`{"manifest":"activate-framework","tier":"standard"}`), 0644); err != nil {
+	if err := os.WriteFile(globalPath, []byte(`{"manifest":"adhoc","tier":"standard"}`), 0644); err != nil {
 		t.Fatal(err)
 	}
 

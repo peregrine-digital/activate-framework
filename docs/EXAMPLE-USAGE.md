@@ -6,11 +6,11 @@ This document illustrates how the file hierarchy works in practice across a cros
 
 | Tier | Type | Location | Scope | Invocation |
 |:------|:------|:----------|:-------|:------------|
-| 1 | AGENTS.md | Repository root | Project-wide | Always active |
-| 2 | Instruction files | `.github/instructions/` | Context-specific | Automatic via glob patterns |
-| 2 | Prompt files | `.github/prompts/` | Task-specific | On-demand via `/command` |
-| 3 | Skills | `.github/skills/[skill-name]/SKILL.md` | Procedural | Explicit, on-demand |
-| 4 | Agent definitions | `.github/agents/` | Persona + capabilities | Explicit |
+| 1 | AGENTS.md | Plugin root | Project-wide | Always active |
+| 2 | Instruction files | `plugins/{name}/instructions/` | Context-specific | Automatic via glob patterns |
+| 2 | Prompt files | `plugins/{name}/prompts/` | Task-specific | On-demand via `/command` |
+| 3 | Skills | `plugins/{name}/skills/{skill}/SKILL.md` | Procedural | Explicit, on-demand |
+| 4 | Agent definitions | `plugins/{name}/agents/` | Persona + capabilities | Explicit |
 
 - **AGENTS.md** defines how we work: commit conventions, branching strategy, TDD expectations
 - **Instruction files** provide context-specific guidance: language conventions, code review checklists
@@ -18,7 +18,7 @@ This document illustrates how the file hierarchy works in practice across a cros
 - **Skills** are reusable procedures: creating an ADR, scaffolding a component
 - **Agent definitions** combine persona, capabilities, and which skills/instructions to use
 
-For full details, see [ADR-001](./docs/dev/adrs/ADR-001-agent-instructions-skills-files.md).
+For full details, see the [plugin file hierarchy](plugin-file-hierarchy.md) documentation.
 
 ---
 
@@ -32,7 +32,7 @@ A cross-functional team is building a new UserProfile feature. Each role uses th
 |:------:|:------|:---------------------|
 | 1 | `AGENTS.md` | "Link work to GitHub issues", "Maintain traceability" |
 | 2 | `product.instructions.md` | "Use Given/When/Then for acceptance criteria", "Include accessibility requirements" |
-| 3 | `write-user-story.md` | Procedure for creating well-formed stories with examples |
+| 3 | `write-user-story/SKILL.md` | Procedure for creating well-formed stories with examples |
 
 **Result:** A user story in GitHub Issues with structured acceptance criteria
 
@@ -44,7 +44,7 @@ A cross-functional team is building a new UserProfile feature. Each role uses th
 |:------|:------|:---------------------|
 | 1 | `AGENTS.md` | "Document decisions in session logs" |
 | 2 | `design.instructions.md` | "Reference USWDS tokens", "Include responsive breakpoints", "Document accessibility considerations" |
-| 3 | `design-component-spec.md` | Procedure for documenting component states, variants, and interactions |
+| 3 | `design-component-spec/SKILL.md` | Procedure for documenting component states, variants, and interactions |
 
 **Result:** A component spec with design tokens, states, and a11y notes
 
@@ -59,8 +59,8 @@ A cross-functional team is building a new UserProfile feature. Each role uses th
 | 2 | `react.instructions.md` | "Functional components only", "Use design system tokens" |
 | — | `/code-review` | On-demand structured code review with priority-based checklist |
 | — | `/accessibility-check` | On-demand WCAG 2.1 AA audit |
-| 3 | `create-component.md` | Step-by-step TDD workflow for new components |
-| 4 | `code-reviewer.md` | Agent that reviews code before PR, using `code-review.instructions.md` and `accessibility.instructions.md` |
+| 3 | `create-component/SKILL.md` | Step-by-step TDD workflow for new components |
+| 4 | `code-reviewer.agent.md` | Agent that reviews code before PR, using `code-review.instructions.md` and `accessibility.instructions.md` |
 
 **Example Workflow:**
 
@@ -93,7 +93,7 @@ A cross-functional team is building a new UserProfile feature. Each role uses th
 | 1 | `AGENTS.md` | "Maintain traceability to acceptance criteria" |
 | 2 | `testing.instructions.md` | "Cover happy path, edge cases, and error states", "Include a11y checks" |
 | 2 | `accessibility.instructions.md` | "Test with screen reader", "Verify WCAG 2.1 AA compliance" |
-| 3 | `write-test-plan.md` | Procedure for creating test cases from acceptance criteria |
+| 3 | `write-test-plan/SKILL.md` | Procedure for creating test cases from acceptance criteria |
 
 **Result:** Test cases linked to acceptance criteria with a11y coverage
 
@@ -105,7 +105,7 @@ A cross-functional team is building a new UserProfile feature. Each role uses th
 |:------|:------|:---------------------|
 | 1 | `AGENTS.md` | "Follow established conventions" |
 | 2 | `documentation.instructions.md` | "Use active voice", "Include code examples", "Follow style guide" |
-| 3 | `document-component.md` | Procedure for creating component documentation with props table |
+| 3 | `document-component/SKILL.md` | Procedure for creating component documentation with props table |
 
 **Result:** User-facing docs with examples and API reference
 
@@ -114,6 +114,7 @@ A cross-functional team is building a new UserProfile feature. Each role uses th
 ## How It All Connects
 
 ```text
+plugins/{plugin-name}/
 ┌─────────────────────────────────────────────────────────────────────┐
 │                         AGENTS.md                                   │
 │        TDD • Atomic commits • Traceability • Session logs           │
@@ -125,11 +126,11 @@ A cross-functional team is building a new UserProfile feature. Each role uses th
 │                    │ /code-review               │                    │
 │                    │ /accessibility-check       │                    │
 │                    │ /create-adr                │                    │
-│                    │ /qasp-report               │                    │
 ├─────────────┬──────┴─────────────┬─────────────┬──────┴─────────────┤
 │  write-     │  design-    │  create-    │  write-     │   document- │
-│  user-      │  component. │  component. │  test-      │   component │
-│  story      │  spec       │  (skill)    │  plan       │             │
+│  user-      │  component/ │  component/ │  test-      │   component/│
+│  story/     │  spec/      │  SKILL.md   │  plan/      │   SKILL.md  │
+│  SKILL.md   │  SKILL.md   │  (skill)    │  SKILL.md   │             │
 ├─────────────┴─────────────┼─────────────┼─────────────┴─────────────┤
 │                           │  @code-     │                           │
 │                           │  reviewer   │ ◄── Tier 4 Agent          │
@@ -156,7 +157,4 @@ This composable approach means:
 
 ## Activate Core Receiver Template Example
 
-For downstream repositories consuming cross-org updates, use:
-
-- `templates/activate-core-receiver.workflow.yml` to receive `repository_dispatch` events of type `activate-core-update`, verify checksum, run quality gates, and open/update a labeled PR.
-- `templates/activate-core-sync.sh` to unpack artifacts into `vendor/activate-core` while preserving optional local overlays.
+For downstream repositories consuming cross-org updates, use `templates/activate-core-receiver.workflow.yml` to receive `repository_dispatch` events of type `activate-core-update`, verify checksum, run quality gates, and open/update a labeled PR.

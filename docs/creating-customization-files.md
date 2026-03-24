@@ -19,7 +19,7 @@ Activate Framework uses a plugin-based architecture. Customization files are org
 
 ```
 plugins/
-├── activate-framework/          # Core framework plugin
+├── adhoc/                       # Core framework plugin
 │   ├── AGENTS.md
 │   ├── instructions/
 │   ├── prompts/
@@ -47,7 +47,7 @@ Each plugin must follow the [four-tier file hierarchy](plugin-file-hierarchy.md)
 
 ### 1. Choose the right plugin
 
-- **activate-framework** — General-purpose guidance applicable to any project
+- **adhoc** — General-purpose guidance applicable to any project
 - **ironarch** — VA-specific workflow with specialized agents
 - **New plugin** — Create `plugins/{your-plugin}/` for domain-specific content
 

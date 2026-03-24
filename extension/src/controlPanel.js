@@ -244,8 +244,38 @@ class ControlPanelProvider {
           ...msg.updates,
           scope: 'global',
         }).then(
+          () => {
+            vscode.window.showInformationMessage('✅ Global defaults saved.');
+            this._render();
+          },
+          (err) => {
+            vscode.window.showErrorMessage(`Failed to save global defaults: ${err?.message || err}`);
+            this._render();
+          },
+        );
+        break;
+      case 'runQuickStart':
+        vscode.commands.executeCommand('activate-framework.quickStart').then(
           () => this._render(),
           () => this._render(),
+        );
+        break;
+      case 'resetGlobalDefaults':
+        this._client.setConfig({
+          manifest: '__clear__',
+          tier: '__clear__',
+          repo: '__clear__',
+          branch: '__clear__',
+          scope: 'global',
+        }).then(
+          () => {
+            vscode.window.showInformationMessage('🔄 Global defaults reset.');
+            this._render();
+          },
+          (err) => {
+            vscode.window.showErrorMessage(`Failed to reset global defaults: ${err?.message || err}`);
+            this._render();
+          },
         );
         break;
       case 'clearProjectOverride':
@@ -1329,8 +1359,28 @@ class ControlPanelProvider {
 
   <hr>
 
+  <div class="section-label">Quick Start</div>
+  <div style="padding: 4px 0;">
+    <button class="secondary" onclick="send('runQuickStart')">
+      Run Quick Start Setup
+    </button>
+  </div>
+
+  <hr>
+
   <div class="section-label">Global Defaults</div>
   <div class="path-display">${esc(state?.projectDir ? '~/.activate/config.json' : '')}</div>
+  <div style="padding: 4px 0;">
+    <!-- JSON.stringify produces double-quoted strings; esc() HTML-encodes them.
+         The browser decodes entities before evaluating onclick JS, so the
+         JSON object arrives intact without breaking on special chars. -->
+    <button class="secondary" onclick="send('setGlobalDefault', { updates: ${esc(JSON.stringify({ manifest: resolved.manifest || '', tier: resolved.tier || '' }))} })">
+      Save Current Setup as Global Default
+    </button>
+    <button class="secondary" onclick="send('resetGlobalDefaults')" style="margin-left: 4px;">
+      Reset Global Defaults
+    </button>
+  </div>
 
   <div class="setting-row">
     <span class="setting-label">Manifest</span>

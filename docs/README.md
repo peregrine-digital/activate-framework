@@ -14,7 +14,7 @@ Follow the prompts to choose assistant target, tier, and install directory.
 
 ### Option 2: Skill
 
-Open `../plugins/activate-framework/skills/activate-installer/SKILL.md` in your AI agent and invoke it.
+Open `../plugins/adhoc/skills/activate-installer/SKILL.md` in your AI agent and invoke it.
 
 > **Note:** The CLI engine lives in `../framework/` (install, config, manifest discovery). Plugin content (instructions, prompts, skills, agents) lives under `../plugins/`.
 
@@ -28,4 +28,4 @@ Open `../plugins/activate-framework/skills/activate-installer/SKILL.md` in your 
 
 ## Version
 
-The installed version is recorded in `manifests/activate-framework.json`.
+The installed version is recorded in `manifests/adhoc.json`.

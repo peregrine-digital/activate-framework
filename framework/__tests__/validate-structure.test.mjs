@@ -113,9 +113,9 @@ describe('validate-structure.mjs', () => {
   });
 
   it('should validate real plugins successfully', () => {
-    const result = runValidator('activate-framework');
+    const result = runValidator('adhoc');
     assert.strictEqual(result.exitCode, 0);
-    assert.ok(result.output.includes('✅ activate-framework'));
+    assert.ok(result.output.includes('✅ adhoc'));
   });
 
   it('should validate ironarch successfully', () => {

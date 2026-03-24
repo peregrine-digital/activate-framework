@@ -326,7 +326,7 @@ type Config struct {
 ### Resolution Order
 
 ```
-Built-in defaults (manifest="activate-framework", tier="standard")
+Built-in defaults (manifest="adhoc", tier="standard")
     ↓
 Global config (~/.activate/config.json)
     ↓
@@ -378,7 +378,7 @@ For each file:
 ResolveBundleDir(startDir)
 ├─ If hasManifests(startDir) → return startDir
 ├─ Walk up parent directories until hasManifests(dir)
-├─ Fallback: startDir/plugins/activate-framework
+├─ Fallback: startDir/plugins/adhoc
 └─ Error if not found
 ```
 
@@ -424,7 +424,7 @@ When files are installed into a workspace (via `repo add`), a sidecar file track
 
 ```go
 type repoSidecar struct {
-    Manifest   string   // e.g., "activate-framework"
+    Manifest   string   // e.g., "adhoc"
     Version    string   // e.g., "0.5.0"
     Tier       string   // e.g., "standard"
     Files      []string // relative paths installed

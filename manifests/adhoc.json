@@ -1,7 +1,7 @@
 {
   "name": "Activate Framework",
   "description": "Core AI-assisted development framework with instructions, prompts, skills, and agents",
-  "basePath": "plugins/activate-framework",
+  "basePath": "plugins/adhoc",
   "tiers": [
     { "id": "core", "label": "Core" },
     { "id": "ad-hoc", "label": "Standard" },
