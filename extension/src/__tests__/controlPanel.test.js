@@ -235,6 +235,44 @@ describe('ControlPanelProvider', () => {
       assert.ok(panel._view.webview.html.includes('Global Defaults'), 'should show global section');
       assert.ok(panel._view.webview.html.includes('Project Overrides'), 'should show project section');
       assert.ok(panel._view.webview.html.includes('Enabled'), 'should show telemetry status');
+      assert.ok(panel._view.webview.html.includes('Save Current Setup as Global Default'), 'should show save-global-default button');
+      assert.ok(panel._view.webview.html.includes("setGlobalDefault"), 'button should wire to setGlobalDefault message');
+      assert.ok(panel._view.webview.html.includes('Run Quick Start Setup'), 'should show quick-start button');
+      assert.ok(panel._view.webview.html.includes("runQuickStart"), 'quick-start button should wire to runQuickStart message');
+      assert.ok(panel._view.webview.html.includes('Reset Global Defaults'), 'should show reset-global button');
+      assert.ok(panel._view.webview.html.includes("resetGlobalDefaults"), 'reset button should wire to resetGlobalDefaults message');
+    });
+
+    it('setGlobalDefault onclick uses JSON-safe interpolation for special chars', async () => {
+      mockClient._mockResults.getState = {
+        config: { tier: "team's-tier", manifest: "o'reilly", telemetryEnabled: false },
+        state: { hasInstallMarker: true },
+        tiers: [{ id: 'standard', label: 'Standard', includes: ['core'] }],
+        projectDir: '/test/project',
+      };
+      mockClient._mockResults.config_global = {};
+      mockClient._mockResults.config_project = { tier: "team's-tier", manifest: "o'reilly" };
+
+      panel._currentPage = 'settings';
+      panel._view = {
+        webview: { html: '', options: {}, cspSource: '' },
+      };
+
+      await panel._render();
+      const html = panel._view.webview.html;
+
+      // The onclick payload must contain a valid JSON object (HTML-escaped).
+      // With JSON.stringify the single quotes in values become part of a
+      // double-quoted JSON string, so no JS string-break is possible.
+      assert.ok(
+        html.includes('setGlobalDefault'),
+        'should still wire to setGlobalDefault message',
+      );
+      // Ensure the manifest value appears without broken JS quotes
+      assert.ok(
+        !html.includes("manifest: 'o&#39;reilly'"),
+        'should NOT use single-quoted interpolation that breaks on apostrophes',
+      );
     });
   });
 });
