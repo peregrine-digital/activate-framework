@@ -117,6 +117,10 @@
       {
         "command": "activate-framework.checkForUpdates",
         "title": "Peregrine Activate: Check for Updates"
+      },
+      {
+        "command": "activate-framework.quickStart",
+        "title": "Peregrine Activate: Run Quick Start Setup"
       }
     ],
     "configuration": {
