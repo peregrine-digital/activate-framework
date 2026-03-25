@@ -64,8 +64,8 @@
   <details class="mb-2" open>
     <summary class="cursor-pointer py-2.5 px-2 font-semibold text-[13px] rounded-lg select-none transition-colors duration-150 hover:bg-activate-bg-hover
       [&::-webkit-details-marker]:hidden list-none
-      before:content-['▸\_'] before:text-[11px] before:inline before:opacity-50
-      [details[open]>&]:before:content-['▾\_']">
+      before:content-['▸'] before:text-[11px] before:inline before:opacity-50 before:mr-1
+      [details[open]>&]:before:content-['▾']">
       {CATEGORY_ICONS[group.category] || '📄'} {group.label}
       <span class="text-activate-fg-muted font-normal ml-1.5">{group.files.length}</span>
     </summary>
