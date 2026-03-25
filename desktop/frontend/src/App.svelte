@@ -1,17 +1,15 @@
 <script lang="ts">
   import '../../../ui/src/app.css';
-  import { flushSync } from 'svelte';
   import { createWailsAPI } from '$lib/adapters/wails';
   import { createNavigation } from '$lib/navigation.svelte';
+  import type { ActivateAPI } from '$lib/api';
   import type { AppState } from '$lib/types';
-  import WelcomePage from '$lib/components/WelcomePage.svelte';
   import WorkspaceView from '$lib/components/WorkspaceView.svelte';
+  import WelcomePage from '$lib/components/WelcomePage.svelte';
   import NoCliPage from '$lib/components/NoCliPage.svelte';
 
-  // Wails Go bindings
   const wailsApp = (window as any).go?.main?.App;
-
-  const api = createWailsAPI();
+  const rawApi = createWailsAPI();
   const nav = createNavigation();
 
   interface WorkspaceInfo {
@@ -23,15 +21,53 @@
     exists: boolean;
   }
 
+  // ── Reactive state (same pattern as the working VS Code WebviewApp) ──
   let view = $state<'welcome' | 'loading' | 'workspace' | 'no-cli'>('welcome');
   let appState = $state<AppState | null>(null);
-  let stateVersion = $state(0);
   let workspaces = $state<WorkspaceInfo[]>([]);
   let loading = $state(true);
   let loadingName = $state('');
   let loadingError = $state('');
 
-  // Listen for native menu events from Wails
+  // Reload state from backend — the one function that updates appState.
+  async function load() {
+    try {
+      appState = await rawApi.getState();
+    } catch (e) {
+      console.error('[activate] load failed:', e);
+    }
+  }
+
+  // Daemon notifications (external changes) trigger a reload
+  rawApi.onStateChanged(() => load());
+
+  // ── Auto-refreshing API ──
+  // Wrap mutating methods so they call load() after completing.
+  // This is the desktop-specific glue — VS Code doesn't need it because
+  // its postMessage channel reliably delivers stateChanged notifications.
+  function mut<A extends unknown[]>(
+    fn: (...args: A) => Promise<void>,
+  ): (...args: A) => Promise<void> {
+    return async (...args: A) => {
+      await fn(...args);
+      await load();
+    };
+  }
+
+  const api: ActivateAPI = {
+    ...rawApi,
+    setConfig: mut(rawApi.setConfig),
+    refreshConfig: mut(rawApi.refreshConfig),
+    installFile: mut(rawApi.installFile),
+    uninstallFile: mut(rawApi.uninstallFile),
+    skipUpdate: mut(rawApi.skipUpdate),
+    setFileOverride: mut(rawApi.setFileOverride),
+    updateAll: mut(rawApi.updateAll),
+    addToWorkspace: mut(rawApi.addToWorkspace),
+    removeFromWorkspace: mut(rawApi.removeFromWorkspace),
+  };
+
+  // ── Desktop chrome (menu events, update checks) ──
   if (typeof window !== 'undefined') {
     (window as any).runtime?.EventsOn('navigate', (target: string) => {
       if (target === 'settings') {
@@ -53,7 +89,7 @@
           msgs.push(`CLI: v${result.currentVersion} → v${result.latestVersion}`);
         }
         if (result.desktop?.available) {
-          msgs.push(`Desktop: v${version} → v${result.desktop.version}`);
+          msgs.push(`Desktop: v${desktopVersion} → v${result.desktop.version}`);
         }
         if (msgs.length === 0) {
           (window as any).runtime?.MessageDialog?.({
@@ -88,51 +124,43 @@
     wailsApp.Version().then((v: string) => { desktopVersion = v; });
   }
 
+  // ── Workspace lifecycle ──
   async function loadWorkspaces() {
     try {
-      // Check if CLI binary is available
       if (wailsApp?.CLIFound) {
         const found = await wailsApp.CLIFound();
         if (!found) {
-          flushSync(() => { view = 'no-cli'; loading = false; });
+          view = 'no-cli';
+          loading = false;
           return;
         }
       }
       if (wailsApp?.ListWorkspaces) {
         const result = (await wailsApp.ListWorkspaces()) ?? [];
-        flushSync(() => {
-          workspaces = result;
-          loading = false;
-        });
+        workspaces = result;
+        loading = false;
         return;
       }
     } catch (e) {
       console.error('[activate] loadWorkspaces failed:', e);
     }
-    flushSync(() => { loading = false; });
+    loading = false;
   }
 
   async function selectWorkspace(path: string) {
-    flushSync(() => {
-      loadingName = path.split('/').pop() || path;
-      loadingError = '';
-      view = 'loading';
-    });
+    loadingName = path.split('/').pop() || path;
+    loadingError = '';
+    view = 'loading';
     try {
       if (wailsApp?.InitWorkspace) {
         await wailsApp.InitWorkspace(path);
       }
-      const state = await api.getState();
-      flushSync(() => {
-        appState = state;
-        view = 'workspace';
-      });
+      await load();
+      view = 'workspace';
       nav.reset();
       wailsApp?.SetWorkspaceMenuVisible(true);
     } catch (e: any) {
-      flushSync(() => {
-        loadingError = e?.message || String(e);
-      });
+      loadingError = e?.message || String(e);
     }
   }
 
@@ -140,54 +168,29 @@
     if (!wailsApp?.SelectWorkspace) return;
     try {
       const state = await wailsApp.SelectWorkspace();
-      if (!state?.projectDir) return; // cancelled
-      flushSync(() => {
-        loadingName = state.projectDir.split('/').pop() || state.projectDir;
-        loadingError = '';
-        view = 'loading';
-      });
-      const appData = await api.getState();
-      flushSync(() => {
-        appState = appData;
-        view = 'workspace';
-      });
+      if (!state?.projectDir) return;
+      loadingName = state.projectDir.split('/').pop() || state.projectDir;
+      loadingError = '';
+      view = 'loading';
+      await load();
+      view = 'workspace';
       nav.reset();
       wailsApp?.SetWorkspaceMenuVisible(true);
       loadWorkspaces();
     } catch (e: any) {
-      flushSync(() => {
-        loadingError = e?.message || String(e);
-        if (view !== 'loading') view = 'loading';
-      });
+      loadingError = e?.message || String(e);
+      if (view !== 'loading') view = 'loading';
     }
   }
 
   function backToWelcome() {
-    flushSync(() => {
-      view = 'welcome';
-      appState = null;
-    });
+    view = 'welcome';
+    appState = null;
     nav.reset();
     wailsApp?.CloseWorkspace();
     wailsApp?.SetWorkspaceMenuVisible(false);
     loadWorkspaces();
   }
-
-  let refreshing = false;
-  api.onStateChanged(async () => {
-    if (view === 'workspace' && !refreshing) {
-      refreshing = true;
-      try {
-        const newState = await api.getState();
-        flushSync(() => {
-          appState = newState;
-          stateVersion++;
-        });
-      } finally {
-        refreshing = false;
-      }
-    }
-  });
 
   loadWorkspaces();
 </script>
@@ -234,10 +237,9 @@
       {/if}
     </div>
   {:else if nav.page === 'settings' && view !== 'workspace'}
-    <!-- Global settings accessible from welcome screen -->
-    {#await api.getState() then mockState}
+    {#await rawApi.getState() then settingsState}
       <WorkspaceView
-        appState={mockState}
+        appState={settingsState}
         {api}
         page={nav.page}
         onNavigate={nav.navigateTo}
@@ -250,8 +252,8 @@
     <NoCliPage onInstallCLI={async () => {
       try {
         await wailsApp?.InstallCLI?.();
-        // CLI installed — reload workspaces
-        flushSync(() => { view = 'welcome'; loading = true; });
+        view = 'welcome';
+        loading = true;
         loadWorkspaces();
       } catch {
         (window as any).runtime?.BrowserOpenURL?.('https://github.com/peregrine-digital/activate-framework#installation');
@@ -266,7 +268,6 @@
   {:else if !appState}
     <div class="py-8 text-center opacity-50">Loading workspace…</div>
   {:else}
-    {#key stateVersion}
     <WorkspaceView
       {appState}
       {api}
@@ -274,7 +275,6 @@
       onNavigate={nav.navigateTo}
       onBack={nav.navigateBack}
     />
-    {/key}
   {/if}
   </main>
 </div>

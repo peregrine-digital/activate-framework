@@ -63,7 +63,9 @@ export function createWailsAPI(): ActivateAPI {
   const app = window.go.main.App;
   const listeners = new Set<() => void>();
 
-  // Listen for stateChanged events from the Go backend (forwarded from daemon)
+  // Listen for stateChanged events from the Go backend (forwarded from daemon).
+  // These fire when the daemon detects external changes (e.g., file system).
+  // User-initiated mutations are handled by the state manager's auto-refresh.
   function setupEventListener() {
     if (typeof window !== 'undefined' && window.runtime?.EventsOn) {
       window.runtime.EventsOn('stateChanged', () => {
@@ -74,13 +76,6 @@ export function createWailsAPI(): ActivateAPI {
     }
   }
   setupEventListener();
-
-  // Trigger all stateChanged listeners (called after mutations for immediate feedback).
-  // Uses setTimeout(0) to ensure the notification runs in a new microtask,
-  // allowing Wails IPC to fully settle before Svelte processes the update.
-  function notify() {
-    setTimeout(() => listeners.forEach((cb) => cb()), 0);
-  }
 
   return {
     platform: 'desktop',
@@ -96,21 +91,18 @@ export function createWailsAPI(): ActivateAPI {
     async setConfig(updates: Partial<Config> & { scope: 'global' | 'project' }): Promise<void> {
       const { scope, ...rest } = updates;
       await app.SetConfig({ scope, updates: rest });
-      notify();
     },
 
     async refreshConfig(): Promise<void> {
-      notify();
+      // No-op: state manager refreshes via getState() after this returns
     },
 
     async installFile(file: FileStatus): Promise<void> {
       await app.InstallFile(file.dest);
-      notify();
     },
 
     async uninstallFile(file: FileStatus): Promise<void> {
       await app.UninstallFile(file.dest);
-      notify();
     },
 
     async diffFile(file: FileStatus): Promise<DiffResult> {
@@ -120,27 +112,22 @@ export function createWailsAPI(): ActivateAPI {
 
     async skipUpdate(file: FileStatus): Promise<void> {
       await app.SkipUpdate(file.dest);
-      notify();
     },
 
     async setFileOverride(dest: string, override: '' | 'pinned' | 'excluded'): Promise<void> {
       await app.SetOverride(dest, override);
-      notify();
     },
 
     async updateAll(): Promise<void> {
       await app.UpdateAll();
-      notify();
     },
 
     async addToWorkspace(): Promise<void> {
       await app.AddToWorkspace();
-      notify();
     },
 
     async removeFromWorkspace(): Promise<void> {
       await app.RemoveFromWorkspace();
-      notify();
     },
 
     async listManifests(): Promise<Manifest[]> {
@@ -164,11 +151,11 @@ export function createWailsAPI(): ActivateAPI {
     },
 
     async changeTier(): Promise<void> {
-      // TODO: show tier picker dialog
+      // Handled in-UI by MainPage's SelectModal
     },
 
     async changeManifest(): Promise<void> {
-      // TODO: show manifest picker dialog
+      // Handled in-UI by MainPage's SelectModal
     },
 
     async installCLI(): Promise<void> {
