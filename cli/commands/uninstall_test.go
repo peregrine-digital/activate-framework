@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -18,33 +19,63 @@ func TestRunUninstall_RemovesActivateDir(t *testing.T) {
 	fakeHome := t.TempDir()
 	t.Setenv("HOME", fakeHome)
 
-	// Create the directory structure
+	// Create a fake workspace with injected files
+	fakeProject := t.TempDir()
+	githubDir := filepath.Join(fakeProject, ".github", "instructions")
+	os.MkdirAll(githubDir, 0755)
+	os.WriteFile(filepath.Join(githubDir, "test.md"), []byte("injected"), 0644)
+
+	// Create .git/info/exclude with managed block
+	gitInfoDir := filepath.Join(fakeProject, ".git", "info")
+	os.MkdirAll(gitInfoDir, 0755)
+	excludeContent := "# existing\n\n# >>> Peregrine Activate (managed — do not edit)\n.github/instructions/test.md\n# <<< Peregrine Activate\n"
+	os.WriteFile(filepath.Join(gitInfoDir, "exclude"), []byte(excludeContent), 0644)
+
+	// Create the sidecar and repo metadata in ~/.activate/repos/<hash>/
+	repoStore := storage.RepoStorePath(fakeProject)
+	os.MkdirAll(repoStore, 0755)
+	absProject, _ := filepath.Abs(fakeProject)
+	metaJSON, _ := json.Marshal(struct{ Path string }{Path: absProject})
+	os.WriteFile(filepath.Join(repoStore, "repo.json"), metaJSON, 0644)
+	sidecarJSON := []byte(`{"files":[".github/instructions/test.md"]}`)
+	os.WriteFile(filepath.Join(repoStore, "installed.json"), sidecarJSON, 0644)
+
+	// Create binary and config
 	binDir := filepath.Join(tmp, "bin")
-	reposDir := filepath.Join(tmp, "repos", "abc123")
 	os.MkdirAll(binDir, 0755)
-	os.MkdirAll(reposDir, 0755)
 	os.WriteFile(filepath.Join(binDir, "activate"), []byte("binary"), 0755)
 	os.WriteFile(filepath.Join(tmp, "config.json"), []byte(`{}`), 0644)
-	os.WriteFile(filepath.Join(reposDir, "installed.json"), []byte(`{}`), 0644)
 
 	// Create a fake shell profile with the marker
 	zshenv := filepath.Join(fakeHome, ".zshenv")
 	os.WriteFile(zshenv, []byte("export FOO=bar\n\n# Added by Activate CLI installer\nexport PATH=\"/fake/.activate/bin:$PATH\"\n"), 0644)
 
-	// Run uninstall with force (skip prompt)
+	// Run uninstall
 	if err := RunUninstall(true); err != nil {
 		t.Fatalf("RunUninstall failed: %v", err)
 	}
 
-	// Verify directory is gone
+	// Verify ~/.activate is gone
 	if _, err := os.Stat(tmp); !os.IsNotExist(err) {
-		t.Errorf("expected %s to be removed, but it still exists", tmp)
+		t.Errorf("expected %s to be removed", tmp)
+	}
+
+	// Verify injected file was removed from workspace
+	injectedFile := filepath.Join(githubDir, "test.md")
+	if _, err := os.Stat(injectedFile); !os.IsNotExist(err) {
+		t.Errorf("expected injected file %s to be removed", injectedFile)
+	}
+
+	// Verify .git/info/exclude was cleaned
+	excludeData, _ := os.ReadFile(filepath.Join(gitInfoDir, "exclude"))
+	if contains(string(excludeData), "Peregrine Activate") {
+		t.Errorf("expected managed block removed from .git/info/exclude, got:\n%s", string(excludeData))
 	}
 
 	// Verify shell profile was cleaned
 	data, _ := os.ReadFile(zshenv)
 	if contains(string(data), "Activate CLI installer") {
-		t.Errorf("expected marker removed from zshenv, got:\n%s", string(data))
+		t.Errorf("expected marker removed from zshenv")
 	}
 }
 

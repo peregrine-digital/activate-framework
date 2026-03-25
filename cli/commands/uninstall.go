@@ -2,6 +2,7 @@ package commands
 
 import (
 	"bufio"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -12,14 +13,17 @@ import (
 
 const shellMarker = "# Added by Activate CLI installer"
 
-// RunUninstall removes the activate binary, cache, config, and shell PATH entries.
+// RunUninstall removes injected files from all workspaces, then removes
+// the activate binary, cache, config, and shell PATH entries.
 func RunUninstall(force bool) error {
 	base := storage.StoreBase()
 
 	if !force {
-		fmt.Printf("This will remove:\n")
-		fmt.Printf("  • %s (binary, config, cache)\n", base)
-		fmt.Printf("  • PATH entries from shell profiles\n")
+		fmt.Printf("This will:\n")
+		fmt.Printf("  • Remove injected files from all managed workspaces\n")
+		fmt.Printf("  • Clean .git/info/exclude in each workspace\n")
+		fmt.Printf("  • Remove %s (binary, config, cache)\n", base)
+		fmt.Printf("  • Remove PATH entries from shell profiles\n")
 		fmt.Printf("\nContinue? [y/N] ")
 
 		reader := bufio.NewReader(os.Stdin)
@@ -30,6 +34,9 @@ func RunUninstall(force bool) error {
 			return nil
 		}
 	}
+
+	// Clean up all managed workspaces first (while sidecar data is still available)
+	cleanWorkspaces(base)
 
 	// Remove ~/.activate directory (binary, config, cache — everything)
 	if err := os.RemoveAll(base); err != nil {
@@ -46,6 +53,44 @@ func RunUninstall(force bool) error {
 
 	fmt.Println("\nActivate CLI uninstalled. Restart your terminal to apply PATH changes.")
 	return nil
+}
+
+// cleanWorkspaces iterates all known workspaces and removes injected files
+// and .git/info/exclude entries from each.
+func cleanWorkspaces(base string) {
+	reposDir := filepath.Join(base, "repos")
+	entries, err := os.ReadDir(reposDir)
+	if err != nil {
+		return
+	}
+
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		metaPath := filepath.Join(reposDir, entry.Name(), "repo.json")
+		data, err := os.ReadFile(metaPath)
+		if err != nil {
+			continue
+		}
+		var meta struct {
+			Path string `json:"path"`
+		}
+		if json.Unmarshal(data, &meta) != nil || meta.Path == "" {
+			continue
+		}
+
+		// Skip workspaces that no longer exist on disk
+		if _, err := os.Stat(meta.Path); os.IsNotExist(err) {
+			continue
+		}
+
+		if err := storage.DeleteRepoSidecar(meta.Path); err != nil {
+			fmt.Fprintf(os.Stderr, "  ⚠ Failed to clean %s: %v\n", meta.Path, err)
+			continue
+		}
+		fmt.Printf("  ✓ Cleaned workspace %s\n", meta.Path)
+	}
 }
 
 // removeShellEntries removes the activate PATH marker + export line from shell profiles.
