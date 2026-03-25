@@ -426,7 +426,6 @@ async function activate(context) {
     }),
 
     vscode.commands.registerCommand('activate-framework.openFile', async (file) => {
-      if (!requireClient()) return;
       if (!file?.dest) { outputChannel.appendLine(`[openFile] no file.dest — file=${JSON.stringify(file)}`); return; }
       const wsRoot = vscode.workspace.workspaceFolders?.[0]?.uri;
       if (!wsRoot) { outputChannel.appendLine('[openFile] no workspace root'); return; }

@@ -48,7 +48,9 @@ class ControlPanelProvider {
 
     webviewView.webview.onDidReceiveMessage((msg) => this._onMessage(msg));
 
-    // Build the HTML that loads the Svelte bundle
+    // Build the HTML that loads the Svelte bundle.
+    // Append a cache-bust query so VS Code doesn't serve a stale bundle.
+    const cacheBust = `?v=${Date.now()}`;
     const jsUri = webviewView.webview.asWebviewUri(
       vscode.Uri.file(path.join(webviewDistPath, 'webview.js')),
     );
@@ -56,7 +58,7 @@ class ControlPanelProvider {
       vscode.Uri.file(path.join(webviewDistPath, 'webview.css')),
     );
 
-    webviewView.webview.html = this._getHtml(jsUri, cssUri);
+    webviewView.webview.html = this._getHtml(`${jsUri}${cacheBust}`, `${cssUri}${cacheBust}`);
 
     // Send initial state once webview is ready
     setTimeout(() => this._sendInit(), 100);
@@ -88,6 +90,7 @@ class ControlPanelProvider {
   // ── message bridge ──────────────────────────────────────
 
   async _onMessage(msg) {
+    console.log('[ControlPanel] ← webview:', msg.command, msg._reqId ? `(req ${msg._reqId})` : '(fire)');
     const reqId = msg._reqId;
 
     // Helper to send response back for request/response pattern
