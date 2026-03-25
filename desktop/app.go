@@ -277,7 +277,8 @@ func (a *App) OpenFile(file string) error {
 	if a.projectDir == "" {
 		return nil
 	}
-	fullPath := filepath.Join(a.projectDir, file)
+	// file.dest is relative to the install dir (.github/)
+	fullPath := filepath.Join(a.projectDir, ".github", file)
 	if _, err := os.Stat(fullPath); err != nil {
 		return err
 	}
