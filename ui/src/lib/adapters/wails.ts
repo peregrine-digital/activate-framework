@@ -75,6 +75,11 @@ export function createWailsAPI(): ActivateAPI {
   }
   setupEventListener();
 
+  // Trigger all stateChanged listeners (called after mutations for immediate feedback)
+  function notify() {
+    listeners.forEach((cb) => cb());
+  }
+
   return {
     platform: 'desktop',
 
@@ -89,19 +94,21 @@ export function createWailsAPI(): ActivateAPI {
     async setConfig(updates: Partial<Config> & { scope: 'global' | 'project' }): Promise<void> {
       const { scope, ...rest } = updates;
       await app.SetConfig({ scope, updates: rest });
+      notify();
     },
 
     async refreshConfig(): Promise<void> {
-      // Re-fetch state triggers a config reload in the daemon
-      listeners.forEach((cb) => cb());
+      notify();
     },
 
     async installFile(file: FileStatus): Promise<void> {
       await app.InstallFile(file.dest);
+      notify();
     },
 
     async uninstallFile(file: FileStatus): Promise<void> {
       await app.UninstallFile(file.dest);
+      notify();
     },
 
     async diffFile(file: FileStatus): Promise<DiffResult> {
@@ -111,22 +118,27 @@ export function createWailsAPI(): ActivateAPI {
 
     async skipUpdate(file: FileStatus): Promise<void> {
       await app.SkipUpdate(file.dest);
+      notify();
     },
 
     async setFileOverride(dest: string, override: '' | 'pinned' | 'excluded'): Promise<void> {
       await app.SetOverride(dest, override);
+      notify();
     },
 
     async updateAll(): Promise<void> {
       await app.UpdateAll();
+      notify();
     },
 
     async addToWorkspace(): Promise<void> {
       await app.AddToWorkspace();
+      notify();
     },
 
     async removeFromWorkspace(): Promise<void> {
       await app.RemoveFromWorkspace();
+      notify();
     },
 
     async listManifests(): Promise<Manifest[]> {
