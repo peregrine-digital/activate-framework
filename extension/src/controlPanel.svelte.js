@@ -193,7 +193,11 @@ class ControlPanelProvider {
           break;
 
         default:
-          console.warn('[ControlPanel] Unknown command:', msg.command);
+          if (reqId) {
+            respondError(new Error(`Unknown command: ${msg.command}`));
+          } else {
+            console.warn('[ControlPanel] Unknown command:', msg.command);
+          }
       }
     } catch (err) {
       console.error('[ControlPanel] Error handling', msg.command, err);

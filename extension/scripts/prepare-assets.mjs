@@ -3,7 +3,9 @@
  *
  * 1. Rebuilds the CLI binary (cli/activate) so the dev-mode daemon always
  *    matches the current source.  Skipped if `go` is not available.
- * 2. Copies install-cli.sh into extension/ so it ships in the VSIX.
+ * 2. Rebuilds the shared Svelte UI bundle (webview-dist/) so the panel
+ *    always matches the current UI source.  Skipped if npm is not available.
+ * 3. Copies install-cli.sh into extension/ so it ships in the VSIX.
  *
  * Run: node scripts/prepare-assets.mjs
  */
@@ -28,6 +30,19 @@ async function main() {
     console.log('  ✓ cli/activate rebuilt');
   } catch {
     console.warn('  ⚠ cli/activate — go build failed or go not available (skipped)');
+  }
+
+  // Build shared UI webview bundle so the panel matches current source
+  const uiDir = path.join(repoRoot, 'ui');
+  try {
+    execFileSync('npm', ['run', 'build:webview'], {
+      cwd: uiDir,
+      stdio: 'inherit',
+      timeout: 60_000,
+    });
+    console.log('  ✓ webview-dist/ rebuilt');
+  } catch {
+    console.warn('  ⚠ webview-dist/ — UI build failed or npm not available (skipped)');
   }
 
   // Copy install-cli.sh to extension root so it ships in the VSIX

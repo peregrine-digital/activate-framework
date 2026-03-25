@@ -12,6 +12,20 @@ go build -o /tmp/activate-dev .
 /tmp/activate-dev "$@"
 '''
 
+[tasks.desktop]
+description = "Build and run the desktop app from source"
+run = '''
+#!/usr/bin/env bash
+set -euo pipefail
+cd desktop
+wails build -clean
+if [[ "$(uname)" == "Darwin" ]]; then
+  open build/bin/activate-desktop.app
+else
+  ./build/bin/activate-desktop
+fi
+'''
+
 [tasks.release]
 description = "Bump version, open a PR, and create a GitHub release after merge"
 run = '''
