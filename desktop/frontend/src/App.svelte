@@ -173,13 +173,19 @@
     loadWorkspaces();
   }
 
+  let refreshing = false;
   api.onStateChanged(async () => {
-    if (view === 'workspace') {
-      const newState = await api.getState();
-      flushSync(() => {
-        appState = newState;
-        stateVersion++;
-      });
+    if (view === 'workspace' && !refreshing) {
+      refreshing = true;
+      try {
+        const newState = await api.getState();
+        flushSync(() => {
+          appState = newState;
+          stateVersion++;
+        });
+      } finally {
+        refreshing = false;
+      }
     }
   });
 

@@ -75,9 +75,11 @@ export function createWailsAPI(): ActivateAPI {
   }
   setupEventListener();
 
-  // Trigger all stateChanged listeners (called after mutations for immediate feedback)
+  // Trigger all stateChanged listeners (called after mutations for immediate feedback).
+  // Uses setTimeout(0) to ensure the notification runs in a new microtask,
+  // allowing Wails IPC to fully settle before Svelte processes the update.
   function notify() {
-    listeners.forEach((cb) => cb());
+    setTimeout(() => listeners.forEach((cb) => cb()), 0);
   }
 
   return {
