@@ -38,22 +38,24 @@
   );
 </script>
 
-<div class="file-row group" class:file-row--outdated={outdated}>
+<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+<div
+  class="file-row group"
+  class:file-row--outdated={outdated}
+  class:cursor-pointer={installed}
+  onclick={() => installed && onOpen(file)}
+  role={installed ? 'button' : undefined}
+  tabindex={installed ? 0 : -1}
+  onkeydown={(e) => installed && e.key === 'Enter' && onOpen(file)}
+>
   <!-- Status icon — fixed 20px column -->
   <span class="file-status" class:text-activate-warning={installed && outdated} class:text-activate-success={installed && !outdated} class:opacity-30={!installed}>
     {installed ? (outdated ? '⬆' : '✓') : '○'}
   </span>
 
   <!-- File info — flex fill -->
-  <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
-  <div
-    class="file-info"
-    class:cursor-pointer={installed}
-    onclick={() => installed && onOpen(file)}
-    role={installed ? 'button' : undefined}
-    tabindex={installed ? 0 : -1}
-    onkeydown={(e) => installed && e.key === 'Enter' && onOpen(file)}
-  >
+  <div class="file-info">
     <span class="file-name">
       {name}
       {#if installed}
