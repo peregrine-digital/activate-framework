@@ -387,7 +387,11 @@ func (s *ActivateService) RepoAdd() (*RepoAddResult, error) {
 }
 
 func (s *ActivateService) RepoRemove() error {
-	return engine.RepoRemove(s.ProjectDir)
+	if err := engine.RepoRemove(s.ProjectDir); err != nil {
+		return err
+	}
+	s.refreshConfig()
+	return nil
 }
 
 func (s *ActivateService) Sync() (*SyncResult, error) {
