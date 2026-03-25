@@ -36,18 +36,30 @@
     file.installedVersion !== file.bundledVersion &&
     skippedVersion !== file.bundledVersion
   );
+
+  // Direct addEventListener to bypass Svelte 5 event delegation,
+  // which may not work reliably in VS Code webviews.
+  function rowClick(node: HTMLElement) {
+    function handler(e: MouseEvent) {
+      if (!installed) return;
+      // Don't fire if user clicked an action button (they call stopPropagation,
+      // but the direct listener fires before delegation resolves)
+      const target = e.target as HTMLElement;
+      if (target.closest('.file-actions')) return;
+      onOpen(file);
+    }
+    node.addEventListener('click', handler);
+    return { destroy() { node.removeEventListener('click', handler); } };
+  }
 </script>
 
-<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
-<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 <div
   class="file-row group"
   class:file-row--outdated={outdated}
   class:cursor-pointer={installed}
-  onclick={() => installed && onOpen(file)}
   role={installed ? 'button' : undefined}
   tabindex={installed ? 0 : -1}
-  onkeydown={(e) => installed && e.key === 'Enter' && onOpen(file)}
+  use:rowClick
 >
   <!-- Status icon — fixed 20px column -->
   <span class="file-status" class:text-activate-warning={installed && outdated} class:text-activate-success={installed && !outdated} class:opacity-30={!installed}>
