@@ -2,6 +2,16 @@
 go = "latest"
 node = "20"
 
+[tasks.activate]
+description = "Build and run the CLI from source"
+run = '''
+#!/usr/bin/env bash
+set -euo pipefail
+cd cli
+go build -o /tmp/activate-dev .
+/tmp/activate-dev "$@"
+'''
+
 [tasks.release]
 description = "Bump version, open a PR, and create a GitHub release after merge"
 run = '''
