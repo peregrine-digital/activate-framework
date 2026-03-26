@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
   import type { FileStatus } from '../types.js';
 
   interface Props {
@@ -38,30 +37,20 @@
     skippedVersion !== file.bundledVersion
   );
 
-  // Raw addEventListener bypasses Svelte 5 event delegation, which is
-  // unreliable inside VS Code webview iframes.
-  let rowEl: HTMLDivElement | undefined;
-
-  onMount(() => {
-    if (!rowEl) return;
-    const el = rowEl;
-    function handler(e: MouseEvent) {
-      if (!installed) return;
-      if ((e.target as HTMLElement).closest('.file-actions')) return;
-      onOpen(file);
-    }
-    el.addEventListener('click', handler);
-    return () => el.removeEventListener('click', handler);
-  });
+  function handleRowClick(e: MouseEvent) {
+    if (!installed) return;
+    if ((e.target as HTMLElement).closest('.file-actions')) return;
+    onOpen(file);
+  }
 </script>
 
 <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 <div
-  bind:this={rowEl}
   class="file-row group"
   class:file-row--outdated={outdated}
   class:cursor-pointer={installed}
+  onclick={handleRowClick}
   onkeydown={(e) => installed && e.key === 'Enter' && onOpen(file)}
   role={installed ? 'button' : undefined}
   tabindex={installed ? 0 : -1}

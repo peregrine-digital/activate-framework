@@ -432,10 +432,12 @@ async function activate(context) {
       const fileUri = vscode.Uri.joinPath(wsRoot, installDir, file.dest);
       outputChannel.appendLine(`[openFile] opening ${fileUri.fsPath}`);
       try {
+        // TODO: remove showInformationMessage once click-to-open is confirmed working
+        vscode.window.showInformationMessage(`Opening: ${installDir}/${file.dest}`);
         await vscode.commands.executeCommand('vscode.open', fileUri);
       } catch (err) {
         outputChannel.appendLine(`[openFile] error: ${err?.message || err}`);
-        vscode.window.showWarningMessage(`Could not open ${file.dest}`);
+        vscode.window.showWarningMessage(`Could not open ${file.dest}: ${err?.message || err}`);
       }
     }),
 
