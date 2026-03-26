@@ -302,95 +302,122 @@ describe('ControlPanelProvider (svelte)', () => {
     });
   });
 
-  describe('fire-and-forget messages', () => {
-    it('installCLI dispatches command', async () => {
-      const { panel } = createPanel(mockClient);
+  describe('command messages (request/response)', () => {
+    it('installCLI dispatches command and responds', async () => {
+      const { panel, webview } = createPanel(mockClient);
+      webview._messages.length = 0;
 
-      await panel._onMessage({ command: 'installCLI' });
+      await panel._onMessage({ command: 'installCLI', _reqId: 100 });
 
       assert.deepEqual(executedCommands[0], ['activate-framework.installCLI']);
+      const resp = webview._messages.find((m) => m._responseId === 100);
+      assert.ok(resp, 'should send response');
+      assert.strictEqual(resp._result, null);
     });
 
-    it('changeTier dispatches command', async () => {
-      const { panel } = createPanel(mockClient);
-      await panel._onMessage({ command: 'changeTier' });
+    it('changeTier dispatches command and responds', async () => {
+      const { panel, webview } = createPanel(mockClient);
+      webview._messages.length = 0;
+      await panel._onMessage({ command: 'changeTier', _reqId: 101 });
       assert.deepEqual(executedCommands[0], ['activate-framework.changeTier']);
+      assert.ok(webview._messages.find((m) => m._responseId === 101));
     });
 
-    it('changeManifest dispatches command', async () => {
-      const { panel } = createPanel(mockClient);
-      await panel._onMessage({ command: 'changeManifest' });
+    it('changeManifest dispatches command and responds', async () => {
+      const { panel, webview } = createPanel(mockClient);
+      webview._messages.length = 0;
+      await panel._onMessage({ command: 'changeManifest', _reqId: 102 });
       assert.deepEqual(executedCommands[0], ['activate-framework.changeManifest']);
+      assert.ok(webview._messages.find((m) => m._responseId === 102));
     });
 
-    it('addToWorkspace dispatches command', async () => {
-      const { panel } = createPanel(mockClient);
-      await panel._onMessage({ command: 'addToWorkspace' });
+    it('addToWorkspace dispatches command and responds', async () => {
+      const { panel, webview } = createPanel(mockClient);
+      webview._messages.length = 0;
+      await panel._onMessage({ command: 'addToWorkspace', _reqId: 103 });
       assert.deepEqual(executedCommands[0], ['activate-framework.addToWorkspace']);
+      assert.ok(webview._messages.find((m) => m._responseId === 103));
     });
 
-    it('removeFromWorkspace dispatches command', async () => {
-      const { panel } = createPanel(mockClient);
-      await panel._onMessage({ command: 'removeFromWorkspace' });
+    it('removeFromWorkspace dispatches command and responds', async () => {
+      const { panel, webview } = createPanel(mockClient);
+      webview._messages.length = 0;
+      await panel._onMessage({ command: 'removeFromWorkspace', _reqId: 104 });
       assert.deepEqual(executedCommands[0], ['activate-framework.removeFromWorkspace']);
+      assert.ok(webview._messages.find((m) => m._responseId === 104));
     });
 
-    it('updateAll dispatches command', async () => {
-      const { panel } = createPanel(mockClient);
-      await panel._onMessage({ command: 'updateAll' });
+    it('updateAll dispatches command and responds', async () => {
+      const { panel, webview } = createPanel(mockClient);
+      webview._messages.length = 0;
+      await panel._onMessage({ command: 'updateAll', _reqId: 105 });
       assert.deepEqual(executedCommands[0], ['activate-framework.updateAll']);
+      assert.ok(webview._messages.find((m) => m._responseId === 105));
     });
 
-    it('installFile passes file arg', async () => {
-      const { panel } = createPanel(mockClient);
+    it('installFile passes file arg and responds', async () => {
+      const { panel, webview } = createPanel(mockClient);
+      webview._messages.length = 0;
       const file = { dest: 'instructions/a.md', installed: false };
-      await panel._onMessage({ command: 'installFile', file });
+      await panel._onMessage({ command: 'installFile', file, _reqId: 106 });
       assert.deepEqual(executedCommands[0], ['activate-framework.installFile', file]);
+      assert.ok(webview._messages.find((m) => m._responseId === 106));
     });
 
-    it('uninstallFile passes file arg', async () => {
-      const { panel } = createPanel(mockClient);
+    it('uninstallFile passes file arg and responds', async () => {
+      const { panel, webview } = createPanel(mockClient);
+      webview._messages.length = 0;
       const file = { dest: 'instructions/a.md', installed: true };
-      await panel._onMessage({ command: 'uninstallFile', file });
+      await panel._onMessage({ command: 'uninstallFile', file, _reqId: 107 });
       assert.deepEqual(executedCommands[0], ['activate-framework.uninstallFile', file]);
+      assert.ok(webview._messages.find((m) => m._responseId === 107));
     });
 
-    it('openFile passes file arg', async () => {
-      const { panel } = createPanel(mockClient);
+    it('openFile passes file arg and responds', async () => {
+      const { panel, webview } = createPanel(mockClient);
+      webview._messages.length = 0;
       const file = { dest: 'instructions/a.md' };
-      await panel._onMessage({ command: 'openFile', file });
+      await panel._onMessage({ command: 'openFile', file, _reqId: 108 });
       assert.deepEqual(executedCommands[0], ['activate-framework.openFile', file]);
+      assert.ok(webview._messages.find((m) => m._responseId === 108));
     });
 
-    it('diffFile passes file arg', async () => {
-      const { panel } = createPanel(mockClient);
+    it('diffFile passes file arg and responds', async () => {
+      const { panel, webview } = createPanel(mockClient);
+      webview._messages.length = 0;
       const file = { dest: 'instructions/a.md' };
-      await panel._onMessage({ command: 'diffFile', file });
+      await panel._onMessage({ command: 'diffFile', file, _reqId: 109 });
       assert.deepEqual(executedCommands[0], ['activate-framework.diffFile', file]);
+      assert.ok(webview._messages.find((m) => m._responseId === 109));
     });
 
-    it('skipUpdate passes file arg', async () => {
-      const { panel } = createPanel(mockClient);
+    it('skipUpdate passes file arg and responds', async () => {
+      const { panel, webview } = createPanel(mockClient);
+      webview._messages.length = 0;
       const file = { dest: 'instructions/a.md' };
-      await panel._onMessage({ command: 'skipUpdate', file });
+      await panel._onMessage({ command: 'skipUpdate', file, _reqId: 110 });
       assert.deepEqual(executedCommands[0], ['activate-framework.skipFileUpdate', file]);
+      assert.ok(webview._messages.find((m) => m._responseId === 110));
     });
 
-    it('checkForUpdates dispatches command', async () => {
-      const { panel } = createPanel(mockClient);
-      await panel._onMessage({ command: 'checkForUpdates' });
+    it('checkForUpdates dispatches command and responds', async () => {
+      const { panel, webview } = createPanel(mockClient);
+      webview._messages.length = 0;
+      await panel._onMessage({ command: 'checkForUpdates', _reqId: 111 });
       assert.deepEqual(executedCommands[0], ['activate-framework.checkForUpdates']);
+      assert.ok(webview._messages.find((m) => m._responseId === 111));
     });
 
     it('refreshUsage dispatches telemetryRunNow then refreshes', async () => {
       const { panel, webview } = createPanel(mockClient);
       webview._messages.length = 0;
 
-      await panel._onMessage({ command: 'refreshUsage' });
+      await panel._onMessage({ command: 'refreshUsage', _reqId: 112 });
       // Wait for the promise chain and debounce to settle
       await new Promise((r) => setTimeout(r, 300));
 
       assert.deepEqual(executedCommands[0], ['activate-framework.telemetryRunNow']);
+      assert.ok(webview._messages.find((m) => m._responseId === 112));
     });
   });
 });
