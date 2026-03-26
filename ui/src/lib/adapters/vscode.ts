@@ -42,7 +42,10 @@ function request<T>(command: string, params?: Record<string, unknown>): Promise<
   return new Promise((resolve, reject) => {
     const id = nextReqId++;
     pending.set(id, { resolve: resolve as (v: unknown) => void, reject });
-    getVsCodeApi().postMessage({ command, ...params, _reqId: id });
+    // JSON roundtrip strips Svelte 5 reactive Proxies which can't be
+    // cloned by postMessage's structured clone algorithm.
+    const msg = JSON.parse(JSON.stringify({ command, ...params, _reqId: id }));
+    getVsCodeApi().postMessage(msg);
     // Timeout after 30s
     setTimeout(() => {
       if (pending.has(id)) {
@@ -54,7 +57,7 @@ function request<T>(command: string, params?: Record<string, unknown>): Promise<
 }
 
 function fire(command: string, params?: Record<string, unknown>): void {
-  getVsCodeApi().postMessage({ command, ...params });
+  getVsCodeApi().postMessage(JSON.parse(JSON.stringify({ command, ...params })));
 }
 
 // Listen for responses from the extension host
