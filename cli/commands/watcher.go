@@ -30,19 +30,23 @@ func newConfigWatcher(t *transport.Transport) (*configWatcher, error) {
 	}, nil
 }
 
-// watchPaths sets up watches on global config and project-specific files.
+// watchPaths sets up watches on directories containing config and sidecar files.
+// We watch directories instead of individual files because:
+// 1. fsnotify.Add() fails if the file doesn't exist yet
+// 2. Directory watches catch creates, writes, AND removes of files within
+// This enables cross-process sync (e.g., extension and desktop app).
 func (cw *configWatcher) watchPaths(projectDir string) {
 	cw.mu.Lock()
 	defer cw.mu.Unlock()
 
-	// Always watch global config
-	globalPath := storage.GlobalConfigPath()
-	_ = cw.watcher.Add(globalPath)
+	// Watch ~/.activate/ directory (contains config.json)
+	globalDir := storage.StoreBase()
+	_ = cw.watcher.Add(globalDir)
 
 	if projectDir != "" {
-		// Watch project config and installed sidecar
-		_ = cw.watcher.Add(storage.ProjectConfigPath(projectDir))
-		_ = cw.watcher.Add(storage.SidecarPath(projectDir))
+		// Watch ~/.activate/repos/<hash>/ directory (contains config.json + installed.json)
+		repoDir := storage.RepoStorePath(projectDir)
+		_ = cw.watcher.Add(repoDir)
 	}
 }
 
@@ -58,7 +62,7 @@ func (cw *configWatcher) run() {
 			if !ok {
 				return
 			}
-			if event.Op&(fsnotify.Write|fsnotify.Create) == 0 {
+			if event.Op&(fsnotify.Write|fsnotify.Create|fsnotify.Remove) == 0 {
 				continue
 			}
 			// Reset debounce timer on each event

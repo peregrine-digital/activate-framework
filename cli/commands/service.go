@@ -218,6 +218,9 @@ type TelemetryRunResult struct {
 
 func (s *ActivateService) GetState() StateResult {
 	start := time.Now()
+	// Re-read config from disk to pick up changes made by other processes
+	// (e.g., extension and desktop app running simultaneously).
+	s.refreshConfig()
 	state := engine.DetectInstallState(s.ProjectDir)
 	sidecar, _ := storage.ReadRepoSidecar(s.ProjectDir)
 	chosen := model.FindManifestByID(s.Manifests, s.Config.Manifest)

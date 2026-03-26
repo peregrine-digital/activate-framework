@@ -948,3 +948,56 @@ func TestDaemonBranchList(t *testing.T) {
 		t.Fatalf("unexpected branches: %v", branches)
 	}
 }
+
+// TestServiceGetStateReadsFromDisk verifies that GetState() picks up
+// external filesystem changes (simulating another process modifying
+// the sidecar or config). This is the core cross-process sync contract.
+func TestServiceGetStateReadsFromDisk(t *testing.T) {
+	m, projectDir, repo, branch, _ := setupBundle(t)
+	svc := newTestService(m, projectDir, repo, branch)
+
+	// Initially no install marker
+	state1 := svc.GetState()
+	if state1.State.HasInstallMarker {
+		t.Fatal("expected no install marker initially")
+	}
+
+	// Simulate another process writing a sidecar directly to disk
+	sc := model.RepoSidecar{
+		Manifest: "test-manifest",
+		Tier:     "minimal",
+		Files:    []string{".github/instructions/test.instructions.md"},
+	}
+	if err := storage.WriteRepoSidecar(projectDir, sc); err != nil {
+		t.Fatal(err)
+	}
+
+	// GetState should pick up the change without any explicit refresh
+	state2 := svc.GetState()
+	if !state2.State.HasInstallMarker {
+		t.Fatal("expected hasInstallMarker=true after external sidecar write")
+	}
+
+	// Simulate another process changing the tier in config
+	if err := storage.WriteProjectConfig(projectDir, &model.Config{
+		Manifest: "test-manifest", Tier: "core",
+		Repo: repo, Branch: branch,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// GetState should reflect the new tier
+	state3 := svc.GetState()
+	if state3.Config.Tier != "core" {
+		t.Fatalf("expected tier=core after external config write, got %s", state3.Config.Tier)
+	}
+
+	// Simulate another process removing the sidecar
+	os.Remove(storage.SidecarPath(projectDir))
+
+	// GetState should show no install marker
+	state4 := svc.GetState()
+	if state4.State.HasInstallMarker {
+		t.Fatal("expected hasInstallMarker=false after external sidecar delete")
+	}
+}
