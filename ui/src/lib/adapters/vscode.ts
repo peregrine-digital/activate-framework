@@ -87,27 +87,27 @@ export function createVSCodeAPI(): ActivateAPI {
     setConfig: (updates) => request('setConfig', { updates }),
     refreshConfig: () => request('refreshConfig'),
 
-    installFile: (file) => { fire('installFile', { file }); return Promise.resolve(); },
-    uninstallFile: (file) => { fire('uninstallFile', { file }); return Promise.resolve(); },
-    diffFile: (file) => { fire('diffFile', { file }); return Promise.resolve({ file: file.dest, diff: '' }); },
-    skipUpdate: (file) => { fire('skipUpdate', { file }); return Promise.resolve(); },
+    installFile: (file) => request('installFile', { file }),
+    uninstallFile: (file) => request('uninstallFile', { file }),
+    diffFile: (file) => { request('diffFile', { file }); return Promise.resolve({ file: file.dest, diff: '' }); },
+    skipUpdate: (file) => request('skipUpdate', { file }),
     setFileOverride: (dest, override) => request('setOverride', { file: { file: dest, override } }),
 
-    updateAll: () => { fire('updateAll'); return Promise.resolve(); },
-    addToWorkspace: () => { fire('addToWorkspace'); return Promise.resolve(); },
-    removeFromWorkspace: () => { fire('removeFromWorkspace'); return Promise.resolve(); },
+    updateAll: () => request('updateAll'),
+    addToWorkspace: () => request('addToWorkspace'),
+    removeFromWorkspace: () => request('removeFromWorkspace'),
 
     listManifests: () => request<Manifest[]>('listManifests'),
     listBranches: () => request<string[]>('listBranches'),
 
-    runTelemetry: () => { fire('refreshUsage'); return Promise.resolve(); },
+    runTelemetry: () => request('refreshUsage'),
     readTelemetryLog: () => request<TelemetryEntry[]>('readTelemetryLog'),
 
-    openFile: (file) => { fire('openFile', { file }); return Promise.resolve(); },
-    changeTier: () => { fire('changeTier'); return Promise.resolve(); },
-    changeManifest: () => { fire('changeManifest'); return Promise.resolve(); },
-    installCLI: () => { fire('installCLI'); return Promise.resolve(); },
-    checkForUpdates: () => { fire('checkForUpdates'); return Promise.resolve(); },
+    openFile: (file) => request('openFile', { file }),
+    changeTier: () => request('changeTier'),
+    changeManifest: () => request('changeManifest'),
+    installCLI: () => request('installCLI'),
+    checkForUpdates: () => request('checkForUpdates'),
 
     onStateChanged: (callback) => {
       stateListeners.add(callback);

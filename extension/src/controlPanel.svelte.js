@@ -150,49 +150,62 @@ class ControlPanelProvider {
           break;
         }
 
-        // ── Fire-and-forget (dispatch to extension commands) ──
+        // ── Commands (all use request/response for reliable delivery) ──
 
         case 'installCLI':
           vscode.commands.executeCommand('activate-framework.installCLI');
+          respond(null);
           break;
         case 'changeTier':
           vscode.commands.executeCommand('activate-framework.changeTier');
+          respond(null);
           break;
         case 'changeManifest':
           vscode.commands.executeCommand('activate-framework.changeManifest');
+          respond(null);
           break;
         case 'addToWorkspace':
-          vscode.commands.executeCommand('activate-framework.addToWorkspace');
+          await vscode.commands.executeCommand('activate-framework.addToWorkspace');
+          respond(null);
           break;
         case 'removeFromWorkspace':
-          vscode.commands.executeCommand('activate-framework.removeFromWorkspace');
+          await vscode.commands.executeCommand('activate-framework.removeFromWorkspace');
+          respond(null);
           break;
         case 'updateAll':
           vscode.commands.executeCommand('activate-framework.updateAll');
+          respond(null);
           break;
         case 'installFile':
-          vscode.commands.executeCommand('activate-framework.installFile', msg.file);
+          await vscode.commands.executeCommand('activate-framework.installFile', msg.file);
+          respond(null);
           break;
         case 'uninstallFile':
-          vscode.commands.executeCommand('activate-framework.uninstallFile', msg.file);
+          await vscode.commands.executeCommand('activate-framework.uninstallFile', msg.file);
+          respond(null);
           break;
         case 'openFile':
-          vscode.commands.executeCommand('activate-framework.openFile', msg.file);
+          await vscode.commands.executeCommand('activate-framework.openFile', msg.file);
+          respond(null);
           break;
         case 'diffFile':
           vscode.commands.executeCommand('activate-framework.diffFile', msg.file);
+          respond(null);
           break;
         case 'skipUpdate':
           vscode.commands.executeCommand('activate-framework.skipFileUpdate', msg.file);
+          respond(null);
           break;
         case 'refreshUsage':
           vscode.commands.executeCommand('activate-framework.telemetryRunNow').then(
             () => this.refresh(),
             () => this.refresh(),
           );
+          respond(null);
           break;
         case 'checkForUpdates':
           vscode.commands.executeCommand('activate-framework.checkForUpdates');
+          respond(null);
           break;
 
         default:
