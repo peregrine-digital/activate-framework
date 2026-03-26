@@ -20,13 +20,22 @@ const (
 )
 
 // Package-level base URLs; overridden in tests to point at httptest servers.
+// Also respects ACTIVATE_RAW_BASE / ACTIVATE_API_BASE env vars for
+// subprocess integration tests where package vars can't be set.
 var (
-	RawBase = "https://raw.githubusercontent.com"
-	APIBase = "https://api.github.com"
+	RawBase = envOrDefault("ACTIVATE_RAW_BASE", "https://raw.githubusercontent.com")
+	APIBase = envOrDefault("ACTIVATE_API_BASE", "https://api.github.com")
 
 	// HTTPClient is the shared client for all outbound requests.
 	HTTPClient = &http.Client{Timeout: httpTimeout * time.Second}
 )
+
+func envOrDefault(key, fallback string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return fallback
+}
 
 // resolvedToken caches the GitHub token for the process lifetime.
 var (

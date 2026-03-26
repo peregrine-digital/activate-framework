@@ -16,13 +16,16 @@ const (
 )
 
 // ActivateBaseDir overrides the base store path for testing.
-// Empty means use ~/.activate.
+// Empty means use ~/.activate. Also respects ACTIVATE_BASE env var.
 var ActivateBaseDir string
 
 // StoreBase returns the root of all activate state (~/.activate or test override).
 func StoreBase() string {
 	if ActivateBaseDir != "" {
 		return ActivateBaseDir
+	}
+	if env := os.Getenv("ACTIVATE_BASE"); env != "" {
+		return env
 	}
 	home, _ := os.UserHomeDir()
 	return filepath.Join(home, activateDirName)
