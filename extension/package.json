@@ -132,10 +132,12 @@
     "build:webview": "cd ../ui && npm run build:webview",
     "prepare-assets": "node scripts/prepare-assets.mjs",
     "package": "npm run build:webview && npm run prepare-assets && vsce package --no-dependencies --allow-missing-repository --skip-license",
-    "test": "node --test src/__tests__/*.test.js"
+    "test": "node --test src/__tests__/*.test.js",
+    "test:integration": "node src/test/runTest.js"
   },
   "devDependencies": {
     "@types/vscode": "^1.85.0",
+    "@vscode/test-electron": "^2.5.2",
     "@vscode/vsce": "^3.0.0"
   }
 }
