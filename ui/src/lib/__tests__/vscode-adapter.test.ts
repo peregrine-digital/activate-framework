@@ -113,7 +113,12 @@ describe('VS Code adapter contract', () => {
     it('messages are structuredClone-safe (no Proxy objects)', () => {
       // Svelte 5 $props() returns Proxy objects which cannot be cloned
       // by postMessage. The adapter must strip them via JSON roundtrip.
-      const file = makeFile();
+      // Simulate a Svelte 5 reactive prop by wrapping in a Proxy:
+      const file = new Proxy(makeFile(), {
+        get(target, prop, receiver) {
+          return Reflect.get(target, prop, receiver);
+        },
+      });
       postedMessages = [];
       api.openFile(file);
 
