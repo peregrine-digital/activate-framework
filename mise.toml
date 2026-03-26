@@ -17,6 +17,14 @@ description = "Build and run the desktop app from source"
 run = '''
 #!/usr/bin/env bash
 set -euo pipefail
+
+# The desktop app spawns ~/.activate/bin/activate as a subprocess.
+# Rebuild the CLI from source so the desktop always uses the latest.
+echo "Building CLI..."
+mkdir -p ~/.activate/bin
+go build -o ~/.activate/bin/activate ./cli
+echo "✓ CLI installed to ~/.activate/bin/activate"
+
 cd desktop
 wails build -clean
 if [[ "$(uname)" == "Darwin" ]]; then
