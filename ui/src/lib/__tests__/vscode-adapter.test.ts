@@ -110,6 +110,19 @@ describe('VS Code adapter contract', () => {
       expect(msg!._reqId).toBeDefined();
     });
 
+    it('messages are structuredClone-safe (no Proxy objects)', () => {
+      // Svelte 5 $props() returns Proxy objects which cannot be cloned
+      // by postMessage. The adapter must strip them via JSON roundtrip.
+      const file = makeFile();
+      postedMessages = [];
+      api.openFile(file);
+
+      const msg = postedMessages.find((m) => m.command === 'openFile');
+      expect(msg).toBeDefined();
+      // structuredClone throws on Proxy objects — this must not throw
+      expect(() => structuredClone(msg)).not.toThrow();
+    });
+
     it('installFile sends file object', () => {
       const file = makeFile();
       api.installFile(file);
