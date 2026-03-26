@@ -46,7 +46,7 @@
   load();
 </script>
 
-<div class="bg-activate-bg text-activate-fg min-h-screen font-sans text-sm px-2.5">
+<div class="bg-activate-bg text-activate-fg min-h-screen min-w-[280px] font-sans text-sm px-2.5">
   {#if loading || (!appState && hasCli)}
     <div class="py-8 text-center opacity-50">Loading…</div>
   {:else if appState}
