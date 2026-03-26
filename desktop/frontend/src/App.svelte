@@ -2,7 +2,6 @@
   import '../../../ui/src/app.css';
   import { createWailsAPI } from '$lib/adapters/wails';
   import { createNavigation } from '$lib/navigation.svelte';
-  import type { ActivateAPI } from '$lib/api';
   import type { AppState } from '$lib/types';
   import WorkspaceView from '$lib/components/WorkspaceView.svelte';
   import WelcomePage from '$lib/components/WelcomePage.svelte';
@@ -38,34 +37,14 @@
     }
   }
 
-  // Daemon notifications (external changes) trigger a reload
+  // State updates are event-driven, same as the VS Code extension.
+  // The daemon sends stateChanged notifications after every mutation,
+  // and the file watcher sends them for cross-process changes.
   rawApi.onStateChanged(() => load());
 
-  // ── Auto-refreshing API ──
-  // Wrap mutating methods so they call load() after completing.
-  // This is the desktop-specific glue — VS Code doesn't need it because
-  // its postMessage channel reliably delivers stateChanged notifications.
-  function mut<A extends unknown[]>(
-    fn: (...args: A) => Promise<void>,
-  ): (...args: A) => Promise<void> {
-    return async (...args: A) => {
-      await fn(...args);
-      await load();
-    };
-  }
-
-  const api: ActivateAPI = {
-    ...rawApi,
-    setConfig: mut(rawApi.setConfig),
-    refreshConfig: mut(rawApi.refreshConfig),
-    installFile: mut(rawApi.installFile),
-    uninstallFile: mut(rawApi.uninstallFile),
-    skipUpdate: mut(rawApi.skipUpdate),
-    setFileOverride: mut(rawApi.setFileOverride),
-    updateAll: mut(rawApi.updateAll),
-    addToWorkspace: mut(rawApi.addToWorkspace),
-    removeFromWorkspace: mut(rawApi.removeFromWorkspace),
-  };
+  // Use rawApi directly — no mut() wrapper needed. The daemon's
+  // stateChanged notification + file watcher handle all refresh.
+  const api = rawApi;
 
   // ── Desktop chrome (menu events, update checks) ──
   if (typeof window !== 'undefined') {
