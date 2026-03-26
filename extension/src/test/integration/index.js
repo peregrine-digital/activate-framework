@@ -84,6 +84,45 @@ function run() {
         await vscode.commands.executeCommand('activate-framework.openFile', { dest: '' });
       });
 
+      await test('openFile command actually opens a file', async () => {
+        const fs = require('fs');
+        const path = require('path');
+
+        const wsRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+        assert.ok(wsRoot, 'No workspace folder — integration test needs a workspace');
+
+        // Create a test file in .github/
+        const testDir = path.join(wsRoot, '.github', '_test');
+        const testFile = path.join(testDir, 'integration-test.md');
+        fs.mkdirSync(testDir, { recursive: true });
+        fs.writeFileSync(testFile, '# Integration Test\n');
+
+        try {
+          // Close all editors first
+          await vscode.commands.executeCommand('workbench.action.closeAllEditors');
+
+          // Call the openFile command the same way the webview bridge does
+          await vscode.commands.executeCommand('activate-framework.openFile', {
+            dest: '_test/integration-test.md',
+          });
+
+          // Give VS Code a moment to open the editor
+          await new Promise((r) => setTimeout(r, 500));
+
+          // Verify the file is now open in an editor tab
+          const activeEditor = vscode.window.activeTextEditor;
+          assert.ok(activeEditor, 'No active editor after openFile — file did not open');
+          assert.ok(
+            activeEditor.document.uri.fsPath.endsWith('integration-test.md'),
+            `Wrong file opened: ${activeEditor.document.uri.fsPath}`,
+          );
+        } finally {
+          // Cleanup
+          await vscode.commands.executeCommand('workbench.action.closeAllEditors');
+          fs.rmSync(testDir, { recursive: true, force: true });
+        }
+      });
+
       // Summary
       console.log(`\n  ${passed.length} passed, ${failures.length} failed\n`);
 
