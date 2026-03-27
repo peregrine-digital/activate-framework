@@ -6,6 +6,7 @@
 export interface Config {
   manifest: string;
   tier: string;
+  preset?: string;
   repo: string;
   branch: string;
   fileOverrides: Record<string, 'pinned' | 'excluded'>;
@@ -45,11 +46,19 @@ export interface FileStatus {
   bundledVersion: string | null;
   updateAvailable: boolean;
   inTier: boolean;
+  inPreset?: boolean;
   override: '' | 'pinned' | 'excluded';
   skipped: boolean;
   description: string;
   displayName?: string;
   tier: string;
+}
+
+export interface Preset {
+  id: string;
+  name: string;
+  description: string;
+  plugin?: string;
 }
 
 export interface Category {
@@ -61,6 +70,7 @@ export interface AppState {
   config: Config;
   tiers: TierDef[];
   manifests: Manifest[];
+  presets?: Preset[];
   files: FileStatus[];
   categories: Category[];
   state: {

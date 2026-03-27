@@ -20,12 +20,19 @@
   let files = $derived(appState.files);
   let categories = $derived(appState.categories);
   let isActive = $derived(appState.state.hasInstallMarker);
+  let hasPresets = $derived((appState.presets?.length ?? 0) > 0);
   let tierLabel = $derived(tiers.find((t) => t.id === config.tier)?.label || config.tier || '—');
+  let presetLabel = $derived(appState.presets?.find((p) => p.id === config.preset)?.name || config.preset || '—');
   let skippedVersions = $derived(config.skippedVersions || {});
 
-  let installedFiles = $derived(files.filter((f) => f.installed && f.inTier && f.override !== 'excluded'));
-  let availableFiles = $derived(files.filter((f) => !f.installed && f.inTier && f.override !== 'excluded'));
-  let outsideTierFiles = $derived(files.filter((f) => !f.inTier && f.override !== 'excluded'));
+  // Use inPreset for filtering when presets are active, fall back to inTier
+  function isIncluded(f: FileStatus): boolean {
+    return hasPresets ? (f.inPreset ?? f.inTier) : f.inTier;
+  }
+
+  let installedFiles = $derived(files.filter((f) => f.installed && isIncluded(f) && f.override !== 'excluded'));
+  let availableFiles = $derived(files.filter((f) => !f.installed && isIncluded(f) && f.override !== 'excluded'));
+  let outsideFiles = $derived(files.filter((f) => !isIncluded(f) && f.override !== 'excluded'));
   let excludedFiles = $derived(files.filter((f) => f.override === 'excluded'));
 
   // Select modal state
@@ -80,6 +87,28 @@
       },
     };
   }
+
+  function handleChangePreset() {
+    if (api.platform === 'vscode') {
+      api.changePreset();
+      return;
+    }
+    const presets = appState.presets ?? [];
+    const options: SelectOption[] = presets.map((p) => ({
+      id: p.id,
+      label: p.name,
+      description: p.description,
+      active: p.id === config.preset,
+    }));
+    selectModal = {
+      title: 'Select Preset',
+      options,
+      onSelect: async (id) => {
+        selectModal = null;
+        await api.setConfig({ scope: 'project', preset: id });
+      },
+    };
+  }
 </script>
 
 {#if selectModal}
@@ -98,6 +127,8 @@
   {isActive}
   manifestCount={appState.manifests.length}
   platform={api.platform}
+  {hasPresets}
+  {presetLabel}
   onShowSettings={() => onNavigate('workspace-settings')}
 />
 
@@ -105,8 +136,10 @@
   {isActive}
   manifestCount={appState.manifests.length}
   platform={api.platform}
+  {hasPresets}
   onChangeTier={handleChangeTier}
   onChangeManifest={handleChangeManifest}
+  onChangePreset={handleChangePreset}
   onToggleWorkspace={() => isActive ? api.removeFromWorkspace() : api.addToWorkspace()}
   onUpdateAll={() => api.updateAll()}
   onShowUsage={() => onNavigate('usage')}
@@ -153,16 +186,16 @@
     onSetOverride={handleSetOverride}
   />
 {:else}
-  <div class="text-activate-fg-muted italic py-3 pl-8 text-xs">All tier files installed</div>
+  <div class="text-activate-fg-muted italic py-3 pl-8 text-xs">{hasPresets ? 'All preset files installed' : 'All tier files installed'}</div>
 {/if}
 
-{#if outsideTierFiles.length > 0}
+{#if outsideFiles.length > 0}
   <div class="section-label">
-    Outside Tier · {outsideTierFiles.length}
+    {hasPresets ? 'Outside Preset' : 'Outside Tier'} · {outsideFiles.length}
   </div>
-  <p class="text-[10px] text-activate-fg-muted italic pb-1 pl-3 opacity-60">Switch to a higher tier to access these files</p>
+  <p class="text-[10px] text-activate-fg-muted italic pb-1 pl-3 opacity-60">{hasPresets ? 'Switch to a higher preset to access these files' : 'Switch to a higher tier to access these files'}</p>
   <CategoryList
-    files={outsideTierFiles}
+    files={outsideFiles}
     {categories}
     installed={false}
     sectionPrefix="outside"

@@ -4,6 +4,7 @@ import type {
   DiffResult,
   FileStatus,
   Manifest,
+  Preset,
   TelemetryEntry,
 } from './types.js';
 
@@ -42,6 +43,10 @@ export interface ActivateAPI {
   // ── Manifests ──
   listManifests(): Promise<Manifest[]>;
   listBranches(): Promise<string[]>;
+
+  // ── Presets ──
+  listPresets(): Promise<Preset[]>;
+  changePreset(): Promise<void>;
 
   // ── Telemetry ──
   runTelemetry(): Promise<void>;

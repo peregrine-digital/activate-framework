@@ -9,16 +9,22 @@
     isActive: boolean;
     manifestCount: number;
     platform: Platform;
+    hasPresets?: boolean;
+    presetLabel?: string;
     onShowSettings: () => void;
   }
 
-  let { tier, tierLabel, manifestName, isActive, manifestCount, platform, onShowSettings }: Props = $props();
+  let { tier, tierLabel, manifestName, isActive, manifestCount, platform, hasPresets = false, presetLabel = '—', onShowSettings }: Props = $props();
 </script>
 
 <div class="glass flex items-center gap-3 px-4 py-3 mb-4 text-xs animate-in">
-  <span class="status-badge">{tierLabel}</span>
-  <span class="status-sep">·</span>
-  <span class="status-badge">{manifestName}</span>
+  {#if hasPresets}
+    <span class="status-badge">{presetLabel}</span>
+  {:else}
+    <span class="status-badge">{tierLabel}</span>
+    <span class="status-sep">·</span>
+    <span class="status-badge">{manifestName}</span>
+  {/if}
   <span class="status-sep">·</span>
   <span class="inline-flex items-center gap-1.5">
     <span class="status-dot" class:status-dot--active={isActive}></span>
