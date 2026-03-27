@@ -147,6 +147,8 @@ class MockClient extends EventEmitter {
   async setFileOverride(p) { return this._record('setFileOverride', p); }
   async runTelemetry(p) { return this._record('runTelemetry', p); }
   async readTelemetryLog() { return this._record('readTelemetryLog'); }
+  async listPresets() { return this._record('listPresets'); }
+  async listPresetFiles(p) { return this._record('listPresetFiles', p); }
 }
 
 // ── Module interception ──────────────────────────────────────
@@ -233,6 +235,7 @@ describe('extension.js', () => {
     const expectedCommands = [
       'activate-framework.changeTier',
       'activate-framework.changeManifest',
+      'activate-framework.changePreset',
       'activate-framework.showStatus',
       'activate-framework.remove',
       'activate-framework.refresh',
@@ -624,12 +627,11 @@ describe('showQuickStartPrompt', () => {
 
     await activateWithState(ext);
 
-    // Should have called setConfig with ironarch/workflow
+    // Should have called setConfig with ironarch/workflow preset
     const setCalls = mockClient.calls.filter(([m]) => m === 'setConfig');
     assert.ok(setCalls.length >= 1, 'should call setConfig at least once');
-    const projectSet = setCalls.find(([, p]) => p?.manifest === 'ironarch');
-    assert.ok(projectSet, 'should set manifest to ironarch');
-    assert.equal(projectSet[1].tier, 'workflow');
+    const projectSet = setCalls.find(([, p]) => p?.preset === 'ironarch/workflow');
+    assert.ok(projectSet, 'should set preset to ironarch/workflow');
     assert.equal(projectSet[1].scope, 'project');
 
     // Should have called repoAdd

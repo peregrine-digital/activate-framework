@@ -475,6 +475,37 @@ describe('ActivateClient', () => {
     await resultPromise;
   });
 
+  // ── Preset RPC tests ────────────────────────────────────────────
+
+  it('listPresets sends PresetList request', async () => {
+    const { client, nextRequest, sendResponse } = createMockClient();
+
+    const resultPromise = client.listPresets();
+    const req = await nextRequest();
+
+    assert.strictEqual(req.method, Method.PresetList);
+
+    const presets = [{ id: 'ironarch/workflow', name: 'IronArch Workflow' }];
+    sendResponse(req.id, presets);
+    const result = await resultPromise;
+    assert.deepStrictEqual(result, presets);
+  });
+
+  it('listPresetFiles sends PresetFiles request with params', async () => {
+    const { client, nextRequest, sendResponse } = createMockClient();
+
+    const resultPromise = client.listPresetFiles({ preset: 'ironarch/workflow', category: 'agents' });
+    const req = await nextRequest();
+
+    assert.strictEqual(req.method, Method.PresetFiles);
+    assert.strictEqual(req.params.preset, 'ironarch/workflow');
+    assert.strictEqual(req.params.category, 'agents');
+
+    sendResponse(req.id, [{ dest: 'agents/plan.md' }]);
+    const result = await resultPromise;
+    assert.deepStrictEqual(result, [{ dest: 'agents/plan.md' }]);
+  });
+
   // ── Daemon auth token tests ──────────────────────────────────
 
   it('stores token option and exposes via getter', () => {

@@ -312,6 +312,41 @@ async function activate(context) {
       }
     }),
 
+    vscode.commands.registerCommand('activate-framework.changePreset', async () => {
+      if (!requireClient()) return;
+      try {
+        const state = await client.getState();
+        const presets = state.presets || [];
+        if (presets.length === 0) {
+          vscode.window.showWarningMessage('No presets available. Use Change Tier / Change Manifest instead.');
+          return;
+        }
+        const currentPreset = state?.config?.preset || '';
+        const items = presets.map((p) => ({
+          label: p.name || p.id,
+          description: (p.id === currentPreset ? '(current) ' : '') + (p.description || ''),
+          value: p.id,
+        }));
+        const currentItem = items.find((i) => i.value === currentPreset);
+
+        const picked = await new Promise((resolve) => {
+          const qp = vscode.window.createQuickPick();
+          qp.items = items;
+          qp.placeholder = 'Select preset';
+          if (currentItem) qp.activeItems = [currentItem];
+          qp.onDidAccept(() => { resolve(qp.activeItems[0]); qp.dispose(); });
+          qp.onDidHide(() => { resolve(undefined); qp.dispose(); });
+          qp.show();
+        });
+        if (!picked) return;
+        await client.setConfig({ preset: picked.value, scope: 'project' });
+        await client.sync();
+        refreshWorkspace('bulk');
+      } catch (err) {
+        vscode.window.showErrorMessage(`Change preset failed: ${err.message}`);
+      }
+    }),
+
     vscode.commands.registerCommand('activate-framework.showStatus', async () => {
       if (!requireClient()) return;
       try {
@@ -322,6 +357,7 @@ async function activate(context) {
         outputChannel.appendLine(`State:    ${state.state.hasInstallMarker ? 'installed' : 'not_installed'}`);
         outputChannel.appendLine(`Manifest: ${state.config.manifest}`);
         outputChannel.appendLine(`Tier:     ${state.config.tier}`);
+        outputChannel.appendLine(`Preset:   ${state.config.preset || '(none)'}`);
         if (state.files) {
           outputChannel.appendLine(`Files:    ${state.files.length}`);
         }
@@ -669,7 +705,7 @@ async function showQuickStartPrompt(context, { skipGuards = false } = {}) {
   }
 
   // Install ironarch/workflow
-  await client.setConfig({ manifest: 'ironarch', tier: 'workflow', scope: 'project' });
+  await client.setConfig({ preset: 'ironarch/workflow', scope: 'project' });
   await client.repoAdd();
 }
 

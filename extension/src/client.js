@@ -33,6 +33,8 @@ const Method = {
   CheckUpdate:   'activate/checkUpdate',
   SelfUpdate:    'activate/selfUpdate',
   BranchList:    'activate/branchList',
+  PresetList:    'activate/presetList',
+  PresetFiles:   'activate/presetFiles',
 
   // Notifications (server → client)
   NotifyStateChanged: 'activate/stateChanged',
@@ -331,6 +333,14 @@ class ActivateClient extends EventEmitter {
 
   listBranches(repo) {
     return this.request(Method.BranchList, { repo: repo || '' });
+  }
+
+  listPresets() {
+    return this.request(Method.PresetList);
+  }
+
+  listPresetFiles(params) {
+    return this.request(Method.PresetFiles, params || {});
   }
 
   // ── Internal ───────────────────────────────────────────────────
