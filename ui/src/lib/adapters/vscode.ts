@@ -106,6 +106,8 @@ export function createVSCodeAPI(): ActivateAPI {
 
     listPresets: () => request<Preset[]>('listPresets'),
     changePreset: () => request('changePreset'),
+    editRepo: (current, scope) => request('editRepo', { current, scope }),
+    editBranch: (current, scope) => request('editBranch', { current, scope }),
 
     runTelemetry: () => request('refreshUsage'),
     readTelemetryLog: () => request<TelemetryEntry[]>('readTelemetryLog'),

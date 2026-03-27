@@ -33,6 +33,10 @@
   let selectModal = $state<{ title: string; options: SelectOption[]; onSelect: (id: string) => void } | null>(null);
 
   function startEditRepo() {
+    if (api.platform === 'vscode' && api.editRepo) {
+      api.editRepo(globalCfg?.repo || '', 'global');
+      return;
+    }
     repoInput = globalCfg?.repo || '';
     editingRepo = true;
   }
@@ -45,6 +49,10 @@
   }
 
   async function openBranchModal() {
+    if (api.platform === 'vscode' && api.editBranch) {
+      api.editBranch(globalCfg?.branch || '', 'global');
+      return;
+    }
     const branches = await api.listBranches();
     const options: SelectOption[] = [
       { id: '__clear__', label: '(reset to default)', description: 'Use default branch' },
@@ -75,6 +83,10 @@
   }
 
   function openPresetModal() {
+    if (api.platform === 'vscode') {
+      api.changePreset();
+      return;
+    }
     const presets = appState.presets ?? [];
     const options: SelectOption[] = [
       { id: '__clear__', label: '(reset to default)', description: 'Remove preset override' },

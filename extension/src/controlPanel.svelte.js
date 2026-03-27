@@ -164,6 +164,75 @@ class ControlPanelProvider {
           vscode.commands.executeCommand('activate-framework.changeManifest');
           respond(null);
           break;
+        case 'changePreset':
+          vscode.commands.executeCommand('activate-framework.changePreset');
+          respond(null);
+          break;
+        case 'editRepo': {
+          const currentRepo = msg.current || '';
+          const scope = msg.scope || 'project';
+          vscode.window.showInputBox({
+            title: 'Repository',
+            prompt: 'GitHub owner/repo (e.g. peregrine-digital/activate-framework)',
+            value: currentRepo,
+            placeHolder: 'peregrine-digital/activate-framework',
+          }).then(async (value) => {
+            if (value === undefined) { respond(null); return; }
+            const updates = value === '' ? { repo: '__clear__' } : { repo: value };
+            await this._client.setConfig({ ...updates, scope });
+            this.refresh();
+            respond(null);
+          }).catch((err) => respondError(err));
+          break;
+        }
+        case 'editBranch': {
+          const currentBranch = msg.current || '';
+          const scope = msg.scope || 'project';
+          const qp = vscode.window.createQuickPick();
+          let disposed = false;
+          let fetchedItems = [];
+          qp.title = 'Branch';
+          qp.placeholder = 'Type a branch name or select from the list…';
+          qp.busy = true;
+          qp.show();
+
+          this._client.listBranches().then((branches) => {
+            if (disposed) return;
+            fetchedItems = (branches || []).map(b => ({ label: b }));
+            qp.items = fetchedItems;
+            const current = qp.items.find(i => i.label === currentBranch);
+            if (current) qp.activeItems = [current];
+            qp.busy = false;
+          }).catch(() => {
+            if (disposed) return;
+            fetchedItems = currentBranch ? [{ label: currentBranch }] : [];
+            qp.items = fetchedItems;
+            qp.busy = false;
+          });
+
+          qp.onDidChangeValue((value) => {
+            if (!value || fetchedItems.some(i => i.label === value)) {
+              qp.items = fetchedItems;
+            } else {
+              qp.items = [{ label: value, description: '(custom)' }, ...fetchedItems];
+            }
+          });
+
+          qp.onDidAccept(async () => {
+            const selected = qp.selectedItems[0];
+            disposed = true;
+            qp.dispose();
+            if (!selected) { respond(null); return; }
+            const updates = selected.label === '' ? { branch: '__clear__' } : { branch: selected.label };
+            await this._client.setConfig({ ...updates, scope });
+            this.refresh();
+            respond(null);
+          });
+          qp.onDidHide(() => {
+            if (!disposed) { disposed = true; qp.dispose(); respond(null); }
+          });
+          break;
+        }
         case 'addToWorkspace':
           await vscode.commands.executeCommand('activate-framework.addToWorkspace');
           respond(null);

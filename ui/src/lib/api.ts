@@ -48,6 +48,10 @@ export interface ActivateAPI {
   listPresets(): Promise<Preset[]>;
   changePreset(): Promise<void>;
 
+  // ── Native editing (platform may use native pickers) ──
+  editRepo?(current: string, scope: 'global' | 'project'): Promise<void>;
+  editBranch?(current: string, scope: 'global' | 'project'): Promise<void>;
+
   // ── Telemetry ──
   runTelemetry(): Promise<void>;
   readTelemetryLog(): Promise<TelemetryEntry[]>;
