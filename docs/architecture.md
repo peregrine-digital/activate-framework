@@ -19,12 +19,12 @@ Activate Framework has three delivery surfaces — a Go CLI, a VS Code extension
 │   ┌─────────────────────────────────────────────────────────┐    │
 │   │                  ActivateService (Go)                   │    │
 │   │                                                         │    │
-│   │   State · Config · Manifests · Files · Tiers · MCP      │    │
+│   │   State · Config · Presets · Files · MCP                 │    │
 │   └──────────────────────────┬──────────────────────────────┘    │
 │                              │                                   │
 │          ┌───────────┬───────┼───────┬────────────┐              │
 │          ▼           ▼       ▼       ▼            ▼              │
-│       Config      Manifest  Installer  Fetcher   Repo            │
+│       Config      Preset    Installer  Fetcher   Repo            │
 │       (2-layer)   Discovery  (local)   (GitHub)  Sidecar         │
 │                                                  + gitexclude    │
 └──────────────────────────────────────────────────────────────────┘
@@ -45,11 +45,11 @@ cli/
 ├── main.go                  # Entry point, arg parsing, printJSON
 ├── model/                   # Pure types + config schema (stdlib only)
 │   ├── config.go            # Config type, MergeConfig, defaults
-│   ├── manifest.go          # Manifest, ManifestFile, TierDef, FormatManifestList
-│   ├── tiers.go             # Tier resolution, SelectFiles, InferCategory, ListByCategory
+│   ├── preset.go            # Preset, PresetFile, FormatPresetList
+│   ├── files.go             # SelectFiles, InferCategory, ListByCategory
 │   ├── types.go             # RepoSidecar, InstallState, FileStatus, TelemetryEntry
 │   ├── versions.go          # ParseFrontmatterVersion, FileDisplayName
-│   └── helpers.go           # FindManifestByID, FindManifestFile, ContainsString
+│   └── helpers.go           # FindPresetByID, FindPresetFile, ContainsString
 ├── transport/               # JSON-RPC wire format (stdlib only)
 │   ├── jsonrpc.go           # Transport type, Request/Response/Notification
 │   └── protocol.go          # Method constants, typed params/results
@@ -57,11 +57,11 @@ cli/
 │   ├── config.go            # ActivateBaseDir, ResolveConfig, Read/Write config
 │   ├── sidecar.go           # SidecarPath, Read/Write/DeleteRepoSidecar
 │   ├── gitexclude.go        # SyncGitExclude, RemoveGitExcludeBlock
-│   ├── filewriter.go        # WriteManifestFile
+│   ├── filewriter.go        # WritePresetFile
 │   ├── mcp.go               # MCP server config read/write/merge
 │   └── fetcher.go           # FetchFile, FetchJSON (GitHub raw/API)
 ├── engine/                  # Business logic (→ storage, model)
-│   ├── manifest.go          # DiscoverManifests, DiscoverRemoteManifests
+│   ├── preset.go            # DiscoverPresets, DiscoverRemotePresets
 │   ├── repo.go              # RepoAdd, RepoRemove
 │   ├── operations.go        # UpdateFiles, InstallSingleFile, DiffFile, SyncNeeded
 │   ├── installer.go         # InstallFiles, ResolveBundleDir
@@ -108,7 +108,7 @@ Key design choices behind this split:
 - **Config TYPE in `model/`, config PERSISTENCE in `storage/`** — avoids circular dependencies between the pure data layer and I/O layer.
 - **`RepoSidecar` type in `model/`** — allows both `storage/` and `engine/` to reference it without import cycles.
 - **`ComputeFileStatuses` and `DetectInstallState` in `engine/`** — these perform I/O via `storage/`, so they belong in the business-logic layer, not in `model/`.
-- **Fetcher split** — HTTP primitives (`FetchFile`, `FetchJSON`) live in `storage/`; discovery logic (`DiscoverManifests`, `DiscoverRemoteManifests`) lives in `engine/`.
+- **Fetcher split** — HTTP primitives (`FetchFile`, `FetchJSON`) live in `storage/`; discovery logic (`DiscoverPresets`, `DiscoverRemotePresets`) lives in `engine/`.
 - **`tui/style/` sub-package** — breaks the potential `tui` ↔ `tui/screens` import cycle by extracting shared styles.
 - **`version` const stays in `main.go`**, passed to the Daemon constructor.
 - **`printJSON` stays in `main.go`**, passed as a callback to CLI formatters and `RunList`.
@@ -120,8 +120,8 @@ Parsed in `parseArgs()` in `main.go`:
 | Command | Purpose | Key Flags |
 |---------|---------|-----------|
 | `menu` | State-aware interactive menu (default) | `--project-dir` |
-| `install` | Interactive installer | `--manifest`, `--tier`, `--target`, `--file`, `--remote` |
-| `list` | List available manifests/files | `--manifest`, `--tier`, `--category`, `--json` |
+| `install` | Interactive installer | `--preset`, `--target`, `--file`, `--remote` |
+| `list` | List available presets/files | `--preset`, `--category`, `--json` |
 | `state` | Print install/config state | `--json` |
 | `config` | Read/write settings | `get`/`set`, `--scope` (global\|project\|resolved) |
 | `repo` | Manage repo-level installations | `add`/`remove` |
@@ -137,7 +137,7 @@ Parsed in `parseArgs()` in `main.go`:
 ```
 main()
   ├─ parseArgs()
-  ├─ Discover manifests (local bundle or remote GitHub)
+  ├─ Discover presets (local bundle or remote GitHub)
   ├─ Resolve config (defaults < global < project < CLI flags)
   ├─ Create ActivateService
   └─ Route to command handler
@@ -155,8 +155,8 @@ type ActivateAPI interface {
     GetState() StateResult
     GetConfig(scope string) (*Config, error)
     SetConfig(scope string, updates *Config) (*SetConfigResult, error)
-    ListManifests() []Manifest
-    ListFiles(manifestID, tierID, category string) (*ListFilesResult, error)
+    ListPresets() []Preset
+    ListFiles(presetID, category string) (*ListFilesResult, error)
     RepoAdd() (*RepoAddResult, error)
     RepoRemove() error
     Sync() (*SyncResult, error)
@@ -170,7 +170,7 @@ type ActivateAPI interface {
     ReadTelemetryLog() ([]TelemetryEntry, error)
     RefreshConfig()
     CurrentConfig() Config
-    CurrentManifests() []Manifest
+    CurrentPresets() []Preset
     CurrentProjectDir() string
     IsRemoteMode() bool
     RemoteRepo() string
@@ -183,7 +183,7 @@ type ActivateAPI interface {
 ```go
 type ActivateService struct {
     ProjectDir string
-    Manifests  []Manifest
+    Presets    []Preset
     Config     Config
     UseRemote  bool
     Repo       string
@@ -193,95 +193,62 @@ type ActivateService struct {
 
 ---
 
-## Manifest System
+## Preset System
 
 ### Types
 
 ```go
-type Manifest struct {
-    ID          string         // derived from filename (e.g., "ironarch")
-    Name        string         // display name (e.g., "IronArch")
+type Preset struct {
+    ID          string         // e.g., "adhoc/standard"
+    Name        string         // display name (e.g., "Activate Standard")
     Description string
-    Version     string
-    BasePath    string         // relative to repo root (e.g., "plugins/ironarch")
-    Tiers       []TierDef      // available tiers
-    Files       []ManifestFile // all files in this manifest
+    Extends     string         // parent preset ID (e.g., "adhoc/core"), empty if base
+    BasePath    string         // relative to repo root (e.g., "plugins/adhoc")
+    Files       []PresetFile   // files included directly (not inherited)
 }
 
-type ManifestFile struct {
+type PresetFile struct {
     Src         string // source path relative to basePath
     Dest        string // destination path relative to install dir
-    Tier        string // tier ID this file belongs to
     Category    string // instructions, prompts, skills, agents, mcp-servers, other
     Description string
-}
-
-type TierDef struct {
-    ID    string // e.g., "core", "skills", "workflow"
-    Label string // display name
 }
 ```
 
 ### Discovery
 
 ```
-DiscoverManifests(baseDir)
-├─ Try baseDir/manifests/*.json (sorted alphabetically)
-├─ Walk up parent directories looking for manifests/
-└─ Fallback: baseDir/manifest.json (legacy single-manifest)
+DiscoverPresets(baseDir)
+├─ Walk plugins/*/presets/*.json
+└─ Each .json file is one preset
+   └─ ID = "{plugin}/{filename}" (e.g., "adhoc/standard")
 ```
 
-Each `.json` file in `manifests/` is one manifest. The filename (without extension) becomes the manifest ID.
+Each `.json` file in `plugins/<plugin>/presets/` is one preset. The ID is derived from the plugin name and filename.
 
 ### Remote Discovery
 
-When `--remote` is passed, manifests are fetched from GitHub instead:
+When `--remote` is passed, presets are fetched from GitHub instead:
 
 ```
-DiscoverRemoteManifests(repo, branch)
-├─ Try manifests/index.json (lists manifest IDs)
-├─ Fallback: hardcoded known IDs
-└─ LoadRemoteManifest(id, repo, branch) for each
-    └─ FetchJSON("manifests/{id}.json", ...) → Manifest
+DiscoverRemotePresets(repo, branch)
+├─ Fetch plugins/index.json (lists plugin IDs)
+└─ For each plugin, fetch presets/*.json
+    └─ FetchJSON("plugins/{plugin}/presets/{name}.json", ...) → Preset
 ```
 
----
+### File Resolution
 
-## Tier System
-
-### Concept
-
-A **tier** is a cumulative file selection level. Each tier includes its own files plus all lower tiers. This lets teams adopt gradually — start with core files, add more as they're ready.
-
-### Resolution
+Presets can extend other presets. File resolution is cumulative — a preset includes its own files plus all files from the preset it extends (recursively):
 
 ```go
-type ResolvedTier struct {
-    ID       string   // e.g., "standard"
-    Label    string   // display name
-    Includes []string // cumulative list of tier IDs included
-}
+ResolvePresetFiles(presets []Preset, presetID string) []PresetFile
 ```
 
-Default tiers (when manifest doesn't define its own):
-
-| Tier | Includes |
-|------|----------|
-| `minimal` | `[core]` |
-| `standard` | `[core, ad-hoc]` |
-| `advanced` | `[core, ad-hoc, ad-hoc-advanced]` |
-
-When a manifest defines custom tiers (like ironarch's `core`, `skills`, `workflow`), those are used instead. Tier resolution is cumulative — selecting the Nth tier includes all tiers before it.
-
-### File Selection
-
-```go
-SelectFiles(files []ManifestFile, manifest Manifest, tierID string) []ManifestFile
-```
-
-1. `GetAllowedFileTiers(manifest, tierID)` → set of tier IDs included
-2. Filter files where `file.Tier` is in the allowed set
-3. Return filtered list
+1. Find the preset by ID
+2. If `Extends` is non-empty, recursively resolve the parent's files
+3. Append this preset's own files
+4. Return the merged list
 
 ### Category System
 
@@ -315,8 +282,7 @@ Config is stored as JSON with two layers that merge at resolution time:
 
 ```go
 type Config struct {
-    Manifest         string            // selected manifest ID
-    Tier             string            // selected tier ID
+    Preset           string            // selected preset ID (e.g., "adhoc/standard")
     FileOverrides    map[string]string // file dest → "pinned" or "excluded"
     SkippedVersions  map[string]string // file dest → version string to skip
     TelemetryEnabled *bool
@@ -326,13 +292,13 @@ type Config struct {
 ### Resolution Order
 
 ```
-Built-in defaults (manifest="adhoc", tier="standard")
+Built-in defaults (preset="adhoc/standard")
     ↓
 Global config (~/.activate/config.json)
     ↓
 Project config (~/.activate/repos/<hash>/config.json)
     ↓
-CLI flags (--manifest, --tier)
+CLI flags (--preset)
     ↓
 ResolveConfig() → final merged Config
 ```
@@ -350,10 +316,10 @@ activate config get --scope global
 activate config get --scope project
 
 # Write to project scope
-activate config set --scope project --tier advanced
+activate config set --scope project --preset adhoc/advanced
 
 # Write to global scope
-activate config set --scope global --manifest ironarch
+activate config set --scope global --preset activate/workflow
 ```
 
 ---
@@ -363,7 +329,7 @@ activate config set --scope global --manifest ironarch
 ### Local File Copy
 
 ```go
-InstallFiles(files []ManifestFile, basePath, targetDir, version, manifestID string)
+InstallFiles(files []PresetFile, basePath, targetDir, version, presetID string)
 ```
 
 For each file:
@@ -376,13 +342,13 @@ For each file:
 
 ```
 ResolveBundleDir(startDir)
-├─ If hasManifests(startDir) → return startDir
-├─ Walk up parent directories until hasManifests(dir)
+├─ If hasPresets(startDir) → return startDir
+├─ Walk up parent directories until hasPresets(dir)
 ├─ Fallback: startDir/plugins/adhoc
 └─ Error if not found
 ```
 
-`hasManifests(dir)` checks for `manifests/*.json` or `manifest.json`.
+`hasPresets(dir)` checks for `plugins/*/presets/*.json`.
 
 ---
 
@@ -412,7 +378,7 @@ Used when `GITHUB_TOKEN` environment variable is set. Supports private repositor
 
 - `FetchFile(filePath, repo, branch)` → raw bytes (10 MB limit)
 - `FetchJSON(filePath, repo, branch, target)` → unmarshal JSON into target
-- `InstallFilesFromRemote(files, basePath, targetDir, version, manifestID, repo, branch)` → fetch and write each file
+- `InstallFilesFromRemote(files, basePath, targetDir, version, presetID, repo, branch)` → fetch and write each file
 
 ---
 
@@ -424,9 +390,8 @@ When files are installed into a workspace (via `repo add`), a sidecar file track
 
 ```go
 type repoSidecar struct {
-    Manifest   string   // e.g., "adhoc"
+    Preset     string   // e.g., "adhoc/standard"
     Version    string   // e.g., "0.5.0"
-    Tier       string   // e.g., "standard"
     Files      []string // relative paths installed
     McpServers []string // MCP server names injected
     Source     string   // "bundled" or "remote"
@@ -458,7 +423,7 @@ type InstallState struct {
     HasGlobalConfig   bool   // ~/.activate/config.json exists
     HasProjectConfig  bool   // project config exists
     HasInstallMarker  bool   // sidecar exists in workspace
-    InstalledManifest string // from sidecar
+    InstalledPreset  string // from sidecar
     InstalledVersion  string // from sidecar
 }
 ```
@@ -484,9 +449,8 @@ type FileStatus struct {
     Dest             string // destination path
     DisplayName      string
     Category         string
-    Tier             string
     Installed        bool   // file exists in workspace
-    InTier           bool   // file is in current tier
+    InPreset         bool   // file is in current preset
     BundledVersion   string // version in source bundle
     InstalledVersion string // version in workspace
     UpdateAvailable  bool   // bundled > installed
@@ -504,7 +468,7 @@ The CLI manages `.vscode/mcp.json` in the workspace to configure MCP (Model Cont
 - `ReadMcpConfig(projectDir)` → parse existing config
 - `WriteMcpConfig(projectDir, config)` → write back
 - `MergeMcpServers(existing, new)` → merge without overwriting user additions
-- `InjectMcpFromManifest(manifest, projectDir)` → add servers from manifest files with category `mcp-servers`
+- `InjectMcpFromPreset(preset, projectDir)` → add servers from preset files with category `mcp-servers`
 
 MCP server configs are JSON files in the plugin (e.g., `mcp-server/screenshot-viewer.json`) that get merged into the workspace's `.vscode/mcp.json`.
 
@@ -556,8 +520,8 @@ type Response struct {
 | `activate/state` | request | no | Full state snapshot |
 | `activate/configGet` | request | no | Read config (by scope) |
 | `activate/configSet` | request | yes | Write config |
-| `activate/manifestList` | request | no | List all manifests |
-| `activate/manifestFiles` | request | no | List files for manifest + tier |
+| `activate/presetList` | request | no | List all presets |
+| `activate/presetFiles` | request | no | List files for a preset |
 | `activate/repoAdd` | request | yes | Install files into workspace |
 | `activate/repoRemove` | request | yes | Remove installed files |
 | `activate/sync` | request | yes | Detect and apply updates |
@@ -605,7 +569,7 @@ The default screen when running `activate` with no arguments (or `activate menu`
 │  [Peregrine Logo]                       │
 │  PEREGRINE DIGITAL SERVICES             │
 │                                         │
-│  ◉ List manifests & files               │
+│  ◉ List presets & files                  │
 │  ○ Show install state                   │
 │  ○ Browse & manage files                │
 │  ○ Settings                             │
@@ -623,8 +587,8 @@ Selecting an option routes to:
 
 Launched via `activate install`. Two-phase form:
 
-1. **Manifest selection** — Choose from discovered manifests (skipped if only one)
-2. **Configure** — Select tier, target directory, confirm
+1. **Preset selection** — Choose from discovered presets
+2. **Configure** — Select target directory, confirm
 
 On completion, calls `installWithResolvedConfig()` to execute the install.
 
@@ -658,8 +622,7 @@ Three-mode interactive screen:
 
 Form with:
 - Telemetry toggle (on/off)
-- Manifest selection (dropdown)
-- Tier selection (dropdown)
+- Preset selection (dropdown)
 
 Returns a `changed` boolean so the caller knows whether to refresh state.
 
@@ -693,10 +656,9 @@ extension/
     ├── config.js                # Config read/write (CJS, vscode.workspace.fs)
     ├── injector.js              # Inject files into workspace, sidecar tracking
     ├── installer.js             # Legacy workspace-mode helpers
-    ├── manifest.js              # selectFiles, TIER_MAP, listByCategory, inferCategory
+    ├── preset.js                # selectFiles, listByCategory, inferCategory
     ├── commands/
-    │   ├── changeTier.js        #   QuickPick → write config → re-inject
-    │   ├── changeManifest.js    #   QuickPick → write config → re-inject
+    │   ├── changePreset.js      #   QuickPick → write config → re-inject
     │   └── showStatus.js        #   Info message with install state
     └── __tests__/               # Extension tests (node --test, CJS)
 ```
@@ -735,8 +697,8 @@ const Method = {
     StateGet:      'activate/state',
     ConfigGet:     'activate/configGet',
     ConfigSet:     'activate/configSet',
-    ManifestList:  'activate/manifestList',
-    ManifestFiles: 'activate/manifestFiles',
+    PresetList:    'activate/presetList',
+    PresetFiles:   'activate/presetFiles',
     RepoAdd:       'activate/repoAdd',
     RepoRemove:    'activate/repoRemove',
     Sync:          'activate/sync',
@@ -774,10 +736,10 @@ The client:
 
 ```
 ┌──────────────────────────────────────┐
-│ v0.5.0 · [standard] · [ironarch]    │
+│ v0.5.0 · [adhoc/standard]             │
 │ ✓ Installed                          │
 │                                      │
-│ [◆ Tier] [⇋ Manifest] [± Install]   │
+│ [◆ Preset] [± Install]              │
 │ [↻ Update] [📊 Usage]               │
 ├──────────────────────────────────────┤
 │ ▼ Installed                          │
@@ -794,15 +756,15 @@ The client:
 │     ○ planner.agent.md               │
 │       [Install] [Exclude]            │
 │                                      │
-│ ▸ Outside Current Tier               │
+│ ▸ Outside Current Preset             │
 │ ▸ Excluded                           │
 └──────────────────────────────────────┘
 ```
 
 Files are organized into four sections:
 - **Installed** — files present in the workspace
-- **Available** — files in the current tier, not yet installed
-- **Outside Tier** — files requiring a higher tier (dimmed)
+- **Available** — files in the current preset, not yet installed
+- **Outside Preset** — files in other presets (dimmed)
 - **Excluded** — user-excluded files
 
 Each file shows status icons, version info, override badges, and contextual action buttons.
@@ -813,8 +775,7 @@ Messages sent from the webview via `vscode.postMessage()`:
 
 | Command | Payload | Action |
 |---------|---------|--------|
-| `changeTier` | — | QuickPick → `setConfig({tier})` |
-| `changeManifest` | — | QuickPick → `setConfig({manifest})` |
+| `changePreset` | — | QuickPick → `setConfig({preset})` |
 | `addToWorkspace` | — | Confirmation → `repoAdd()` |
 | `removeFromWorkspace` | — | Confirmation → `repoRemove()` |
 | `updateAll` | — | `update()` → show count |
@@ -835,8 +796,7 @@ Messages sent from the webview via `vscode.postMessage()`:
 
 | Command | Description |
 |---------|-------------|
-| `changeTier` | QuickPick with available tiers → write project config → sync |
-| `changeManifest` | QuickPick with available manifests → write project config → sync |
+| `changePreset` | QuickPick with available presets → write project config → sync |
 | `showStatus` | Print state to output channel |
 | `addToWorkspace` | Install files into `.github/` with confirmation |
 | `removeFromWorkspace` | Remove installed files with confirmation |
@@ -853,9 +813,9 @@ Messages sent from the webview via `vscode.postMessage()`:
 
 `scripts/prepare-assets.mjs` runs at build time to bundle plugin content into the extension:
 
-1. Read all manifests from `manifests/*.json`
-2. Resolve source files using each manifest's `basePath`
-3. Copy manifests to `extension/assets/manifests/`
+1. Read all presets from `plugins/*/presets/*.json`
+2. Resolve source files using each preset's `basePath`
+3. Copy presets to `extension/assets/presets/`
 4. Copy source files to `extension/assets/` (preserving dest paths)
 
 This makes the extension self-contained — it ships with all plugin files embedded, so the daemon can find them via `ResolveBundleDir()`.
@@ -925,7 +885,7 @@ The CLI was originally a flat `package main` directory with 26+ source files. As
 ### Why a Daemon?
 
 The extension could shell out to the CLI for each operation, but the daemon provides:
-- **Shared state** — config and manifests are loaded once, not on every command
+- **Shared state** — config and presets are loaded once, not on every command
 - **Notifications** — the daemon pushes `stateChanged` events so the UI stays in sync
 - **Atomic operations** — mutating operations can be sequenced without race conditions
 - **Performance** — no process spawn overhead per operation
@@ -936,7 +896,7 @@ VS Code's Copilot discovers instructions, prompts, skills, and agents from the `
 
 ### Why Two Config Layers?
 
-- **Global** — user-wide preferences (default manifest, telemetry) that apply to every project
-- **Project** — per-repo overrides (different tier, excluded files) that don't affect other repos
+- **Global** — user-wide preferences (default preset, telemetry) that apply to every project
+- **Project** — per-repo overrides (different preset, excluded files) that don't affect other repos
 
 The project config is stored in `~/.activate/repos/<hash>/` (not in the workspace) so it never touches the repo's version control.

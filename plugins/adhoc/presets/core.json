@@ -1,0 +1,13 @@
+{
+  "name": "Activate Core",
+  "description": "Foundation: security guardrails, coding conventions, and essential prompts",
+  "files": [
+    "AGENTS.md",
+    "CUSTOMIZATION.md",
+    "instructions/security.instructions.md",
+    "instructions/general.instructions.md",
+    "prompts/accessibility-check.prompt.md",
+    "prompts/code-review.prompt.md",
+    "prompts/create-adr.prompt.md"
+  ]
+}

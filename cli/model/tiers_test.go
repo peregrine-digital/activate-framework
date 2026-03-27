@@ -1,6 +1,7 @@
 package model
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -179,5 +180,88 @@ func TestListByCategory_UsesExplicitCategory(t *testing.T) {
 	groups := ListByCategory(files, m, "minimal", "")
 	if len(groups) != 1 || groups[0].Category != "skills" {
 		t.Fatalf("expected explicit category override, got %v", groups)
+	}
+}
+
+// ── FormatPresetList tests ──────────────────────────────────────
+
+func TestFormatPresetListMultiple(t *testing.T) {
+	presets := []Preset{
+		{ID: "adhoc/core", Name: "Core Preset", Description: "Basic files", Files: []PresetFile{{Src: "a.md", Dest: "a.md"}}},
+		{ID: "adhoc/standard", Name: "Standard Preset", Files: []PresetFile{{Src: "a.md", Dest: "a.md"}, {Src: "b.md", Dest: "b.md"}}},
+	}
+
+	out := FormatPresetList(presets)
+	if !strings.Contains(out, "adhoc/core") {
+		t.Fatal("expected adhoc/core in output")
+	}
+	if !strings.Contains(out, "Core Preset — 1 files") {
+		t.Fatalf("expected formatted core line, got:\n%s", out)
+	}
+	if !strings.Contains(out, "Basic files") {
+		t.Fatal("expected description in output")
+	}
+	if !strings.Contains(out, "Standard Preset — 2 files") {
+		t.Fatalf("expected formatted standard line, got:\n%s", out)
+	}
+}
+
+func TestFormatPresetListEmpty(t *testing.T) {
+	out := FormatPresetList(nil)
+	if out != "" {
+		t.Fatalf("expected empty output, got %q", out)
+	}
+}
+
+// ── ListPresetFilesByCategory tests ─────────────────────────────
+
+func TestListPresetFilesByCategory_GroupsFiles(t *testing.T) {
+	files := []PresetFile{
+		{Src: "plugins/adhoc/instructions/a.md", Dest: "instructions/a.md"},
+		{Src: "plugins/adhoc/skills/b", Dest: "skills/b", IsDir: true},
+		{Src: "plugins/adhoc/instructions/c.md", Dest: "instructions/c.md"},
+		{Src: "plugins/adhoc/agents/d.md", Dest: "agents/d.md"},
+	}
+
+	groups := ListPresetFilesByCategory(files, "")
+	if len(groups) != 3 {
+		t.Fatalf("expected 3 category groups, got %d", len(groups))
+	}
+	if groups[0].Category != "instructions" || len(groups[0].Files) != 2 {
+		t.Fatalf("expected instructions with 2 files, got %s with %d", groups[0].Category, len(groups[0].Files))
+	}
+	if groups[1].Category != "skills" || len(groups[1].Files) != 1 {
+		t.Fatalf("expected skills with 1 file, got %s with %d", groups[1].Category, len(groups[1].Files))
+	}
+	if groups[2].Category != "agents" || len(groups[2].Files) != 1 {
+		t.Fatalf("expected agents with 1 file, got %s with %d", groups[2].Category, len(groups[2].Files))
+	}
+}
+
+func TestListPresetFilesByCategory_FiltersByCategory(t *testing.T) {
+	files := []PresetFile{
+		{Src: "plugins/adhoc/instructions/a.md", Dest: "instructions/a.md"},
+		{Src: "plugins/adhoc/prompts/b.md", Dest: "prompts/b.md"},
+	}
+	groups := ListPresetFilesByCategory(files, "prompts")
+	if len(groups) != 1 || groups[0].Category != "prompts" {
+		t.Fatalf("expected only prompts group, got %v", groups)
+	}
+}
+
+func TestListPresetFilesByCategory_UsesExplicitCategory(t *testing.T) {
+	files := []PresetFile{
+		{Src: "plugins/adhoc/other/thing.md", Dest: "other/thing.md", Category: "skills"},
+	}
+	groups := ListPresetFilesByCategory(files, "")
+	if len(groups) != 1 || groups[0].Category != "skills" {
+		t.Fatalf("expected explicit category override, got %v", groups)
+	}
+}
+
+func TestListPresetFilesByCategory_EmptyInput(t *testing.T) {
+	groups := ListPresetFilesByCategory(nil, "")
+	if len(groups) != 0 {
+		t.Fatalf("expected no groups for nil input, got %d", len(groups))
 	}
 }

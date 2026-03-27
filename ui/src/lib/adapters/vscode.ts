@@ -5,6 +5,7 @@ import type {
   DiffResult,
   FileStatus,
   Manifest,
+  Preset,
   TelemetryEntry,
 } from '../types.js';
 
@@ -102,6 +103,11 @@ export function createVSCodeAPI(): ActivateAPI {
 
     listManifests: () => request<Manifest[]>('listManifests'),
     listBranches: () => request<string[]>('listBranches'),
+
+    listPresets: () => request<Preset[]>('listPresets'),
+    changePreset: () => request('changePreset'),
+    editRepo: (current, scope) => request('editRepo', { current, scope }),
+    editBranch: (current, scope) => request('editBranch', { current, scope }),
 
     runTelemetry: () => request('refreshUsage'),
     readTelemetryLog: () => request<TelemetryEntry[]>('readTelemetryLog'),

@@ -28,6 +28,80 @@ func TestFormatManifestListMultiple(t *testing.T) {
 	}
 }
 
+// ── Preset type tests ───────────────────────────────────────────
+
+func TestPresetFileFields(t *testing.T) {
+	f := PresetFile{
+		Src:  "plugins/adhoc/AGENTS.md",
+		Dest: "AGENTS.md",
+		IsDir: false,
+	}
+	if f.Src != "plugins/adhoc/AGENTS.md" {
+		t.Fatal("unexpected Src")
+	}
+	if f.IsDir {
+		t.Fatal("expected IsDir false")
+	}
+}
+
+func TestPresetFields(t *testing.T) {
+	p := Preset{
+		ID:      "adhoc/standard",
+		Name:    "Activate Standard",
+		Plugin:  "adhoc",
+		Extends: "adhoc/core",
+		Files:   []PresetFile{{Src: "plugins/adhoc/a.md", Dest: "a.md"}},
+	}
+	if p.Extends != "adhoc/core" {
+		t.Fatal("unexpected Extends")
+	}
+	if len(p.Files) != 1 {
+		t.Fatal("unexpected file count")
+	}
+}
+
+// ── FindPresetByID tests ────────────────────────────────────────
+
+func TestFindPresetByID_Found(t *testing.T) {
+	presets := []Preset{
+		{ID: "adhoc/core", Name: "Core"},
+		{ID: "adhoc/standard", Name: "Standard"},
+	}
+	p := FindPresetByID(presets, "adhoc/standard")
+	if p == nil || p.Name != "Standard" {
+		t.Fatal("expected to find adhoc/standard")
+	}
+}
+
+func TestFindPresetByID_NotFound(t *testing.T) {
+	presets := []Preset{{ID: "adhoc/core", Name: "Core"}}
+	p := FindPresetByID(presets, "nonexistent")
+	if p != nil {
+		t.Fatal("expected nil for missing preset")
+	}
+}
+
+// ── FindPresetFile tests ────────────────────────────────────────
+
+func TestFindPresetFile_Found(t *testing.T) {
+	files := []PresetFile{
+		{Src: "plugins/adhoc/a.md", Dest: "a.md"},
+		{Src: "plugins/adhoc/b.md", Dest: "b.md"},
+	}
+	f := FindPresetFile(files, "b.md")
+	if f == nil || f.Src != "plugins/adhoc/b.md" {
+		t.Fatal("expected to find b.md by dest")
+	}
+}
+
+func TestFindPresetFile_NotFound(t *testing.T) {
+	files := []PresetFile{{Src: "plugins/adhoc/a.md", Dest: "a.md"}}
+	f := FindPresetFile(files, "missing.md")
+	if f != nil {
+		t.Fatal("expected nil for missing file")
+	}
+}
+
 // ── InferCategory tests ─────────────────────────────────────────
 
 func TestInferCategoryPaths(t *testing.T) {

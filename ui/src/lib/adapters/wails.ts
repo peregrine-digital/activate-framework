@@ -12,6 +12,7 @@ import type {
   DiffResult,
   FileStatus,
   Manifest,
+  Preset,
   TelemetryEntry,
 } from '../types';
 
@@ -38,6 +39,7 @@ declare global {
           AddToWorkspace(): Promise<any>;
           RemoveFromWorkspace(): Promise<any>;
           ListManifests(): Promise<any>;
+          ListPresets(): Promise<any>;
           ListBranches(): Promise<any>;
           RunTelemetry(): Promise<any>;
           ReadTelemetryLog(): Promise<any>;
@@ -134,6 +136,10 @@ export function createWailsAPI(): ActivateAPI {
       return (await app.ListManifests()) ?? [];
     },
 
+    async listPresets(): Promise<Preset[]> {
+      return (await app.ListPresets()) ?? [];
+    },
+
     async listBranches(): Promise<string[]> {
       return (await app.ListBranches()) ?? [];
     },
@@ -155,6 +161,10 @@ export function createWailsAPI(): ActivateAPI {
     },
 
     async changeManifest(): Promise<void> {
+      // Handled in-UI by MainPage's SelectModal
+    },
+
+    async changePreset(): Promise<void> {
       // Handled in-UI by MainPage's SelectModal
     },
 

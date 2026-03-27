@@ -69,6 +69,10 @@ func (d *Daemon) dispatch(req *transport.Request) *transport.Response {
 		return d.handleManifestList(req)
 	case transport.MethodManifestFiles:
 		return d.handleManifestFiles(req)
+	case transport.MethodPresetList:
+		return d.handlePresetList(req)
+	case transport.MethodPresetFiles:
+		return d.handlePresetFiles(req)
 	case transport.MethodRepoAdd:
 		return d.handleRepoAdd(req)
 	case transport.MethodRepoRemove:
@@ -140,6 +144,7 @@ func (d *Daemon) handleInitialize(req *transport.Request) *transport.Response {
 			"state", "config", "manifests", "files",
 			"repo", "sync", "update", "diff",
 			"telemetry", "overrides", "selfUpdate",
+			"presets",
 		},
 	})
 }
@@ -186,6 +191,9 @@ func (d *Daemon) handleConfigSet(req *transport.Request) *transport.Response {
 	if params.Branch != "" {
 		updates.Branch = params.Branch
 	}
+	if params.Preset != "" {
+		updates.Preset = params.Preset
+	}
 	if params.TelemetryEnabled != nil {
 		updates.TelemetryEnabled = params.TelemetryEnabled
 	}
@@ -209,6 +217,24 @@ func (d *Daemon) handleManifestFiles(req *transport.Request) *transport.Response
 		}
 	}
 	result, err := d.service.ListFiles(params.Manifest, params.Tier, params.Category)
+	if err != nil {
+		return transport.ErrorResponse(req.ID, transport.ErrCodeInternal, err.Error())
+	}
+	return transport.SuccessResponse(req.ID, result)
+}
+
+func (d *Daemon) handlePresetList(req *transport.Request) *transport.Response {
+	return transport.SuccessResponse(req.ID, d.service.ListPresets())
+}
+
+func (d *Daemon) handlePresetFiles(req *transport.Request) *transport.Response {
+	var params transport.PresetFilesParams
+	if req.Params != nil {
+		if err := json.Unmarshal(req.Params, &params); err != nil {
+			return transport.ErrorResponse(req.ID, transport.ErrCodeInvalidParams, err.Error())
+		}
+	}
+	result, err := d.service.ListPresetFiles(params.Preset, params.Category)
 	if err != nil {
 		return transport.ErrorResponse(req.ID, transport.ErrCodeInternal, err.Error())
 	}

@@ -19,6 +19,8 @@ type ActivateAPI interface {
 	SetConfig(scope string, updates *model.Config) (*SetConfigResult, error)
 	ListManifests() []model.Manifest
 	ListFiles(manifestID, tierID, category string) (*ListFilesResult, error)
+	ListPresets() []model.Preset
+	ListPresetFiles(presetID, category string) (*ListPresetFilesResult, error)
 	RepoAdd() (*RepoAddResult, error)
 	RepoRemove() error
 	Sync() (*SyncResult, error)
@@ -34,6 +36,7 @@ type ActivateAPI interface {
 	RefreshConfig()
 	CurrentConfig() model.Config
 	CurrentManifests() []model.Manifest
+	CurrentPresets() []model.Preset
 	CurrentProjectDir() string
 }
 
@@ -43,7 +46,8 @@ var _ ActivateAPI = (*ActivateService)(nil)
 // ActivateService is the single API surface for all domain operations.
 type ActivateService struct {
 	ProjectDir   string
-	Manifests    []model.Manifest
+	Manifests    []model.Manifest   // Deprecated: kept for backward compat
+	Presets      []model.Preset
 	Config       model.Config
 	contentCache map[string][]byte  // cached remote file contents (srcPath → bytes)
 }
@@ -67,9 +71,12 @@ func (s *ActivateService) Initialize(projectDir string) {
 		s.refreshConfig()
 	}
 
-	// Discover manifests if not already loaded
+	// Discover manifests and presets if not already loaded
 	if len(s.Manifests) == 0 {
 		s.discoverManifests()
+	}
+	if len(s.Presets) == 0 {
+		s.discoverPresets()
 	}
 }
 
@@ -116,6 +123,47 @@ func (s *ActivateService) prefetchFiles(repo, branch string) {
 	s.contentCache = engine.PrefetchManifestFiles(*chosen, repo, branch)
 }
 
+// discoverPresets fetches presets from GitHub, falling back to local cache.
+func (s *ActivateService) discoverPresets() {
+	repo := s.Config.Repo
+	branch := s.Config.Branch
+	if repo == "" {
+		repo = storage.DefaultRepo
+	}
+	if branch == "" {
+		branch = storage.DefaultBranch
+	}
+
+	p, err := engine.DiscoverRemotePresets(repo, branch)
+	if err == nil && len(p) > 0 {
+		s.Presets = p
+		if s.ProjectDir != "" {
+			_ = storage.WritePresetCache(s.ProjectDir, p)
+		}
+		s.prefetchPresetFiles(repo, branch)
+		return
+	}
+
+	if s.ProjectDir != "" {
+		if cached, cacheErr := storage.ReadPresetCache(s.ProjectDir); cacheErr == nil && len(cached) > 0 {
+			fmt.Fprintf(os.Stderr, "[service] preset discovery failed, using cache (%d presets)\n", len(cached))
+			s.Presets = cached
+			s.prefetchPresetFiles(repo, branch)
+		}
+	}
+}
+
+// prefetchPresetFiles downloads all file contents for the active preset in
+// parallel and caches them.
+func (s *ActivateService) prefetchPresetFiles(repo, branch string) {
+	presetID := s.Config.ResolvedPreset()
+	resolved, err := engine.ResolvePresetInheritance(s.Presets, presetID)
+	if err != nil || resolved == nil {
+		return
+	}
+	s.contentCache = engine.PrefetchPresetFiles(*resolved, repo, branch)
+}
+
 // remoteVersions derives a srcPath→version map from the content cache.
 func (s *ActivateService) remoteVersions() map[string]string {
 	if s.contentCache == nil {
@@ -142,6 +190,7 @@ func (s *ActivateService) ListBranches(repo string) ([]string, error) {
 func (s *ActivateService) RefreshConfig()                { s.refreshConfig() }
 func (s *ActivateService) CurrentConfig() model.Config   { return s.Config }
 func (s *ActivateService) CurrentManifests() []model.Manifest { return s.Manifests }
+func (s *ActivateService) CurrentPresets() []model.Preset     { return s.Presets }
 func (s *ActivateService) CurrentProjectDir() string     { return s.ProjectDir }
 
 // ── Result types ───────────────────────────────────────────────
@@ -156,14 +205,21 @@ type ManifestInfo struct {
 	Name string `json:"name"`
 }
 
+type PresetInfo struct {
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Description string `json:"description,omitempty"`
+}
+
 type StateResult struct {
 	ProjectDir       string               `json:"projectDir"`
 	InstallDir       string               `json:"installDir"`
 	TelemetryLogPath string               `json:"telemetryLogPath,omitempty"`
 	State            model.InstallState   `json:"state"`
 	Config           model.Config         `json:"config"`
-	Manifests        []ManifestInfo       `json:"manifests,omitempty"`
-	Tiers            []model.ResolvedTier `json:"tiers,omitempty"`
+	Manifests        []ManifestInfo       `json:"manifests,omitempty"`    // Deprecated: use Presets
+	Tiers            []model.ResolvedTier `json:"tiers,omitempty"`        // Deprecated: use Presets
+	Presets          []PresetInfo         `json:"presets,omitempty"`
 	Categories       []CategoryInfo       `json:"categories,omitempty"`
 	Files            []model.FileStatus   `json:"files,omitempty"`
 }
@@ -180,9 +236,16 @@ type ListFilesResult struct {
 	TotalFiles int                  `json:"totalFiles"`
 }
 
+type ListPresetFilesResult struct {
+	Preset     string                      `json:"preset"`
+	Categories []model.PresetCategoryGroup `json:"categories"`
+	TotalFiles int                         `json:"totalFiles"`
+}
+
 type RepoAddResult struct {
-	Manifest string `json:"manifest"`
-	Tier     string `json:"tier"`
+	Manifest string `json:"manifest,omitempty"` // Deprecated: use Preset
+	Tier     string `json:"tier,omitempty"`     // Deprecated: use Preset
+	Preset   string `json:"preset,omitempty"`
 	Count    int    `json:"count"`
 }
 
@@ -253,7 +316,23 @@ func (s *ActivateService) GetState() StateResult {
 		result.Manifests = mi
 	}
 
-	if chosen != nil {
+	// Include preset metadata
+	if len(s.Presets) > 0 {
+		pi := make([]PresetInfo, len(s.Presets))
+		for i, p := range s.Presets {
+			pi[i] = PresetInfo{ID: p.ID, Name: p.Name, Description: p.Description}
+		}
+		result.Presets = pi
+	}
+
+	// Use preset-based file statuses when presets are available
+	presetID := s.Config.ResolvedPreset()
+	resolved, resolveErr := engine.ResolvePresetInheritance(s.Presets, presetID)
+	if resolveErr == nil && resolved != nil {
+		rv := s.remoteVersions()
+		result.Files = engine.ComputePresetFileStatuses(*resolved, sidecar, s.Config, s.ProjectDir, rv)
+	} else if chosen != nil {
+		// Legacy manifest-based fallback
 		result.Tiers = model.DiscoverAvailableTiers(*chosen)
 		rv := s.remoteVersions()
 		if rv == nil {
@@ -305,10 +384,12 @@ func (s *ActivateService) SetConfig(scope string, updates *model.Config) (*SetCo
 	}
 	s.refreshConfig()
 
-	// Re-discover manifests if repo or branch changed
+	// Re-discover manifests and presets if repo or branch changed
 	if updates.Repo != "" || updates.Branch != "" {
 		s.Manifests = nil
+		s.Presets = nil
 		s.discoverManifests()
+		s.discoverPresets()
 	}
 
 	if updates.Manifest != "" {
@@ -345,6 +426,18 @@ func (s *ActivateService) SetConfig(scope string, updates *model.Config) (*SetCo
 		s.prefetchFiles(repo, branch)
 	}
 
+	if updates.Preset != "" {
+		repo := s.Config.Repo
+		branch := s.Config.Branch
+		if repo == "" {
+			repo = storage.DefaultRepo
+		}
+		if branch == "" {
+			branch = storage.DefaultBranch
+		}
+		s.prefetchPresetFiles(repo, branch)
+	}
+
 	return &SetConfigResult{OK: true, Scope: scope}, nil
 }
 
@@ -378,7 +471,39 @@ func (s *ActivateService) ListFiles(manifestID, tierID, category string) (*ListF
 	}, nil
 }
 
+func (s *ActivateService) ListPresets() []model.Preset {
+	return s.Presets
+}
+
+func (s *ActivateService) ListPresetFiles(presetID, category string) (*ListPresetFilesResult, error) {
+	if presetID == "" {
+		presetID = s.Config.ResolvedPreset()
+	}
+	resolved, err := engine.ResolvePresetInheritance(s.Presets, presetID)
+	if err != nil {
+		return nil, err
+	}
+	groups := model.ListPresetFilesByCategory(resolved.Files, category)
+	total := 0
+	for _, g := range groups {
+		total += len(g.Files)
+	}
+	return &ListPresetFilesResult{
+		Preset:     presetID,
+		Categories: groups,
+		TotalFiles: total,
+	}, nil
+}
+
 func (s *ActivateService) RepoAdd() (*RepoAddResult, error) {
+	if len(s.Presets) > 0 {
+		if err := engine.PresetRepoAdd(s.Presets, s.Config, s.ProjectDir, s.contentCache); err != nil {
+			return nil, err
+		}
+		s.refreshConfig()
+		return &RepoAddResult{Preset: s.Config.ResolvedPreset()}, nil
+	}
+	// Legacy manifest fallback
 	if err := engine.RepoAdd(s.Manifests, s.Config, s.ProjectDir, s.contentCache); err != nil {
 		return nil, err
 	}
@@ -398,6 +523,42 @@ func (s *ActivateService) RepoRemove() error {
 }
 
 func (s *ActivateService) Sync() (*SyncResult, error) {
+	if len(s.Presets) > 0 {
+		return s.syncPreset()
+	}
+	return s.syncManifest()
+}
+
+func (s *ActivateService) syncPreset() (*SyncResult, error) {
+	presetID := s.Config.ResolvedPreset()
+	resolved, err := engine.ResolvePresetInheritance(s.Presets, presetID)
+	if err != nil {
+		return nil, err
+	}
+
+	sidecar, _ := storage.ReadRepoSidecar(s.ProjectDir)
+	if sidecar == nil {
+		return &SyncResult{Action: "none", Reason: "not installed"}, nil
+	}
+
+	if engine.PresetSyncNeeded(sidecar, presetID) {
+		if err := engine.PresetRepoAdd(s.Presets, s.Config, s.ProjectDir, s.contentCache); err != nil {
+			return nil, err
+		}
+		return &SyncResult{
+			Action: "reinstalled",
+			Reason: fmt.Sprintf("preset changed → %s", presetID),
+		}, nil
+	}
+
+	updated, skipped, err := engine.PresetUpdateFiles(*resolved, sidecar, s.Config, s.ProjectDir)
+	if err != nil {
+		return nil, err
+	}
+	return &SyncResult{Action: "updated", Updated: updated, Skipped: skipped}, nil
+}
+
+func (s *ActivateService) syncManifest() (*SyncResult, error) {
 	chosen := model.FindManifestByID(s.Manifests, s.Config.Manifest)
 	if chosen == nil {
 		return nil, fmt.Errorf("unknown manifest: %s", s.Config.Manifest)
@@ -433,6 +594,26 @@ func (s *ActivateService) Sync() (*SyncResult, error) {
 }
 
 func (s *ActivateService) InstallFile(file string) (*FileResult, error) {
+	if len(s.Presets) > 0 {
+		presetID := s.Config.ResolvedPreset()
+		resolved, err := engine.ResolvePresetInheritance(s.Presets, presetID)
+		if err != nil {
+			return nil, err
+		}
+		target := model.FindPresetFile(resolved.Files, file)
+		if target == nil {
+			return nil, fmt.Errorf("file %q not found in preset %s", file, presetID)
+		}
+		if err := engine.PresetInstallSingleFile(*target, presetID, s.ProjectDir, s.Config); err != nil {
+			return nil, err
+		}
+		if _, ok := s.Config.SkippedVersions[target.Dest]; ok {
+			_ = storage.ClearSkippedVersion(s.ProjectDir, target.Dest)
+			s.refreshConfig()
+		}
+		return &FileResult{OK: true, File: target.Dest}, nil
+	}
+	// Legacy manifest fallback
 	chosen := model.FindManifestByID(s.Manifests, s.Config.Manifest)
 	if chosen == nil {
 		return nil, fmt.Errorf("unknown manifest: %s", s.Config.Manifest)
@@ -463,6 +644,23 @@ func (s *ActivateService) UninstallFile(file string) (*FileResult, error) {
 }
 
 func (s *ActivateService) DiffFile(file string) (*DiffResult, error) {
+	if len(s.Presets) > 0 {
+		presetID := s.Config.ResolvedPreset()
+		resolved, err := engine.ResolvePresetInheritance(s.Presets, presetID)
+		if err != nil {
+			return nil, err
+		}
+		target := model.FindPresetFile(resolved.Files, file)
+		if target == nil {
+			return nil, fmt.Errorf("file %q not found in preset %s", file, presetID)
+		}
+		diff, err := engine.PresetDiffFile(*target, s.ProjectDir, s.Config)
+		if err != nil {
+			return nil, err
+		}
+		return &DiffResult{File: target.Dest, Diff: diff, Identical: diff == ""}, nil
+	}
+	// Legacy manifest fallback
 	chosen := model.FindManifestByID(s.Manifests, s.Config.Manifest)
 	if chosen == nil {
 		return nil, fmt.Errorf("unknown manifest: %s", s.Config.Manifest)
@@ -486,6 +684,43 @@ func (s *ActivateService) DiffFile(file string) (*DiffResult, error) {
 }
 
 func (s *ActivateService) SkipUpdate(file string) (*FileResult, error) {
+	if len(s.Presets) > 0 {
+		presetID := s.Config.ResolvedPreset()
+		resolved, err := engine.ResolvePresetInheritance(s.Presets, presetID)
+		if err != nil {
+			return nil, err
+		}
+		target := model.FindPresetFile(resolved.Files, file)
+		if target == nil {
+			return nil, fmt.Errorf("file %q not found in preset %s", file, presetID)
+		}
+		var bundledVersion string
+		if s.contentCache != nil {
+			if data, ok := s.contentCache[target.Src]; ok {
+				bundledVersion = model.ParseFrontmatterVersion(data)
+			}
+		}
+		if bundledVersion == "" {
+			repo := s.Config.Repo
+			branch := s.Config.Branch
+			if repo == "" {
+				repo = storage.DefaultRepo
+			}
+			if branch == "" {
+				branch = storage.DefaultBranch
+			}
+			bundledVersion, _ = storage.ReadFileVersionRemote(target.Src, repo, branch)
+		}
+		if bundledVersion == "" {
+			return nil, fmt.Errorf("no version found in bundled file %s", target.Src)
+		}
+		if err := storage.SetSkippedVersion(s.ProjectDir, target.Dest, bundledVersion); err != nil {
+			return nil, err
+		}
+		s.refreshConfig()
+		return &FileResult{OK: true, File: target.Dest}, nil
+	}
+	// Legacy manifest fallback
 	chosen := model.FindManifestByID(s.Manifests, s.Config.Manifest)
 	if chosen == nil {
 		return nil, fmt.Errorf("unknown manifest: %s", s.Config.Manifest)
@@ -539,6 +774,23 @@ func (s *ActivateService) SetOverride(file, override string) (*FileResult, error
 }
 
 func (s *ActivateService) Update() (*UpdateResult, error) {
+	if len(s.Presets) > 0 {
+		presetID := s.Config.ResolvedPreset()
+		resolved, err := engine.ResolvePresetInheritance(s.Presets, presetID)
+		if err != nil {
+			return nil, err
+		}
+		sidecar, _ := storage.ReadRepoSidecar(s.ProjectDir)
+		if sidecar == nil {
+			return nil, fmt.Errorf("no installed files found; run 'repo add' first")
+		}
+		updated, skipped, err := engine.PresetUpdateFiles(*resolved, sidecar, s.Config, s.ProjectDir)
+		if err != nil {
+			return nil, err
+		}
+		return &UpdateResult{Updated: updated, Skipped: skipped}, nil
+	}
+	// Legacy manifest fallback
 	chosen := model.FindManifestByID(s.Manifests, s.Config.Manifest)
 	if chosen == nil {
 		return nil, fmt.Errorf("unknown manifest: %s", s.Config.Manifest)

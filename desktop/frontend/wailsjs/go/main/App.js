@@ -50,6 +50,10 @@ export function ListManifests() {
   return window['go']['main']['App']['ListManifests']();
 }
 
+export function ListPresets() {
+  return window['go']['main']['App']['ListPresets']();
+}
+
 export function ListWorkspaces() {
   return window['go']['main']['App']['ListWorkspaces']();
 }

@@ -71,12 +71,14 @@ class ControlPanelProvider {
 
     const cfg = state.config || {};
     const tier = cfg.tier || '';
+    const preset = cfg.preset || cfg.resolvedPreset || '';
     const fileOverrides = cfg.fileOverrides || {};
     const skippedVersions = cfg.skippedVersions || {};
     const isActive = state.state?.hasInstallMarker || false;
     const manifestName = cfg.manifest || '';
     const manifests = state.manifests || [];
     const manifestCount = manifests.length || 1;
+    const presets = state.presets || [];
 
     // Cache metadata from daemon for use by other methods
     this._categories = state.categories || [];
@@ -100,7 +102,7 @@ class ControlPanelProvider {
 
       const isExcluded = f.override === 'excluded';
       const isPinned = f.override === 'pinned';
-      const inTier = isPinned || f.inTier;
+      const inScope = isPinned || (presets.length > 0 ? f.inPreset : f.inTier);
 
       if (isExcluded) {
         excludedFiles.push(f);
@@ -109,7 +111,7 @@ class ControlPanelProvider {
 
       if (f.installed) {
         installedFiles.push(f);
-      } else if (inTier) {
+      } else if (inScope) {
         availableFiles.push(f);
       } else {
         outsideTierFiles.push(f);
@@ -121,9 +123,16 @@ class ControlPanelProvider {
     const activeTier = tiers.find((t) => t.id === tier);
     const tierLabel = activeTier ? activeTier.label : tier;
 
+    // Preset label from daemon preset definitions
+    const activePreset = presets.find((p) => p.id === preset);
+    const presetLabel = activePreset ? activePreset.name : preset;
+
     return {
       tier,
       tierLabel,
+      preset,
+      presetLabel,
+      presets,
       isActive,
       manifestName,
       manifestCount,
@@ -182,6 +191,9 @@ class ControlPanelProvider {
         break;
       case 'changeManifest':
         vscode.commands.executeCommand('activate-framework.changeManifest');
+        break;
+      case 'changePreset':
+        vscode.commands.executeCommand('activate-framework.changePreset');
         break;
       case 'addToWorkspace':
         vscode.commands.executeCommand('activate-framework.addToWorkspace');
@@ -262,6 +274,7 @@ class ControlPanelProvider {
         break;
       case 'resetGlobalDefaults':
         this._client.setConfig({
+          preset: '__clear__',
           manifest: '__clear__',
           tier: '__clear__',
           repo: '__clear__',
@@ -406,15 +419,15 @@ class ControlPanelProvider {
 </body></html>`;
   }
 
-  _getHtml({ tier, tierLabel, isActive, manifestName, manifestCount, installedFiles, availableFiles, outsideTierFiles, excludedFiles, versionMap, fileOverrides, skippedVersions }) {
+  _getHtml({ tier, tierLabel, preset, presetLabel, presets, isActive, manifestName, manifestCount, installedFiles, availableFiles, outsideTierFiles, excludedFiles, versionMap, fileOverrides, skippedVersions }) {
     const installAction = isActive ? 'removeFromWorkspace' : 'addToWorkspace';
     const installButtonLabel = isActive ? '− Remove' : '+ Install';
+    const hasPresets = presets && presets.length > 0;
 
     /** Build HTML for one file card */
     const fileCard = (f, installed) => {
       const name = esc(displayName(f));
       const desc = esc(f.description || '');
-      const tierBadge = esc(f.tier);
       const json = esc(JSON.stringify(f));
 
       // File override badge (pinned / excluded) — from daemon FileStatus
@@ -493,7 +506,6 @@ class ControlPanelProvider {
             </div>
           </div>
           <div class="file-actions">
-            <span class="file-tier">${tierBadge}</span>
             ${actionButtons}
             ${overrideButtons}
           </div>
@@ -726,11 +738,6 @@ class ControlPanelProvider {
       gap: 4px;
       flex-shrink: 0;
     }
-    .file-tier {
-      font-size: 10px;
-      opacity: 0.4;
-      white-space: nowrap;
-    }
     .icon-btn {
       background: none;
       border: 1px solid transparent;
@@ -801,9 +808,11 @@ class ControlPanelProvider {
 </head>
 <body>
   <div class="status-bar">
-    <span class="badge">${esc(tierLabel)}</span>
+    ${hasPresets
+      ? `<span class="badge">${esc(presetLabel)}</span>`
+      : `<span class="badge">${esc(tierLabel)}</span>
     <span class="dot">·</span>
-    <span class="badge">${esc(manifestName)}</span>
+    <span class="badge">${esc(manifestName)}</span>`}
     <span class="dot">·</span>
     <span class="ws-status">${isActive ? '✓' : '○'} Installed</span>
     <span class="spacer"></span>
@@ -811,8 +820,10 @@ class ControlPanelProvider {
   </div>
 
   <div class="button-row">
-    <button class="secondary" onclick="send('changeTier')">◆ Tier</button>
-    ${manifestCount > 1 ? `<button class="secondary" onclick="send('changeManifest')">⇋ Manifest</button>` : ''}
+    ${hasPresets
+      ? `<button class="secondary" onclick="send('changePreset')">◆ Preset</button>`
+      : `<button class="secondary" onclick="send('changeTier')">◆ Tier</button>
+    ${manifestCount > 1 ? `<button class="secondary" onclick="send('changeManifest')">⇋ Manifest</button>` : ''}`}
     <button class="secondary" onclick="send('${installAction}')">${esc(installButtonLabel)}</button>
     <button class="primary" onclick="send('updateAll')">↻ Update</button>
     <button class="secondary" onclick="send('showUsage')">📊 Usage</button>
@@ -827,8 +838,8 @@ class ControlPanelProvider {
   ${availableHtml || '<div class="empty">All tier files installed</div>'}
 
   ${outsideTierFiles && outsideTierFiles.length > 0 ? `
-  <div class="section-label dim-section-label">Outside Tier · ${outsideTierFiles.length}</div>
-  <div class="dim-section-hint">Switch to a higher tier to access these files</div>
+  <div class="section-label dim-section-label">${hasPresets ? 'Outside Preset' : 'Outside Tier'} · ${outsideTierFiles.length}</div>
+  ${hasPresets ? '' : '<div class="dim-section-hint">Switch to a higher tier to access these files</div>'}
   ${outsideTierHtml}
   ` : ''}
 
@@ -1178,8 +1189,11 @@ class ControlPanelProvider {
     const global = globalCfg || {};
     const project = projectCfg || {};
     const tiers = state?.tiers || [];
+    const presets = state?.presets || [];
+    const hasPresets = presets.length > 0;
     const telemetryEnabled = resolved.telemetryEnabled === true;
 
+    const presetLabel = resolved.preset || '—';
     const manifestLabel = resolved.manifest || '—';
     const tierLabel = (tiers.find((t) => t.id === resolved.tier) || {}).label || resolved.tier || '—';
     const repoLabel = resolved.repo || 'peregrine-digital/activate-framework';
@@ -1192,6 +1206,7 @@ class ControlPanelProvider {
       return 'default';
     };
 
+    const presetSrc = source('preset');
     const manifestSrc = source('manifest');
     const tierSrc = source('tier');
     const repoSrc = source('repo');
@@ -1314,6 +1329,14 @@ class ControlPanelProvider {
 
   <div class="section-label">Configuration</div>
 
+  ${hasPresets ? `
+  <div class="setting-row">
+    <span class="setting-label">Preset</span>
+    <span class="setting-value">
+      ${esc(presetLabel)} ${srcBadge(presetSrc)}
+    </span>
+  </div>
+  ` : `
   <div class="setting-row">
     <span class="setting-label">Manifest</span>
     <span class="setting-value">
@@ -1327,6 +1350,7 @@ class ControlPanelProvider {
       ${esc(tierLabel)} ${srcBadge(tierSrc)}
     </span>
   </div>
+  `}
 
   <div class="setting-row">
     <span class="setting-label">Repository</span>
@@ -1374,7 +1398,7 @@ class ControlPanelProvider {
     <!-- JSON.stringify produces double-quoted strings; esc() HTML-encodes them.
          The browser decodes entities before evaluating onclick JS, so the
          JSON object arrives intact without breaking on special chars. -->
-    <button class="secondary" onclick="send('setGlobalDefault', { updates: ${esc(JSON.stringify({ manifest: resolved.manifest || '', tier: resolved.tier || '' }))} })">
+    <button class="secondary" onclick="send('setGlobalDefault', { updates: ${esc(JSON.stringify(hasPresets ? { preset: resolved.preset || '' } : { manifest: resolved.manifest || '', tier: resolved.tier || '' }))} })">
       Save Current Setup as Global Default
     </button>
     <button class="secondary" onclick="send('resetGlobalDefaults')" style="margin-left: 4px;">
@@ -1382,6 +1406,10 @@ class ControlPanelProvider {
     </button>
   </div>
 
+  <div class="setting-row">
+    <span class="setting-label">Preset</span>
+    <span class="setting-value">${esc(global.preset || '(not set)')}</span>
+  </div>
   <div class="setting-row">
     <span class="setting-label">Manifest</span>
     <span class="setting-value">${esc(global.manifest || '(not set)')}</span>
@@ -1408,6 +1436,13 @@ class ControlPanelProvider {
   <div class="section-label">Project Overrides</div>
   <div class="path-display">~/.activate/repos/&lt;hash&gt;/config.json</div>
 
+  <div class="setting-row">
+    <span class="setting-label">Preset</span>
+    <span class="setting-value">
+      ${esc(project.preset || '(not set)')}
+      ${project.preset ? `<button class="toggle-btn" onclick="send('clearProjectOverride', { updates: { preset: '__clear__' } })">✕</button>` : ''}
+    </span>
+  </div>
   <div class="setting-row">
     <span class="setting-label">Manifest</span>
     <span class="setting-value">
