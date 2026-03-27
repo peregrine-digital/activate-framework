@@ -86,36 +86,31 @@ type presetJSON struct {
 }
 
 // DiscoverRemotePresets fetches all preset metadata from GitHub.
-// It scans plugins/*/presets/*.json.
+// It autodiscovers plugins by listing plugins/ subdirectories,
+// then lists presets/*.json inside each plugin.
 func DiscoverRemotePresets(repo, branch string) ([]model.Preset, error) {
-	// 1. Try fetching plugins/index.json which lists plugin names.
-	var pluginIndex struct {
-		Plugins []string `json:"plugins"`
-	}
-	plugins := []string{"adhoc", "ironarch"}
-	if err := storage.FetchJSON("plugins/index.json", repo, branch, &pluginIndex); err == nil && len(pluginIndex.Plugins) > 0 {
-		plugins = pluginIndex.Plugins
-	}
-
-	// Known fallback preset names per plugin.
-	knownPresets := map[string][]string{
-		"adhoc":    {"core", "standard", "advanced"},
-		"ironarch": {"skills", "workflow"},
+	// 1. Discover plugins by listing plugins/ directory.
+	plugins, err := storage.ListDirEntries("plugins", repo, branch, "dir")
+	if err != nil {
+		return nil, fmt.Errorf("discover plugins: %w", err)
 	}
 
 	var results []model.Preset
 	for _, plugin := range plugins {
-		// 2. Try fetching per-plugin preset index.
-		var presetIndex struct {
-			Presets []string `json:"presets"`
-		}
-		presetNames := knownPresets[plugin]
-		if err := storage.FetchJSON(fmt.Sprintf("plugins/%s/presets/index.json", plugin), repo, branch, &presetIndex); err == nil && len(presetIndex.Presets) > 0 {
-			presetNames = presetIndex.Presets
+		// 2. List preset files in plugins/<plugin>/presets/.
+		files, err := storage.ListDirEntries(
+			fmt.Sprintf("plugins/%s/presets", plugin), repo, branch, "file",
+		)
+		if err != nil {
+			continue // plugin may not have presets
 		}
 
-		// 3. Load each preset file.
-		for _, name := range presetNames {
+		// 3. Load each .json preset file.
+		for _, f := range files {
+			name := strings.TrimSuffix(f, ".json")
+			if name == f {
+				continue // skip non-JSON files
+			}
 			p, err := loadRemotePreset(plugin, name, repo, branch)
 			if err != nil {
 				continue
