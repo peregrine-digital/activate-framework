@@ -214,14 +214,14 @@ func TestMigrateManifestTierToPreset(t *testing.T) {
 		{"adhoc", "advanced", "adhoc/advanced"},
 		{"adhoc", "custom", "adhoc/custom"},
 		// IronArch mappings
-		{"ironarch", "skills", "ironarch/skills"},
-		{"ironarch", "workflow", "ironarch/workflow"},
-		{"ironarch", "custom", "ironarch/custom"},
+		{"ironarch", "skills", "activate/skills"},
+		{"ironarch", "workflow", "activate/workflow"},
+		{"ironarch", "custom", "activate/custom"},
 		// Unknown manifest
 		{"other", "fancy", "other/fancy"},
 		// Defaults applied when one is missing
 		{"", "advanced", "adhoc/advanced"},        // manifest defaults to "adhoc"
-		{"ironarch", "", "ironarch/standard"},      // tier defaults to "standard" → unknown for ironarch
+		{"ironarch", "", "activate/standard"},      // tier defaults to "standard" → maps to activate/standard
 		{"adhoc", "", "adhoc/standard"},            // tier defaults to "standard"
 	}
 	for _, tt := range tests {
@@ -258,9 +258,9 @@ func TestConfig_ResolvedPreset_EmptyWhenUnset(t *testing.T) {
 func TestConfig_ResolvedPreset_ManifestOnlyMigrates(t *testing.T) {
 	cfg := &Config{Manifest: "ironarch"}
 	got := cfg.ResolvedPreset()
-	// manifest=ironarch, tier defaults to "standard" → ironarch/standard (unmapped)
-	if got != "ironarch/standard" {
-		t.Fatalf("expected ironarch/standard, got %q", got)
+	// manifest=ironarch, tier defaults to "standard" → activate/standard
+	if got != "activate/standard" {
+		t.Fatalf("expected activate/standard, got %q", got)
 	}
 }
 

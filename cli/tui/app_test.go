@@ -549,10 +549,10 @@ func TestStateText_InstalledPreset(t *testing.T) {
 	m := mainMenuModel{state: model.InstallState{
 		HasProjectConfig: true,
 		HasInstallMarker: true,
-		InstalledPreset:  "ironarch/workflow",
+		InstalledPreset:  "activate/workflow",
 	}}
 	text := m.stateText()
-	if !strings.Contains(text, "installed ironarch/workflow") {
+	if !strings.Contains(text, "installed activate/workflow") {
 		t.Fatalf("expected preset install info, got %q", text)
 	}
 }
@@ -561,11 +561,11 @@ func TestStateText_InstalledPresetOverridesManifest(t *testing.T) {
 	m := mainMenuModel{state: model.InstallState{
 		HasProjectConfig:  true,
 		HasInstallMarker:  true,
-		InstalledPreset:   "ironarch/workflow",
+		InstalledPreset:   "activate/workflow",
 		InstalledManifest: "alpha",
 	}}
 	text := m.stateText()
-	if !strings.Contains(text, "installed ironarch/workflow") {
+	if !strings.Contains(text, "installed activate/workflow") {
 		t.Fatalf("expected preset to take priority, got %q", text)
 	}
 }
@@ -602,15 +602,15 @@ func TestStateBody_ShowsPreset(t *testing.T) {
 			HasGlobalConfig:  true,
 			HasProjectConfig: true,
 			HasInstallMarker: true,
-			InstalledPreset:  "ironarch/workflow",
+			InstalledPreset:  "activate/workflow",
 		},
-		cfg: model.Config{Preset: "ironarch/workflow"},
+		cfg: model.Config{Preset: "activate/workflow"},
 	}
 	body := m.stateBody()
-	if !strings.Contains(body, "preset: ironarch/workflow") {
+	if !strings.Contains(body, "preset: activate/workflow") {
 		t.Fatal("expected preset in body")
 	}
-	if !strings.Contains(body, "Installed: ironarch/workflow") {
+	if !strings.Contains(body, "Installed: activate/workflow") {
 		t.Fatal("expected installed preset in body")
 	}
 }

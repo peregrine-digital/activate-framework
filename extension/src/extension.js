@@ -667,7 +667,7 @@ async function autoSetup(controlPanel, context) {
 
 /**
  * Show a quick-start prompt on first activation in a new workspace.
- * Offers "Quick Start" which installs ironarch/workflow. Cancelling
+ * Offers "Quick Start" which installs activate/workflow. Cancelling
  * sets a per-workspace dismiss flag.
  *
  * Guards (skipped when `skipGuards` is true, e.g. manual re-trigger):
@@ -704,8 +704,8 @@ async function showQuickStartPrompt(context, { skipGuards = false } = {}) {
     return;
   }
 
-  // Install ironarch/workflow
-  await client.setConfig({ preset: 'ironarch/workflow', scope: 'project' });
+  // Install activate/workflow
+  await client.setConfig({ preset: 'activate/workflow', scope: 'project' });
   await client.repoAdd();
 }
 

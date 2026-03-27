@@ -191,11 +191,11 @@ describe('ControlPanelProvider', () => {
 
     it('uses presets from daemon state when available', async () => {
       mockClient._mockResults.getState = {
-        config: { preset: 'ironarch/workflow', manifest: 'ironarch', tier: 'workflow', fileOverrides: {}, skippedVersions: {} },
+        config: { preset: 'activate/workflow', manifest: 'ironarch', tier: 'workflow', fileOverrides: {}, skippedVersions: {} },
         state: { hasInstallMarker: true },
         presets: [
-          { id: 'ironarch/standard', name: 'IronArch Standard', description: 'Standard preset' },
-          { id: 'ironarch/workflow', name: 'IronArch Workflow', description: 'Workflow preset' },
+          { id: 'activate/standard', name: 'Activate Standard', description: 'Standard preset' },
+          { id: 'activate/workflow', name: 'Activate Workflow', description: 'Workflow preset' },
         ],
         tiers: [],
         files: [
@@ -206,8 +206,8 @@ describe('ControlPanelProvider', () => {
       };
 
       const state = await panel._gatherState();
-      assert.equal(state.preset, 'ironarch/workflow');
-      assert.equal(state.presetLabel, 'IronArch Workflow');
+      assert.equal(state.preset, 'activate/workflow');
+      assert.equal(state.presetLabel, 'Activate Workflow');
       assert.equal(state.presets.length, 2);
       assert.equal(state.installedFiles.length, 1);
       assert.equal(state.availableFiles.length, 1); // agents/b.md is inPreset
@@ -257,14 +257,14 @@ describe('ControlPanelProvider', () => {
 
     it('renders settings page with preset when presets available', async () => {
       mockClient._mockResults.getState = {
-        config: { preset: 'ironarch/workflow', manifest: 'ironarch', tier: 'workflow', telemetryEnabled: true },
+        config: { preset: 'activate/workflow', manifest: 'ironarch', tier: 'workflow', telemetryEnabled: true },
         state: { hasInstallMarker: true },
-        presets: [{ id: 'ironarch/workflow', name: 'IronArch Workflow', description: 'Workflow' }],
+        presets: [{ id: 'activate/workflow', name: 'Activate Workflow', description: 'Workflow' }],
         tiers: [],
         projectDir: '/test/project',
       };
-      mockClient._mockResults.config_global = { preset: 'ironarch/workflow' };
-      mockClient._mockResults.config_project = { preset: 'ironarch/workflow' };
+      mockClient._mockResults.config_global = { preset: 'activate/workflow' };
+      mockClient._mockResults.config_project = { preset: 'activate/workflow' };
 
       panel._currentPage = 'settings';
       panel._view = {
@@ -273,7 +273,7 @@ describe('ControlPanelProvider', () => {
 
       await panel._render();
       assert.ok(panel._view.webview.html.includes('Preset'), 'should show Preset label when presets available');
-      assert.ok(panel._view.webview.html.includes('ironarch/workflow'), 'should show preset value');
+      assert.ok(panel._view.webview.html.includes('activate/workflow'), 'should show preset value');
     });
 
     it('renders settings page with config scopes', async () => {

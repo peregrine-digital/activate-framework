@@ -31,7 +31,7 @@ func DiscoverRemoteManifests(repo, branch string) ([]model.Manifest, error) {
 		}
 	}
 
-	known := []string{"adhoc", "ironarch"}
+	known := []string{"adhoc", "activate"}
 	var results []model.Manifest
 	for _, id := range known {
 		m, err := loadRemoteManifest(id, repo, branch)

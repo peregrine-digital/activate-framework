@@ -610,7 +610,7 @@ describe('showQuickStartPrompt', () => {
     return context;
   }
 
-  it('Quick Start: sets ironarch/workflow and calls repoAdd', async () => {
+  it('Quick Start: sets activate/workflow and calls repoAdd', async () => {
     const ext = loadExtension();
 
     // State: first run, no files installed
@@ -627,11 +627,11 @@ describe('showQuickStartPrompt', () => {
 
     await activateWithState(ext);
 
-    // Should have called setConfig with ironarch/workflow preset
+    // Should have called setConfig with activate/workflow preset
     const setCalls = mockClient.calls.filter(([m]) => m === 'setConfig');
     assert.ok(setCalls.length >= 1, 'should call setConfig at least once');
-    const projectSet = setCalls.find(([, p]) => p?.preset === 'ironarch/workflow');
-    assert.ok(projectSet, 'should set preset to ironarch/workflow');
+    const projectSet = setCalls.find(([, p]) => p?.preset === 'activate/workflow');
+    assert.ok(projectSet, 'should set preset to activate/workflow');
     assert.equal(projectSet[1].scope, 'project');
 
     // Should have called repoAdd
@@ -667,11 +667,11 @@ describe('showQuickStartPrompt', () => {
 
     mockClient._mockResults.getState = {
       state: { hasInstallMarker: false, hasGlobalConfig: true, hasProjectConfig: false },
-      config: { tier: 'workflow', manifest: 'ironarch' },
+      config: { tier: 'workflow', manifest: 'activate' },
       files: [],
     };
     // Global config HAS manifest set
-    mockClient._mockResults.config_global = { manifest: 'ironarch', tier: 'workflow' };
+    mockClient._mockResults.config_global = { manifest: 'activate', tier: 'workflow' };
 
     // Should never reach the prompt
 
@@ -815,10 +815,10 @@ describe('showQuickStartPrompt', () => {
 
     mockClient._mockResults.getState = {
       state: { hasInstallMarker: true, hasGlobalConfig: true, hasProjectConfig: false },
-      config: { tier: 'workflow', manifest: 'ironarch' },
+      config: { tier: 'workflow', manifest: 'activate' },
       files: [],
     };
-    mockClient._mockResults.config_global = { manifest: 'ironarch', tier: 'workflow' };
+    mockClient._mockResults.config_global = { manifest: 'activate', tier: 'workflow' };
     mockClient._mockResults.sync = { action: 'none' };
 
     // User picks Quick Start from the re-trigger

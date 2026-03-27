@@ -3,7 +3,6 @@
   "description": "Core plus language guides, design skills, agents, and GitHub integration",
   "extends": "adhoc/core",
   "files": [
-    "prompts/qasp-report.prompt.md",
     "instructions/code-review.instructions.md",
     "instructions/python.instructions.md",
     "instructions/typescript.instructions.md",

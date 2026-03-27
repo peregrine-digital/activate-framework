@@ -25,7 +25,7 @@ plugins/
 │   ├── prompts/
 │   ├── skills/
 │   └── agents/
-└── ironarch/                    # VA workflow plugin
+└── activate/                    # VA workflow plugin
     ├── AGENTS.md
     ├── instructions/
     ├── prompts/
@@ -48,7 +48,7 @@ Each plugin must follow the [four-tier file hierarchy](plugin-file-hierarchy.md)
 ### 1. Choose the right plugin
 
 - **adhoc** — General-purpose guidance applicable to any project
-- **ironarch** — VA-specific workflow with specialized agents
+- **activate** — VA-specific workflow with specialized agents
 - **New plugin** — Create `plugins/{your-plugin}/` for domain-specific content
 
 ### 2. Create the file

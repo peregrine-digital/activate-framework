@@ -485,7 +485,7 @@ describe('ActivateClient', () => {
 
     assert.strictEqual(req.method, Method.PresetList);
 
-    const presets = [{ id: 'ironarch/workflow', name: 'IronArch Workflow' }];
+    const presets = [{ id: 'activate/workflow', name: 'Activate Workflow' }];
     sendResponse(req.id, presets);
     const result = await resultPromise;
     assert.deepStrictEqual(result, presets);
@@ -494,11 +494,11 @@ describe('ActivateClient', () => {
   it('listPresetFiles sends PresetFiles request with params', async () => {
     const { client, nextRequest, sendResponse } = createMockClient();
 
-    const resultPromise = client.listPresetFiles({ preset: 'ironarch/workflow', category: 'agents' });
+    const resultPromise = client.listPresetFiles({ preset: 'activate/workflow', category: 'agents' });
     const req = await nextRequest();
 
     assert.strictEqual(req.method, Method.PresetFiles);
-    assert.strictEqual(req.params.preset, 'ironarch/workflow');
+    assert.strictEqual(req.params.preset, 'activate/workflow');
     assert.strictEqual(req.params.category, 'agents');
 
     sendResponse(req.id, [{ dest: 'agents/plan.md' }]);

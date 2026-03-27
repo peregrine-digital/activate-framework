@@ -102,7 +102,7 @@ activate-framework/
 ├── plugins/                         # Content plugins (deliverable assets)
 │   ├── adhoc/                       #   Core: instructions, prompts, skills, agents
 │   │   └── presets/                 #     Preset definitions (core, standard, advanced)
-│   └── ironarch/                    #   VA: specialized workflow agents
+│   └── activate/                    #   Specialized workflow agents + skills
 │       └── presets/                 #     Preset definitions (skills, workflow)
 │
 ├── install-cli.sh                   # CLI installer script (curl | sh)
@@ -132,8 +132,8 @@ Each plugin defines **presets** — named configurations that users pick from a 
 | **adhoc/core** | adhoc | Security guardrails, coding conventions, essential prompts |
 | **adhoc/standard** | adhoc | Core + language guides, design skills, agents, GitHub MCP |
 | **adhoc/advanced** | adhoc | Standard + federal compliance, AWS alignment, skill authoring |
-| **ironarch/skills** | ironarch | Core + CI debugging, PR writing, spec creation, visual testing |
-| **ironarch/workflow** | ironarch | Skills + full agent pipeline (plan → implement → test → review → PR) |
+| **activate/skills** | activate | Core + CI debugging, PR writing, spec creation, visual testing |
+| **activate/workflow** | activate | Skills + full agent pipeline (plan → implement → test → review → PR) |
 
 ### Creating a Plugin
 

@@ -1,7 +1,7 @@
 {
-  "name": "IronArch Workflow",
-  "description": "Full VA-oriented agent pipeline: plan, implement, test, review, document, and PR",
-  "extends": "ironarch/skills",
+  "name": "Activate Workflow",
+  "description": "Full agent pipeline: plan, implement, test, review, document, and PR",
+  "extends": "activate/skills",
   "files": [
     "agents/documenter.agent.md",
     "agents/implementer.agent.md",

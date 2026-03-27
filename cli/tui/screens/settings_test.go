@@ -65,7 +65,7 @@ func TestBuildSettingsForm_HasAllFields(t *testing.T) {
 func TestBuildSettingsForm_WithPresets(t *testing.T) {
 	presets := []model.Preset{
 		{ID: "adhoc/standard", Name: "Ad-Hoc Standard"},
-		{ID: "ironarch/workflow", Name: "IronArch Workflow"},
+		{ID: "activate/workflow", Name: "Activate Workflow"},
 	}
 	dir := setupTestStore(t)
 	svc := &commands.ActivateService{

@@ -319,7 +319,7 @@ activate config get --scope project
 activate config set --scope project --preset adhoc/advanced
 
 # Write to global scope
-activate config set --scope global --preset ironarch/workflow
+activate config set --scope global --preset activate/workflow
 ```
 
 ---

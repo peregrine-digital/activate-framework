@@ -108,11 +108,11 @@ func MigrateManifestTierToPreset(manifest, tier string) string {
 	case "ironarch":
 		switch t {
 		case "skills":
-			return "ironarch/skills"
+			return "activate/skills"
 		case "workflow":
-			return "ironarch/workflow"
+			return "activate/workflow"
 		default:
-			return m + "/" + t
+			return "activate/" + t
 		}
 	default:
 		return m + "/" + t
