@@ -1,22 +1,20 @@
 package model
 
-// ResolvedTier is a tier definition with cumulative includes.
+// Deprecated: ResolvedTier is part of the old manifest+tier system, will be removed.
 type ResolvedTier struct {
 	ID       string   `json:"id"`
 	Label    string   `json:"label"`
 	Includes []string `json:"includes"`
 }
 
-// DefaultTiers for manifests that don't define their own.
+// Deprecated: DefaultTiers is part of the old manifest+tier system, will be removed.
 var DefaultTiers = []ResolvedTier{
 	{ID: "minimal", Label: "Minimal", Includes: []string{"core"}},
 	{ID: "standard", Label: "Standard", Includes: []string{"core", "ad-hoc"}},
 	{ID: "advanced", Label: "Advanced", Includes: []string{"core", "ad-hoc", "ad-hoc-advanced"}},
 }
 
-// GetManifestTiers returns the tier definitions for a manifest.
-// If the manifest defines custom tiers, they are made cumulative.
-// Otherwise returns DefaultTiers.
+// Deprecated: GetManifestTiers is part of the old manifest+tier system, will be removed.
 func GetManifestTiers(m Manifest) []ResolvedTier {
 	if len(m.Tiers) > 0 {
 		var result []ResolvedTier
@@ -36,7 +34,7 @@ func GetManifestTiers(m Manifest) []ResolvedTier {
 	return DefaultTiers
 }
 
-// DiscoverAvailableTiers returns only tiers that have at least one file.
+// Deprecated: DiscoverAvailableTiers is part of the old manifest+tier system, will be removed.
 func DiscoverAvailableTiers(m Manifest) []ResolvedTier {
 	presentTiers := make(map[string]bool)
 	for _, f := range m.Files {
@@ -57,7 +55,7 @@ func DiscoverAvailableTiers(m Manifest) []ResolvedTier {
 	return result
 }
 
-// GetAllowedFileTiers returns the set of file-tier values allowed for a given tier ID.
+// Deprecated: GetAllowedFileTiers is part of the old manifest+tier system, will be removed.
 func GetAllowedFileTiers(m Manifest, tierID string) map[string]bool {
 	tiers := GetManifestTiers(m)
 	for _, t := range tiers {
@@ -88,7 +86,7 @@ func GetAllowedFileTiers(m Manifest, tierID string) map[string]bool {
 	return map[string]bool{"core": true}
 }
 
-// SelectFiles filters manifest files to those included in the chosen tier.
+// Deprecated: SelectFiles is part of the old manifest+tier system, will be removed.
 func SelectFiles(files []ManifestFile, m Manifest, tierID string) []ManifestFile {
 	allowed := GetAllowedFileTiers(m, tierID)
 	var result []ManifestFile
@@ -134,6 +132,41 @@ func InferCategory(filePath string) string {
 	return "other"
 }
 
+// PresetCategoryGroup holds a group of preset files under one category.
+type PresetCategoryGroup struct {
+	Category string
+	Label    string
+	Files    []PresetFile
+}
+
+// ListPresetFilesByCategory groups PresetFiles by category, optionally filtering to a single category.
+func ListPresetFilesByCategory(files []PresetFile, category string) []PresetCategoryGroup {
+	groups := make(map[string][]PresetFile)
+	for _, f := range files {
+		cat := f.Category
+		if cat == "" {
+			cat = InferCategory(f.Dest)
+		}
+		if category != "" && cat != category {
+			continue
+		}
+		groups[cat] = append(groups[cat], f)
+	}
+
+	var result []PresetCategoryGroup
+	for _, cat := range CategoryOrder {
+		if fs, ok := groups[cat]; ok {
+			label := CategoryLabels[cat]
+			if label == "" {
+				label = cat
+			}
+			result = append(result, PresetCategoryGroup{Category: cat, Label: label, Files: fs})
+		}
+	}
+	return result
+}
+
+// Deprecated: use ListPresetFilesByCategory instead.
 // ListByCategory groups files by category, optionally filtering by tier and/or category.
 func ListByCategory(files []ManifestFile, m Manifest, tierID, category string) []CategoryGroup {
 	var filtered []ManifestFile

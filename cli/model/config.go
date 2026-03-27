@@ -1,8 +1,9 @@
 package model
 
 const (
-	DefaultManifest = "adhoc"
-	DefaultTier     = "standard"
+	DefaultManifest = "adhoc"    // Deprecated: use DefaultPreset
+	DefaultTier     = "standard" // Deprecated: use DefaultPreset
+	DefaultPreset   = "adhoc/standard"
 
 	// ClearValue is a sentinel passed via configSet to unset a string field.
 	ClearValue = "__clear__"
@@ -12,8 +13,9 @@ const (
 type Config struct {
 	Repo             string            `json:"repo,omitempty"`
 	Branch           string            `json:"branch,omitempty"`
-	Manifest         string            `json:"manifest"`
-	Tier             string            `json:"tier"`
+	Manifest         string            `json:"manifest,omitempty"`          // Deprecated: use Preset
+	Tier             string            `json:"tier,omitempty"`              // Deprecated: use Preset
+	Preset           string            `json:"preset,omitempty"`            // preset ID e.g. "adhoc/standard"
 	FileOverrides    map[string]string `json:"fileOverrides,omitempty"`
 	SkippedVersions  map[string]string `json:"skippedVersions,omitempty"`
 	TelemetryEnabled *bool             `json:"telemetryEnabled,omitempty"`
@@ -32,6 +34,7 @@ func MergeConfig(dst, src *Config) {
 	} else if src.Branch != "" {
 		dst.Branch = src.Branch
 	}
+	// Deprecated fields — kept for backward compat
 	if src.Manifest == ClearValue {
 		dst.Manifest = ""
 	} else if src.Manifest != "" {
@@ -41,6 +44,12 @@ func MergeConfig(dst, src *Config) {
 		dst.Tier = ""
 	} else if src.Tier != "" {
 		dst.Tier = src.Tier
+	}
+	// New preset field
+	if src.Preset == ClearValue {
+		dst.Preset = ""
+	} else if src.Preset != "" {
+		dst.Preset = src.Preset
 	}
 	if src.FileOverrides != nil {
 		if dst.FileOverrides == nil {
@@ -69,4 +78,56 @@ func MergeConfig(dst, src *Config) {
 	if src.TelemetryEnabled != nil {
 		dst.TelemetryEnabled = src.TelemetryEnabled
 	}
+}
+
+// MigrateManifestTierToPreset converts legacy manifest+tier config to preset ID.
+// Returns empty string if no migration needed.
+func MigrateManifestTierToPreset(manifest, tier string) string {
+	if manifest == "" && tier == "" {
+		return ""
+	}
+	m := manifest
+	if m == "" {
+		m = DefaultManifest
+	}
+	t := tier
+	if t == "" {
+		t = DefaultTier
+	}
+	switch m {
+	case "adhoc":
+		switch t {
+		case "minimal":
+			return "adhoc/core"
+		case "standard":
+			return "adhoc/standard"
+		case "advanced":
+			return "adhoc/advanced"
+		default:
+			return m + "/" + t
+		}
+	case "ironarch":
+		switch t {
+		case "skills":
+			return "ironarch/skills"
+		case "workflow":
+			return "ironarch/workflow"
+		default:
+			return m + "/" + t
+		}
+	default:
+		return m + "/" + t
+	}
+}
+
+// ResolvedPreset returns the effective preset ID from config,
+// falling back to legacy manifest+tier migration, then to DefaultPreset.
+func (c *Config) ResolvedPreset() string {
+	if c.Preset != "" {
+		return c.Preset
+	}
+	if c.Manifest != "" || c.Tier != "" {
+		return MigrateManifestTierToPreset(c.Manifest, c.Tier)
+	}
+	return DefaultPreset
 }
