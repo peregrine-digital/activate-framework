@@ -62,17 +62,17 @@ In VS Code's Copilot chat, describe what you need:
 
 Place the file in the appropriate directory within your plugin.
 
-### 3. Add to manifest
+### 3. Add to a preset
 
-Update `manifests/{plugin-name}.json` to include the new file:
+Update `plugins/{plugin-name}/presets/{preset-name}.json` to include the new file:
 
 ```json
 {
-  "src": "instructions/python.instructions.md",
-  "dest": "instructions/python.instructions.md",
-  "tier": "core",
-  "category": "instructions",
-  "description": "Python conventions and project-specific patterns"
+  "name": "My Preset",
+  "description": "What this preset provides",
+  "files": [
+    "instructions/python.instructions.md"
+  ]
 }
 ```
 
@@ -125,7 +125,7 @@ If your customizations don't fit an existing plugin:
 
 1. **Create the plugin directory:**
    ```bash
-   mkdir -p plugins/my-plugin/{instructions,prompts,skills,agents}
+   mkdir -p plugins/my-plugin/{instructions,prompts,skills,agents,presets}
    ```
 
 2. **Add AGENTS.md** (required):
@@ -133,24 +133,13 @@ If your customizations don't fit an existing plugin:
    touch plugins/my-plugin/AGENTS.md
    ```
 
-3. **Create a manifest** in `manifests/my-plugin.json`:
+3. **Create a preset** in `plugins/my-plugin/presets/core.json`:
    ```json
    {
-     "name": "My Plugin",
-     "description": "What this plugin provides",
-     "version": "0.1.0",
-     "basePath": "plugins/my-plugin",
-     "tiers": [
-       { "id": "core", "label": "Core" }
-     ],
+     "name": "My Plugin Core",
+     "description": "What this preset provides",
      "files": [
-       {
-         "src": "AGENTS.md",
-         "dest": "AGENTS.md",
-         "tier": "core",
-         "category": "other",
-         "description": "Plugin guidance"
-       }
+       "AGENTS.md"
      ]
    }
    ```
