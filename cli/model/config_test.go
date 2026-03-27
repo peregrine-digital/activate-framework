@@ -248,10 +248,10 @@ func TestConfig_ResolvedPreset_FallsBackToMigration(t *testing.T) {
 	}
 }
 
-func TestConfig_ResolvedPreset_FallsBackToDefault(t *testing.T) {
+func TestConfig_ResolvedPreset_EmptyWhenUnset(t *testing.T) {
 	cfg := &Config{}
-	if got := cfg.ResolvedPreset(); got != DefaultPreset {
-		t.Fatalf("expected %q, got %q", DefaultPreset, got)
+	if got := cfg.ResolvedPreset(); got != "" {
+		t.Fatalf("expected empty string, got %q", got)
 	}
 }
 

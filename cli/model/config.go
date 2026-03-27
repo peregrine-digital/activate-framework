@@ -1,9 +1,8 @@
 package model
 
 const (
-	DefaultManifest = "adhoc"    // Deprecated: use DefaultPreset
-	DefaultTier     = "standard" // Deprecated: use DefaultPreset
-	DefaultPreset   = "adhoc/standard"
+	DefaultManifest = "adhoc"    // Deprecated: use Preset field
+	DefaultTier     = "standard" // Deprecated: use Preset field
 
 	// ClearValue is a sentinel passed via configSet to unset a string field.
 	ClearValue = "__clear__"
@@ -121,7 +120,7 @@ func MigrateManifestTierToPreset(manifest, tier string) string {
 }
 
 // ResolvedPreset returns the effective preset ID from config,
-// falling back to legacy manifest+tier migration, then to DefaultPreset.
+// falling back to legacy manifest+tier migration. Returns "" if no preset is configured.
 func (c *Config) ResolvedPreset() string {
 	if c.Preset != "" {
 		return c.Preset
@@ -129,5 +128,5 @@ func (c *Config) ResolvedPreset() string {
 	if c.Manifest != "" || c.Tier != "" {
 		return MigrateManifestTierToPreset(c.Manifest, c.Tier)
 	}
-	return DefaultPreset
+	return ""
 }

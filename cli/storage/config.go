@@ -97,7 +97,6 @@ func ResolveConfig(projectDir string, overrides *model.Config) model.Config {
 		Branch:          DefaultBranch,
 		Manifest:        model.DefaultManifest,
 		Tier:            model.DefaultTier,
-		Preset:          model.DefaultPreset,
 		FileOverrides:   make(map[string]string),
 		SkippedVersions: make(map[string]string),
 	}
