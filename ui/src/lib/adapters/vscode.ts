@@ -103,6 +103,9 @@ export function createVSCodeAPI(): ActivateAPI {
     listManifests: () => request<Manifest[]>('listManifests'),
     listBranches: () => request<string[]>('listBranches'),
 
+    editRepo: (current, scope) => request('editRepo', { current, scope }),
+    editBranch: (current, scope) => request('editBranch', { current, scope }),
+
     runTelemetry: () => request('refreshUsage'),
     readTelemetryLog: () => request<TelemetryEntry[]>('readTelemetryLog'),
 

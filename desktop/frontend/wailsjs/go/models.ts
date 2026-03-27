@@ -5,6 +5,7 @@ export namespace main {
 	    name: string;
 	    manifest?: string;
 	    tier?: string;
+	    preset?: string;
 	    fileCount: number;
 	    exists: boolean;
 	
@@ -18,6 +19,7 @@ export namespace main {
 	        this.name = source["name"];
 	        this.manifest = source["manifest"];
 	        this.tier = source["tier"];
+	        this.preset = source["preset"];
 	        this.fileCount = source["fileCount"];
 	        this.exists = source["exists"];
 	    }

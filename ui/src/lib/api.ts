@@ -43,6 +43,10 @@ export interface ActivateAPI {
   listManifests(): Promise<Manifest[]>;
   listBranches(): Promise<string[]>;
 
+  // ── Native editing (platform may use native pickers) ──
+  editRepo?(current: string, scope: 'global' | 'project'): Promise<void>;
+  editBranch?(current: string, scope: 'global' | 'project'): Promise<void>;
+
   // ── Telemetry ──
   runTelemetry(): Promise<void>;
   readTelemetryLog(): Promise<TelemetryEntry[]>;

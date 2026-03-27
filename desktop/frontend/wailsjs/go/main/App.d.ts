@@ -27,6 +27,8 @@ export function ListBranches():Promise<json.RawMessage>;
 
 export function ListManifests():Promise<json.RawMessage>;
 
+export function ListPresets():Promise<json.RawMessage>;
+
 export function ListWorkspaces():Promise<Array<main.WorkspaceInfo>>;
 
 export function OpenFile(arg1:string):Promise<void>;

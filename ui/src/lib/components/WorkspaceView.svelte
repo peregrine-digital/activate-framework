@@ -22,7 +22,7 @@
 {#if page === 'no-cli'}
   <NoCliPage onInstallCLI={() => api.installCLI()} />
 {:else if page === 'settings'}
-  <GlobalSettingsPage {api} {serverVersion} onBack={onBack} />
+  <GlobalSettingsPage {appState} {api} {serverVersion} onBack={onBack} />
 {:else if page === 'usage'}
   <UsagePage {api} telemetryEnabled={appState.config.telemetryEnabled === true} onBack={onBack} />
 {:else if page === 'workspace-settings'}
