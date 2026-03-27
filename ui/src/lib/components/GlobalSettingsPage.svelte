@@ -1,14 +1,17 @@
 <script lang="ts">
   import type { ActivateAPI } from '../api.js';
-  import type { Config } from '../types.js';
+  import type { AppState, Config } from '../types.js';
+  import SelectModal from './SelectModal.svelte';
+  import type { SelectOption } from './SelectModal.svelte';
 
   interface Props {
+    appState: AppState;
     api: ActivateAPI;
     serverVersion: string;
     onBack: () => void;
   }
 
-  let { api, serverVersion, onBack }: Props = $props();
+  let { appState, api, serverVersion, onBack }: Props = $props();
 
   let globalCfg = $state<Config | null>(null);
 
@@ -19,7 +22,89 @@
   $effect(() => { loadConfig(); });
 
   let telemetryEnabled = $derived(globalCfg?.telemetryEnabled === true);
+  let hasPresets = $derived((appState.presets?.length ?? 0) > 0);
+  let presetLabel = $derived(appState.presets?.find((p) => p.id === globalCfg?.preset)?.name || globalCfg?.preset || '(not set)');
+
+  // Inline editing state
+  let editingRepo = $state(false);
+  let repoInput = $state('');
+  let editingBranch = $state(false);
+  let branchInput = $state('');
+  let selectModal = $state<{ title: string; options: SelectOption[]; onSelect: (id: string) => void } | null>(null);
+
+  function startEditRepo() {
+    repoInput = globalCfg?.repo || '';
+    editingRepo = true;
+  }
+
+  async function saveRepo() {
+    const value = repoInput.trim();
+    await api.setConfig({ repo: value || '__clear__', scope: 'global' });
+    editingRepo = false;
+    await loadConfig();
+  }
+
+  async function openBranchModal() {
+    const branches = await api.listBranches();
+    const options: SelectOption[] = [
+      { id: '__clear__', label: '(reset to default)', description: 'Use default branch' },
+      { id: '__custom__', label: 'Custom branch…', description: 'Enter a branch name manually' },
+      ...branches.map((b) => ({ id: b, label: b, active: b === globalCfg?.branch })),
+    ];
+    selectModal = {
+      title: 'Select Branch',
+      options,
+      onSelect: async (id) => {
+        selectModal = null;
+        if (id === '__custom__') {
+          branchInput = globalCfg?.branch || '';
+          editingBranch = true;
+          return;
+        }
+        await api.setConfig({ branch: id, scope: 'global' });
+        await loadConfig();
+      },
+    };
+  }
+
+  async function saveBranch() {
+    const value = branchInput.trim();
+    await api.setConfig({ branch: value || '__clear__', scope: 'global' });
+    editingBranch = false;
+    await loadConfig();
+  }
+
+  function openPresetModal() {
+    const presets = appState.presets ?? [];
+    const options: SelectOption[] = [
+      { id: '__clear__', label: '(reset to default)', description: 'Remove preset override' },
+      ...presets.map((p) => ({
+        id: p.id,
+        label: p.name,
+        description: p.description,
+        active: p.id === globalCfg?.preset,
+      })),
+    ];
+    selectModal = {
+      title: 'Select Preset',
+      options,
+      onSelect: async (id) => {
+        selectModal = null;
+        await api.setConfig({ preset: id, scope: 'global' } as any);
+        await loadConfig();
+      },
+    };
+  }
 </script>
+
+{#if selectModal}
+  <SelectModal
+    title={selectModal.title}
+    options={selectModal.options}
+    onSelect={selectModal.onSelect}
+    onClose={() => (selectModal = null)}
+  />
+{/if}
 
 <div class="flex gap-2 my-2 flex-wrap items-center">
   <button class="btn btn-secondary" onclick={onBack}>← Back</button>
@@ -41,12 +126,57 @@
   </div>
   <div class="setting-row">
     <span class="font-semibold text-xs">Repository</span>
-    <span class="text-xs">{globalCfg.repo || '(not set)'}</span>
+    {#if editingRepo}
+      <div class="flex items-center gap-1">
+        <input
+          type="text"
+          bind:value={repoInput}
+          placeholder="owner/repo"
+          class="inline-input"
+          onkeydown={(e) => { if (e.key === 'Enter') saveRepo(); if (e.key === 'Escape') editingRepo = false; }}
+          autofocus
+        />
+        <button class="edit-action" onclick={saveRepo}>✓</button>
+        <button class="edit-action" onclick={() => editingRepo = false}>✕</button>
+      </div>
+    {:else}
+      <span class="text-xs flex items-center gap-1.5">
+        {globalCfg.repo || '(not set)'}
+        <button class="edit-btn" onclick={startEditRepo} title="Change repository">✎</button>
+      </span>
+    {/if}
   </div>
   <div class="setting-row">
     <span class="font-semibold text-xs">Branch</span>
-    <span class="text-xs">{globalCfg.branch || '(not set)'}</span>
+    {#if editingBranch}
+      <div class="flex items-center gap-1">
+        <input
+          type="text"
+          bind:value={branchInput}
+          placeholder="main"
+          class="inline-input"
+          onkeydown={(e) => { if (e.key === 'Enter') saveBranch(); if (e.key === 'Escape') editingBranch = false; }}
+          autofocus
+        />
+        <button class="edit-action" onclick={saveBranch}>✓</button>
+        <button class="edit-action" onclick={() => editingBranch = false}>✕</button>
+      </div>
+    {:else}
+      <span class="text-xs flex items-center gap-1.5">
+        {globalCfg.branch || '(not set)'}
+        <button class="edit-btn" onclick={openBranchModal} title="Change branch">✎</button>
+      </span>
+    {/if}
   </div>
+  {#if hasPresets}
+    <div class="setting-row">
+      <span class="font-semibold text-xs">Preset</span>
+      <span class="text-xs flex items-center gap-1.5">
+        {presetLabel}
+        <button class="edit-btn" onclick={openPresetModal} title="Change preset">✎</button>
+      </span>
+    </div>
+  {/if}
 {:else}
   <div class="text-xs opacity-50 py-3 pl-2">Loading…</div>
 {/if}
@@ -105,6 +235,46 @@
   }
   .toggle-btn:hover {
     background: var(--color-activate-btn-secondary-hover);
+  }
+  .edit-btn {
+    font-size: 12px;
+    padding: 1px 4px;
+    border-radius: 0.25rem;
+    cursor: pointer;
+    border: none;
+    background: transparent;
+    color: var(--color-activate-fg);
+    opacity: 0.35;
+    transition: opacity 0.15s ease;
+  }
+  .edit-btn:hover {
+    opacity: 1;
+  }
+  .edit-action {
+    font-size: 12px;
+    padding: 2px 6px;
+    border-radius: 0.25rem;
+    cursor: pointer;
+    border: 1px solid transparent;
+    background: var(--color-activate-btn-secondary-bg);
+    color: var(--color-activate-btn-secondary-fg);
+    transition: all 0.15s ease;
+  }
+  .edit-action:hover {
+    background: var(--color-activate-btn-secondary-hover);
+  }
+  .inline-input {
+    font-size: 12px;
+    padding: 2px 6px;
+    border-radius: 0.25rem;
+    border: 1px solid var(--color-activate-border);
+    background: rgba(39, 39, 42, 0.6);
+    color: var(--color-activate-fg);
+    width: 12rem;
+    outline: none;
+  }
+  .inline-input:focus {
+    border-color: var(--color-activate-btn-primary-bg);
   }
   .toggle-btn.active {
     background: var(--color-activate-btn-primary-bg);

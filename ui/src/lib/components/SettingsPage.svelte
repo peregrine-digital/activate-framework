@@ -1,6 +1,8 @@
 <script lang="ts">
   import type { ActivateAPI } from '../api.js';
   import type { AppState, Config } from '../types.js';
+  import SelectModal from './SelectModal.svelte';
+  import type { SelectOption } from './SelectModal.svelte';
 
   interface Props {
     appState: AppState;
@@ -23,6 +25,16 @@
   let resolved = $derived(appState.config);
   let tiers = $derived(appState.tiers);
   let tierLabel = $derived(tiers.find((t) => t.id === resolved.tier)?.label || resolved.tier || '—');
+  let hasPresets = $derived((appState.presets?.length ?? 0) > 0);
+  let presetLabel = $derived(appState.presets?.find((p) => p.id === resolved.preset)?.name || resolved.preset || '—');
+  let overrideFields = $derived(hasPresets ? ['manifest', 'tier', 'repo', 'branch', 'preset'] : ['manifest', 'tier', 'repo', 'branch']);
+
+  // Inline editing state
+  let editingRepo = $state(false);
+  let repoInput = $state('');
+  let editingBranch = $state(false);
+  let branchInput = $state('');
+  let selectModal = $state<{ title: string; options: SelectOption[]; onSelect: (id: string) => void } | null>(null);
 
   function configSource(field: keyof Config): 'project' | 'global' | 'default' {
     if (projectCfg && projectCfg[field] != null && projectCfg[field] !== '') return 'project';
@@ -30,10 +42,84 @@
     return 'default';
   }
 
-  function clearOverride(updates: Record<string, string>) {
-    api.setConfig({ ...updates, scope: 'project' } as any);
+  async function clearOverride(updates: Record<string, string>) {
+    await api.setConfig({ ...updates, scope: 'project' } as any);
+    await loadConfigs();
+  }
+
+  function startEditRepo() {
+    repoInput = resolved.repo || '';
+    editingRepo = true;
+  }
+
+  async function saveRepo() {
+    const value = repoInput.trim();
+    await api.setConfig({ repo: value || '__clear__', scope: 'project' });
+    editingRepo = false;
+    await loadConfigs();
+  }
+
+  async function openBranchModal() {
+    const branches = await api.listBranches();
+    const options: SelectOption[] = [
+      { id: '__clear__', label: '(reset to default)', description: 'Use default branch' },
+      { id: '__custom__', label: 'Custom branch…', description: 'Enter a branch name manually' },
+      ...branches.map((b) => ({ id: b, label: b, active: b === resolved.branch })),
+    ];
+    selectModal = {
+      title: 'Select Branch',
+      options,
+      onSelect: async (id) => {
+        selectModal = null;
+        if (id === '__custom__') {
+          branchInput = resolved.branch || '';
+          editingBranch = true;
+          return;
+        }
+        await api.setConfig({ branch: id, scope: 'project' });
+        await loadConfigs();
+      },
+    };
+  }
+
+  async function saveBranch() {
+    const value = branchInput.trim();
+    await api.setConfig({ branch: value || '__clear__', scope: 'project' });
+    editingBranch = false;
+    await loadConfigs();
+  }
+
+  function openPresetModal() {
+    const presets = appState.presets ?? [];
+    const options: SelectOption[] = [
+      { id: '__clear__', label: '(reset to default)', description: 'Remove preset override' },
+      ...presets.map((p) => ({
+        id: p.id,
+        label: p.name,
+        description: p.description,
+        active: p.id === resolved.preset,
+      })),
+    ];
+    selectModal = {
+      title: 'Select Preset',
+      options,
+      onSelect: async (id) => {
+        selectModal = null;
+        await api.setConfig({ preset: id, scope: 'project' } as any);
+        await loadConfigs();
+      },
+    };
   }
 </script>
+
+{#if selectModal}
+  <SelectModal
+    title={selectModal.title}
+    options={selectModal.options}
+    onSelect={selectModal.onSelect}
+    onClose={() => (selectModal = null)}
+  />
+{/if}
 
 <div class="flex gap-2 my-2 flex-wrap items-center">
   <button class="btn btn-secondary" onclick={onBack}>← Back</button>
@@ -62,26 +148,69 @@
 
 <div class="setting-row">
   <span class="font-semibold text-xs">Repository</span>
-  <span class="text-xs flex items-center gap-1.5">
-    {resolved.repo || 'peregrine-digital/activate-framework'}
-    <span class="source-badge {configSource('repo')}">{configSource('repo')}</span>
-  </span>
+  {#if editingRepo}
+    <div class="flex items-center gap-1">
+      <input
+        type="text"
+        bind:value={repoInput}
+        placeholder="owner/repo"
+        class="inline-input"
+        onkeydown={(e) => { if (e.key === 'Enter') saveRepo(); if (e.key === 'Escape') editingRepo = false; }}
+        autofocus
+      />
+      <button class="edit-action" onclick={saveRepo}>✓</button>
+      <button class="edit-action" onclick={() => editingRepo = false}>✕</button>
+    </div>
+  {:else}
+    <span class="text-xs flex items-center gap-1.5">
+      {resolved.repo || 'peregrine-digital/activate-framework'}
+      <span class="source-badge {configSource('repo')}">{configSource('repo')}</span>
+      <button class="edit-btn" onclick={startEditRepo} title="Change repository">✎</button>
+    </span>
+  {/if}
 </div>
 
 <div class="setting-row">
   <span class="font-semibold text-xs">Branch</span>
-  <span class="text-xs flex items-center gap-1.5">
-    {resolved.branch || 'main'}
-    <span class="source-badge {configSource('branch')}">{configSource('branch')}</span>
-  </span>
+  {#if editingBranch}
+    <div class="flex items-center gap-1">
+      <input
+        type="text"
+        bind:value={branchInput}
+        placeholder="main"
+        class="inline-input"
+        onkeydown={(e) => { if (e.key === 'Enter') saveBranch(); if (e.key === 'Escape') editingBranch = false; }}
+        autofocus
+      />
+      <button class="edit-action" onclick={saveBranch}>✓</button>
+      <button class="edit-action" onclick={() => editingBranch = false}>✕</button>
+    </div>
+  {:else}
+    <span class="text-xs flex items-center gap-1.5">
+      {resolved.branch || 'main'}
+      <span class="source-badge {configSource('branch')}">{configSource('branch')}</span>
+      <button class="edit-btn" onclick={openBranchModal} title="Change branch">✎</button>
+    </span>
+  {/if}
 </div>
+
+{#if hasPresets}
+  <div class="setting-row">
+    <span class="font-semibold text-xs">Preset</span>
+    <span class="text-xs flex items-center gap-1.5">
+      {presetLabel}
+      <span class="source-badge {configSource('preset')}">{configSource('preset')}</span>
+      <button class="edit-btn" onclick={openPresetModal} title="Change preset">✎</button>
+    </span>
+  </div>
+{/if}
 
 <hr class="divider" />
 
 <div class="section-label">Project Overrides</div>
 
 {#if projectCfg}
-  {#each ['manifest', 'tier', 'repo', 'branch'] as field}
+  {#each overrideFields as field}
     <div class="setting-row">
       <span class="font-semibold text-xs capitalize">{field}</span>
       <span class="text-xs flex items-center gap-1.5">
@@ -162,5 +291,45 @@
     background: var(--color-activate-btn-primary-bg);
     color: var(--color-activate-btn-primary-fg);
     box-shadow: 0 0 8px var(--color-activate-glow);
+  }
+  .edit-btn {
+    font-size: 12px;
+    padding: 1px 4px;
+    border-radius: 0.25rem;
+    cursor: pointer;
+    border: none;
+    background: transparent;
+    color: var(--color-activate-fg);
+    opacity: 0.35;
+    transition: opacity 0.15s ease;
+  }
+  .edit-btn:hover {
+    opacity: 1;
+  }
+  .edit-action {
+    font-size: 12px;
+    padding: 2px 6px;
+    border-radius: 0.25rem;
+    cursor: pointer;
+    border: 1px solid transparent;
+    background: var(--color-activate-btn-secondary-bg);
+    color: var(--color-activate-btn-secondary-fg);
+    transition: all 0.15s ease;
+  }
+  .edit-action:hover {
+    background: var(--color-activate-btn-secondary-hover);
+  }
+  .inline-input {
+    font-size: 12px;
+    padding: 2px 6px;
+    border-radius: 0.25rem;
+    border: 1px solid var(--color-activate-border);
+    background: rgba(39, 39, 42, 0.6);
+    color: var(--color-activate-fg);
+    width: 12rem;
+    outline: none;
+  }
+  .inline-input:focus {
+    border-color: var(--color-activate-btn-primary-bg);
   }
 </style>
