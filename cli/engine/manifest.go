@@ -93,7 +93,7 @@ func InstallFilesFromRemote(files []model.ManifestFile, basePath, targetDir, rep
 		if err := os.WriteFile(destPath, data, 0644); err != nil {
 			return err
 		}
-		fmt.Printf("  ✓  %s\n", f.Dest)
+		fmt.Fprintf(os.Stderr, "  ✓  %s\n", f.Dest)
 	}
 
 	return nil

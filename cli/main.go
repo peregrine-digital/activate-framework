@@ -39,6 +39,7 @@ type cliArgs struct {
 	branch       string
 	list         bool
 	json         bool
+	yes          bool
 	help         bool
 	version      bool
 }
@@ -52,7 +53,7 @@ func parseArgs(args []string) cliArgs {
 	i := 0
 	if i < len(args) && !strings.HasPrefix(args[i], "-") {
 		switch args[i] {
-		case "menu", "install", "list", "state", "config", "repo", "update", "diff", "sync", "serve", "self-update", "version", "help":
+		case "menu", "install", "list", "state", "config", "repo", "update", "diff", "sync", "serve", "self-update", "uninstall", "version", "help":
 			a.command = args[i]
 			i++
 		}
@@ -126,6 +127,8 @@ func parseArgs(args []string) cliArgs {
 			a.list = true
 		case "--json":
 			a.json = true
+		case "--yes", "-y":
+			a.yes = true
 		case "--help", "-h":
 			a.help = true
 		case "--version", "-v":
@@ -153,7 +156,8 @@ Commands:
 	menu        State-aware interactive menu (default)
 	install     Interactive installer (or --file for single file)
 	update      Re-install currently installed files
-	self-update Update the activate binary to the latest release
+	self-update  Update the activate binary to the latest release
+	uninstall   Remove activate binary, config, and cache
 	sync        Detect version mismatch and re-inject if needed
 	serve       Start JSON-RPC daemon (--stdio for stdio transport)
 	diff        Show diff between bundled and installed file
@@ -175,6 +179,7 @@ Flags:
   --repo <owner/repo> GitHub repository (default: %s)
   --branch <name>     Branch or tag (default: %s)
   --json              Machine-readable JSON output (list command)
+  -y, --yes           Skip confirmation prompts
   -h, --help          Show this help message
   -v, --version       Print version
 `, version, storage.DefaultRepo, storage.DefaultBranch)
@@ -199,6 +204,15 @@ func main() {
 		os.Exit(0)
 	}
 
+	// ── Uninstall (no manifests needed) ──────────────────────────
+	if args.command == "uninstall" {
+		if err := commands.RunUninstall(args.yes); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+			os.Exit(1)
+		}
+		os.Exit(0)
+	}
+
 	// ── Self-update (no manifests needed) ──────────────────────
 	if args.command == "self-update" {
 		fmt.Printf("Checking for updates (current: v%s)...\n", version)
@@ -213,7 +227,7 @@ func main() {
 
 	// ── Passive update hint (non-blocking, cached) ─────────────
 	if args.command != "serve" {
-		if cached := selfupdate.CheckCached(version, "", ""); cached != nil && cached.UpdateAvail {
+		if cached := selfupdate.CheckCached(version, "", "", ""); cached != nil && cached.UpdateAvail {
 			fmt.Fprintf(os.Stderr, "Update available: v%s → v%s (run 'activate self-update')\n\n", cached.CurrentVersion, cached.LatestVersion)
 		}
 	}

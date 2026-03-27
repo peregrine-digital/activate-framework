@@ -492,6 +492,87 @@ func TestServiceRepoRemove(t *testing.T) {
 	}
 }
 
+// ── TestServiceRepoAddRemoveAdd (lifecycle round-trip) ─────────
+
+func TestServiceRepoAddRemoveAdd(t *testing.T) {
+	m, projectDir, repo, branch, _ := setupBundle(t)
+	svc := newTestService(m, projectDir, repo, branch)
+	destPath := filepath.Join(projectDir, ".github", "instructions", "test.instructions.md")
+
+	// 1. Add → files installed, hasInstallMarker = true
+	if _, err := svc.RepoAdd(); err != nil {
+		t.Fatalf("first RepoAdd: %v", err)
+	}
+	if _, err := os.Stat(destPath); err != nil {
+		t.Fatal("file should exist after first add")
+	}
+	state1 := svc.GetState()
+	if !state1.State.HasInstallMarker {
+		t.Fatal("expected hasInstallMarker=true after add")
+	}
+
+	// 2. Remove → files removed, hasInstallMarker = false
+	if err := svc.RepoRemove(); err != nil {
+		t.Fatalf("RepoRemove: %v", err)
+	}
+	if _, err := os.Stat(destPath); !os.IsNotExist(err) {
+		t.Fatal("file should not exist after remove")
+	}
+	state2 := svc.GetState()
+	if state2.State.HasInstallMarker {
+		t.Fatal("expected hasInstallMarker=false after remove")
+	}
+
+	// 3. Add again → files reinstalled, hasInstallMarker = true
+	if _, err := svc.RepoAdd(); err != nil {
+		t.Fatalf("second RepoAdd: %v", err)
+	}
+	if _, err := os.Stat(destPath); err != nil {
+		t.Fatal("file should exist after second add")
+	}
+	state3 := svc.GetState()
+	if !state3.State.HasInstallMarker {
+		t.Fatal("expected hasInstallMarker=true after second add")
+	}
+	if len(state3.Files) == 0 {
+		t.Fatal("expected files in state after second add")
+	}
+}
+
+// ── TestServiceSetConfigRefreshesState ─────────────────────────
+
+func TestServiceSetConfigRefreshesState(t *testing.T) {
+	m2 := model.Manifest{
+		ID: "other-manifest", Name: "Other",
+		BasePath: "plugins/test",
+		Files: []model.ManifestFile{
+			{Src: "instructions/test.instructions.md", Dest: "instructions/test.instructions.md", Tier: "core"},
+		},
+	}
+
+	m, projectDir, repo, branch, _ := setupBundle(t)
+	svc := newTestService(m, projectDir, repo, branch)
+	svc.Manifests = append(svc.Manifests, m2)
+
+	// Add with first manifest
+	if _, err := svc.RepoAdd(); err != nil {
+		t.Fatal(err)
+	}
+	state1 := svc.GetState()
+	if state1.Config.Manifest != "test-manifest" {
+		t.Fatalf("expected test-manifest, got %s", state1.Config.Manifest)
+	}
+
+	// Change tier and verify state reflects it
+	if _, err := svc.SetConfig("project", &model.Config{Tier: "core"}); err != nil {
+		t.Fatal(err)
+	}
+	state2 := svc.GetState()
+	if state2.Config.Tier != "core" {
+		t.Fatalf("expected tier=core after set, got %s", state2.Config.Tier)
+	}
+}
+
 // ── TestServiceSync ────────────────────────────────────────────
 
 func TestServiceSync(t *testing.T) {

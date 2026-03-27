@@ -31,11 +31,31 @@ type githubAsset struct {
 }
 
 // assetAPIURL returns the GitHub API URL for downloading a release asset.
-// For private repos, this endpoint (with Accept: application/octet-stream)
-// is the only way to download assets.
 func assetAPIURL(assetID int) string {
 	return fmt.Sprintf("%s/repos/%s/%s/releases/assets/%d",
 		storage.APIBase, GitHubOwner, GitHubRepo, assetID)
+}
+
+// newGitHubRequest creates an authenticated GitHub API request.
+func newGitHubRequest(method, url, token string) (*http.Request, error) {
+	req, err := http.NewRequest(method, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Accept", "application/vnd.github+json")
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+	return req, nil
+}
+
+// decodeReleases parses a JSON array of GitHub release objects from a reader.
+func decodeReleases(r io.Reader) ([]githubRelease, error) {
+	var releases []githubRelease
+	if err := json.NewDecoder(r).Decode(&releases); err != nil {
+		return nil, err
+	}
+	return releases, nil
 }
 
 // CheckVsix queries the latest GitHub release for a .vsix asset.
@@ -45,13 +65,9 @@ func assetAPIURL(assetID int) string {
 func CheckVsix(currentExtVersion, token string) VsixInfo {
 	url := fmt.Sprintf("%s/repos/%s/%s/releases?per_page=1", storage.APIBase, GitHubOwner, GitHubRepo)
 
-	req, err := http.NewRequest("GET", url, nil)
+	req, err := newGitHubRequest("GET", url, token)
 	if err != nil {
 		return VsixInfo{}
-	}
-	req.Header.Set("Accept", "application/vnd.github+json")
-	if token != "" {
-		req.Header.Set("Authorization", "Bearer "+token)
 	}
 
 	resp, err := storage.GitHubDo(req)
@@ -64,8 +80,8 @@ func CheckVsix(currentExtVersion, token string) VsixInfo {
 		return VsixInfo{}
 	}
 
-	var releases []githubRelease
-	if err := json.NewDecoder(resp.Body).Decode(&releases); err != nil || len(releases) == 0 {
+	releases, err := decodeReleases(resp.Body)
+	if err != nil || len(releases) == 0 {
 		return VsixInfo{}
 	}
 	release := releases[0]
@@ -77,7 +93,7 @@ func CheckVsix(currentExtVersion, token string) VsixInfo {
 		if strings.HasSuffix(asset.Name, ".vsix") {
 			vsixAsset = &release.Assets[i]
 		}
-		if asset.Name == "checksums.txt" || asset.Name == "SHA256SUMS" || asset.Name == "sha256sums.txt" {
+		if isChecksumFile(asset.Name) {
 			checksumsAsset = &release.Assets[i]
 		}
 	}

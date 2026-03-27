@@ -388,6 +388,115 @@ func TestDaemonRepoAddAndRemove(t *testing.T) {
 	}
 }
 
+// TestDaemonRepoAddRemoveAddRoundTrip tests the full lifecycle over RPC:
+// add → verify state → remove → verify state → add again → verify state.
+// This catches stale daemon state after remove operations.
+func TestDaemonRepoAddRemoveAddRoundTrip(t *testing.T) {
+	h := newHarness(t)
+	defer h.cleanup()
+
+	sendRequest(t, h.clientWriter, h.clientReader, transport.MethodInitialize, 1, transport.InitializeParams{ProjectDir: h.projectDir})
+
+	destPath := filepath.Join(h.projectDir, ".github", "instructions", "setup.instructions.md")
+
+	// 1. Add
+	resp := sendRequest(t, h.clientWriter, h.clientReader, transport.MethodRepoAdd, 2, nil)
+	if resp.Error != nil {
+		t.Fatalf("first repoAdd error: %v", resp.Error)
+	}
+	readNotification(t, h.clientReader)
+
+	if _, err := os.Stat(destPath); err != nil {
+		t.Fatal("file should exist after first add")
+	}
+
+	// Verify state shows installed
+	state1Resp := sendRequest(t, h.clientWriter, h.clientReader, transport.MethodStateGet, 3, nil)
+	state1 := resultMap(t, state1Resp)
+	stateObj1, _ := state1["state"].(map[string]interface{})
+	if stateObj1["hasInstallMarker"] != true {
+		t.Fatalf("expected hasInstallMarker=true after add, got %v", stateObj1["hasInstallMarker"])
+	}
+
+	// 2. Remove
+	resp2 := sendRequest(t, h.clientWriter, h.clientReader, transport.MethodRepoRemove, 4, nil)
+	if resp2.Error != nil {
+		t.Fatalf("repoRemove error: %v", resp2.Error)
+	}
+	readNotification(t, h.clientReader)
+
+	if _, err := os.Stat(destPath); !os.IsNotExist(err) {
+		t.Fatal("file should not exist after remove")
+	}
+
+	// Verify state shows not installed
+	state2Resp := sendRequest(t, h.clientWriter, h.clientReader, transport.MethodStateGet, 5, nil)
+	state2 := resultMap(t, state2Resp)
+	stateObj2, _ := state2["state"].(map[string]interface{})
+	if stateObj2["hasInstallMarker"] != false {
+		t.Fatalf("expected hasInstallMarker=false after remove, got %v", stateObj2["hasInstallMarker"])
+	}
+
+	// 3. Add again — this is the critical test
+	resp3 := sendRequest(t, h.clientWriter, h.clientReader, transport.MethodRepoAdd, 6, nil)
+	if resp3.Error != nil {
+		t.Fatalf("second repoAdd error: %v", resp3.Error)
+	}
+	readNotification(t, h.clientReader)
+
+	if _, err := os.Stat(destPath); err != nil {
+		t.Fatal("file should exist after second add")
+	}
+
+	// Verify state shows installed again
+	state3Resp := sendRequest(t, h.clientWriter, h.clientReader, transport.MethodStateGet, 7, nil)
+	state3 := resultMap(t, state3Resp)
+	stateObj3, _ := state3["state"].(map[string]interface{})
+	if stateObj3["hasInstallMarker"] != true {
+		t.Fatalf("expected hasInstallMarker=true after second add, got %v", stateObj3["hasInstallMarker"])
+	}
+	// Verify files are populated
+	files3, _ := state3["files"].([]interface{})
+	if len(files3) == 0 {
+		t.Fatal("expected files in state after second add")
+	}
+}
+
+// TestDaemonSetConfigUpdatesState verifies that changing config via RPC
+// is reflected in subsequent state queries.
+func TestDaemonSetConfigUpdatesState(t *testing.T) {
+	h := newHarness(t)
+	defer h.cleanup()
+
+	sendRequest(t, h.clientWriter, h.clientReader, transport.MethodInitialize, 1, transport.InitializeParams{ProjectDir: h.projectDir})
+
+	// Get initial state
+	state1Resp := sendRequest(t, h.clientWriter, h.clientReader, transport.MethodStateGet, 2, nil)
+	state1 := resultMap(t, state1Resp)
+	config1, _ := state1["config"].(map[string]interface{})
+	if config1["tier"] != "standard" {
+		t.Fatalf("initial tier = %v, want standard", config1["tier"])
+	}
+
+	// Change tier
+	setResp := sendRequest(t, h.clientWriter, h.clientReader, transport.MethodConfigSet, 3, transport.ConfigSetParams{
+		Scope:   "project",
+		Updates: &model.Config{Tier: "core"},
+	})
+	if setResp.Error != nil {
+		t.Fatalf("setConfig error: %v", setResp.Error)
+	}
+	readNotification(t, h.clientReader)
+
+	// Verify new state reflects the change
+	state2Resp := sendRequest(t, h.clientWriter, h.clientReader, transport.MethodStateGet, 4, nil)
+	state2 := resultMap(t, state2Resp)
+	config2, _ := state2["config"].(map[string]interface{})
+	if config2["tier"] != "core" {
+		t.Fatalf("tier after set = %v, want core", config2["tier"])
+	}
+}
+
 func TestDaemonFileInstallAndUninstall(t *testing.T) {
 	h := newHarness(t)
 	defer h.cleanup()
@@ -837,5 +946,58 @@ func TestDaemonBranchList(t *testing.T) {
 	}
 	if len(branches) != 2 || branches[0] != "main" || branches[1] != "develop" {
 		t.Fatalf("unexpected branches: %v", branches)
+	}
+}
+
+// TestServiceGetStateReadsFromDisk verifies that GetState() picks up
+// external filesystem changes (simulating another process modifying
+// the sidecar or config). This is the core cross-process sync contract.
+func TestServiceGetStateReadsFromDisk(t *testing.T) {
+	m, projectDir, repo, branch, _ := setupBundle(t)
+	svc := newTestService(m, projectDir, repo, branch)
+
+	// Initially no install marker
+	state1 := svc.GetState()
+	if state1.State.HasInstallMarker {
+		t.Fatal("expected no install marker initially")
+	}
+
+	// Simulate another process writing a sidecar directly to disk
+	sc := model.RepoSidecar{
+		Manifest: "test-manifest",
+		Tier:     "minimal",
+		Files:    []string{".github/instructions/test.instructions.md"},
+	}
+	if err := storage.WriteRepoSidecar(projectDir, sc); err != nil {
+		t.Fatal(err)
+	}
+
+	// GetState should pick up the change without any explicit refresh
+	state2 := svc.GetState()
+	if !state2.State.HasInstallMarker {
+		t.Fatal("expected hasInstallMarker=true after external sidecar write")
+	}
+
+	// Simulate another process changing the tier in config
+	if err := storage.WriteProjectConfig(projectDir, &model.Config{
+		Manifest: "test-manifest", Tier: "core",
+		Repo: repo, Branch: branch,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// GetState should reflect the new tier
+	state3 := svc.GetState()
+	if state3.Config.Tier != "core" {
+		t.Fatalf("expected tier=core after external config write, got %s", state3.Config.Tier)
+	}
+
+	// Simulate another process removing the sidecar
+	os.Remove(storage.SidecarPath(projectDir))
+
+	// GetState should show no install marker
+	state4 := svc.GetState()
+	if state4.State.HasInstallMarker {
+		t.Fatal("expected hasInstallMarker=false after external sidecar delete")
 	}
 }

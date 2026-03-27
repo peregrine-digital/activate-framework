@@ -1,0 +1,33 @@
+/**
+ * VS Code theme adapter CSS.
+ *
+ * When loaded inside a VS Code webview, this remaps Activate theme tokens
+ * to the native VS Code CSS variables, so the UI matches the editor theme.
+ *
+ * Imported by WebviewApp.svelte only (not the standalone dev preview).
+ */
+:root {
+  --color-activate-fg: var(--vscode-foreground, #cccccc);
+  --color-activate-fg-muted: var(--vscode-descriptionForeground, #999999);
+  --color-activate-bg: var(--vscode-sideBar-background, #1e1e1e);
+  --color-activate-bg-surface: var(--vscode-editor-background, #252526);
+  --color-activate-bg-hover: var(--vscode-list-hoverBackground, #2a2d2e);
+
+  --color-activate-btn-primary-bg: var(--vscode-button-background, #0078d4);
+  --color-activate-btn-primary-fg: var(--vscode-button-foreground, #ffffff);
+  --color-activate-btn-primary-hover: var(--vscode-button-hoverBackground, #026ec1);
+  --color-activate-btn-secondary-bg: var(--vscode-button-secondaryBackground, #3a3d41);
+  --color-activate-btn-secondary-fg: var(--vscode-button-secondaryForeground, #cccccc);
+  --color-activate-btn-secondary-hover: var(--vscode-button-secondaryHoverBackground, #45494e);
+
+  --color-activate-badge-bg: var(--vscode-badge-background, #4d4d4d);
+  --color-activate-badge-fg: var(--vscode-badge-foreground, #cccccc);
+
+  --color-activate-border: var(--vscode-widget-border, var(--vscode-panel-border, #333333));
+  --color-activate-success: var(--vscode-testing-iconPassed, #73c991);
+  --color-activate-warning: var(--vscode-editorWarning-foreground, #cca700);
+  --color-activate-error: var(--vscode-errorForeground, #f48771);
+
+  font-family: var(--vscode-font-family);
+  font-size: var(--vscode-font-size);
+}
