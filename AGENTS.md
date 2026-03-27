@@ -36,8 +36,7 @@ Two-layer JSON config, same schema everywhere:
 **Schema:**
 ```json
 {
-  "manifest": "adhoc",
-  "tier": "standard",
+  "preset": "adhoc/standard",
   "repo": "peregrine-digital/activate-framework",
   "branch": "main",
   "fileOverrides": { "dest/path.md": "pinned" | "excluded" },
@@ -51,4 +50,4 @@ Two-layer JSON config, same schema everywhere:
 
 ### Delivery Mode
 
-**Remote-only** — manifests and source files are always fetched from GitHub (`repo`/`branch` in config, defaults in `storage.DefaultRepo`/`storage.DefaultBranch`). There are no local bundles. A manifest cache at `~/.activate/repos/<hash>/manifest-cache.json` provides offline fallback. Files are injected into the workspace's `.github/` directory and hidden from git via `.git/info/exclude`. The sidecar `.github/.activate-installed.json` tracks what's installed.
+**Remote-only** — presets and source files are always fetched from GitHub (`repo`/`branch` in config, defaults in `storage.DefaultRepo`/`storage.DefaultBranch`). There are no local bundles. A preset cache at `~/.activate/repos/<hash>/preset-cache.json` provides offline fallback. Files are injected into the workspace's `.github/` directory and hidden from git via `.git/info/exclude`. The sidecar `~/.activate/repos/<hash>/installed.json` tracks what's installed.

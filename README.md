@@ -2,11 +2,11 @@
 
 Activate is a plugin-based system for distributing AI coding agent configuration to development teams. It packages instructions, prompts, skills, and agent definitions into installable plugins that are injected into your workspace's `.github/` directory — where tools like GitHub Copilot, Claude Code, and Cursor automatically pick them up.
 
-The framework has three delivery surfaces: a **compiled Go CLI** with an interactive TUI, a **VS Code extension** with a sidebar control panel, and a **JSON-RPC daemon** that bridges the two. All three share the same service layer, manifest system, and config schema.
+The framework has three delivery surfaces: a **compiled Go CLI** with an interactive TUI, a **VS Code extension** with a sidebar control panel, and a **JSON-RPC daemon** that bridges the two. All three share the same service layer, preset system, and config schema.
 
 ## What It Does
 
-1. **Discovers plugins** — Manifests define what files a plugin contains, organized into selectable tiers (core, standard, advanced)
+1. **Discovers presets** — Each preset defines a named collection of files that users pick from a single flat list (e.g., "Activate Standard", "IronArch Workflow")
 2. **Installs agent configuration** — Copies `.instructions.md`, `.prompt.md`, `.agent.md`, `SKILL.md`, and `AGENTS.md` files into your workspace's `.github/` directory
 3. **Hides from git** — Installed files are auto-excluded via `.git/info/exclude` so they never get committed
 4. **Tracks state** — A sidecar file (`~/.activate/repos/<hash>/installed.json`) tracks what's installed, versions, and checksums
@@ -20,7 +20,7 @@ The framework has three delivery surfaces: a **compiled Go CLI** with an interac
 2. In VS Code: **Extensions** → **⋯** → **Install from VSIX…** → select the downloaded file
 3. Reload VS Code — the extension auto-installs the CLI and sets up your workspace
 
-The extension provides a sidebar control panel for switching manifests, changing tiers, browsing installed files, and checking for updates.
+The extension provides a sidebar control panel for switching presets, browsing installed files, and checking for updates.
 
 ### CLI Only
 
@@ -53,12 +53,12 @@ activate install
 │   ┌─────────────────────────────────────────────────────────┐    │
 │   │                  ActivateService (Go)                   │    │
 │   │                                                         │    │
-│   │   State · Config · Manifests · Files · Tiers · MCP      │    │
+│   │   State · Config · Presets · Files · MCP                │    │
 │   └──────────────────────────┬──────────────────────────────┘    │
 │                              │                                   │
 │          ┌───────────┬───────┼───────┬────────────┐              │
 │          ▼           ▼       ▼       ▼            ▼              │
-│       Config      Manifest  Installer  Fetcher   Repo            │
+│       Config      Preset    Installer  Fetcher   Repo            │
 │       (2-layer)   Discovery  (remote)  (GitHub)  Sidecar         │
 │                                                  + gitexclude    │
 └──────────────────────────────────────────────────────────────────┘
@@ -99,48 +99,48 @@ activate-framework/
 │   │   └── __tests__/               #     Tests (97 tests across 5 files)
 │   └── package.json                 #   Extension manifest + commands
 │
-├── manifests/                       # Plugin registry (one JSON per plugin)
-│   ├── adhoc.json                   #   Core framework manifest
-│   └── ironarch.json                #   VA workflow manifest
-│
 ├── plugins/                         # Content plugins (deliverable assets)
 │   ├── adhoc/                       #   Core: instructions, prompts, skills, agents
+│   │   └── presets/                 #     Preset definitions (core, standard, advanced)
 │   └── ironarch/                    #   VA: specialized workflow agents
+│       └── presets/                 #     Preset definitions (skills, workflow)
 │
-├── skills/                          # Shared skills (cross-plugin)
-├── mcp-servers/                     # Shared MCP server configs
 ├── install-cli.sh                   # CLI installer script (curl | sh)
 └── docs/                            # Documentation
 ```
 
 ## Plugin System
 
-Plugins follow a four-tier guidance hierarchy:
+Plugins follow a layered guidance hierarchy:
 
 ```
 plugins/{plugin-name}/
-├── AGENTS.md                              # Tier 1: Always active (recommended)
-├── instructions/*.instructions.md         # Tier 2: Auto-applied by glob
-├── prompts/*.prompt.md                    # Tier 2: Manual /command
-├── skills/{skill-name}/SKILL.md           # Tier 3: On-demand procedures
-└── agents/*.agent.md                      # Tier 4: Specialized personas
+├── presets/                               # Preset definitions (JSON)
+├── AGENTS.md                              # Always active (recommended)
+├── instructions/*.instructions.md         # Auto-applied by glob
+├── prompts/*.prompt.md                    # Manual /command
+├── skills/{skill-name}/SKILL.md           # On-demand procedures
+└── agents/*.agent.md                      # Specialized personas
 ```
 
-Each manifest defines **tiers** (e.g., core, standard, advanced) that let teams choose how much guidance to install. Files are tagged by category (instruction, prompt, skill, agent, mcp-server, other) and selected based on the active tier.
+Each plugin defines **presets** — named configurations that users pick from a single flat list. Presets support inheritance via `extends`, so "Activate Standard" includes everything from "Activate Core" plus additional files. Files are resolved as paths relative to the plugin directory, with `@plugin/path` for cross-plugin references.
 
-### Available Plugins
+### Available Presets
 
-| Plugin | Description | Tiers |
-|--------|-------------|-------|
-| **adhoc** | Core AI dev framework — general instructions, prompts, skills, agents | core, ad-hoc, ad-hoc-advanced |
-| **ironarch** | VA-oriented workflow — planning, implementing, testing, reviewing, documenting | core, skills, workflow |
+| Preset | Plugin | Description |
+|--------|--------|-------------|
+| **adhoc/core** | adhoc | Security guardrails, coding conventions, essential prompts |
+| **adhoc/standard** | adhoc | Core + language guides, design skills, agents, GitHub MCP |
+| **adhoc/advanced** | adhoc | Standard + federal compliance, AWS alignment, skill authoring |
+| **ironarch/skills** | ironarch | Core + CI debugging, PR writing, spec creation, visual testing |
+| **ironarch/workflow** | ironarch | Skills + full agent pipeline (plan → implement → test → review → PR) |
 
 ### Creating a Plugin
 
 1. Create a directory under `plugins/`
 2. Add `AGENTS.md` at the root (recommended)
 3. Add instructions, prompts, skills, and agents as needed
-4. Create a manifest in `manifests/{plugin-name}.json`
+4. Create preset JSON files in `plugins/{name}/presets/`
 5. Run validation: `npm run validate:plugins`
 
 ## CI/CD
