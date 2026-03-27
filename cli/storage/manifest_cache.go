@@ -37,3 +37,35 @@ func ReadManifestCache(projectDir string) ([]model.Manifest, error) {
 	}
 	return manifests, nil
 }
+
+// ── Preset cache ────────────────────────────────────────────────
+
+// PresetCachePath returns the path to the cached presets file.
+func PresetCachePath(projectDir string) string {
+	return filepath.Join(RepoStorePath(projectDir), "preset-cache.json")
+}
+
+// WritePresetCache saves presets to disk for offline fallback.
+func WritePresetCache(projectDir string, presets []model.Preset) error {
+	if err := EnsureRepoMeta(projectDir); err != nil {
+		return err
+	}
+	data, err := json.MarshalIndent(presets, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(PresetCachePath(projectDir), append(data, '\n'), 0644)
+}
+
+// ReadPresetCache loads cached presets from disk.
+func ReadPresetCache(projectDir string) ([]model.Preset, error) {
+	data, err := os.ReadFile(PresetCachePath(projectDir))
+	if err != nil {
+		return nil, err
+	}
+	var presets []model.Preset
+	if err := json.Unmarshal(data, &presets); err != nil {
+		return nil, err
+	}
+	return presets, nil
+}
