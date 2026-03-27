@@ -56,9 +56,32 @@ func TestBuildSettingsForm_HasAllFields(t *testing.T) {
 	form := buildSettingsForm(svc, vals)
 	form.Init()
 
-	// Should have manifest pre-selected
+	// Should have manifest pre-selected (legacy path — no presets on svc)
 	if vals.manifest != "alpha" {
 		t.Fatalf("expected manifest=alpha, got %q", vals.manifest)
+	}
+}
+
+func TestBuildSettingsForm_WithPresets(t *testing.T) {
+	presets := []model.Preset{
+		{ID: "adhoc/standard", Name: "Ad-Hoc Standard"},
+		{ID: "ironarch/workflow", Name: "IronArch Workflow"},
+	}
+	dir := setupTestStore(t)
+	svc := &commands.ActivateService{
+		Config:     model.Config{Preset: "adhoc/standard"},
+		Presets:    presets,
+		ProjectDir: dir,
+	}
+	vals := &settingsValues{
+		preset:    "adhoc/standard",
+		telemetry: false, scope: "project",
+	}
+	form := buildSettingsForm(svc, vals)
+	form.Init()
+
+	if vals.preset != "adhoc/standard" {
+		t.Fatalf("expected preset=adhoc/standard, got %q", vals.preset)
 	}
 }
 

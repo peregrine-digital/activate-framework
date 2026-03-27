@@ -17,8 +17,9 @@ import (
 // ── Settings screen ─────────────────────────────────────────────
 
 type settingsValues struct {
-	manifest  string
-	tier      string
+	preset    string
+	manifest  string // Deprecated: kept for backward compat when no presets
+	tier      string // Deprecated: kept for backward compat when no presets
 	repo      string
 	branch    string
 	telemetry bool
@@ -59,6 +60,7 @@ func newSettingsModel(svc commands.ActivateAPI) settingsModel {
 	telemetryOn := cfg.TelemetryEnabled != nil && *cfg.TelemetryEnabled
 
 	vals := &settingsValues{
+		preset:    cfg.ResolvedPreset(),
 		manifest:  cfg.Manifest,
 		tier:      cfg.Tier,
 		repo:      cfg.Repo,
@@ -173,14 +175,24 @@ func (m settingsModel) saveSettings() (tea.Model, tea.Cmd) {
 	m.svc.RefreshConfig()
 	currentCfg := m.svc.CurrentConfig()
 
-	if m.vals.manifest != currentCfg.Manifest {
-		updates.Manifest = m.vals.manifest
-		changes = append(changes, fmt.Sprintf("Manifest: %s → %s", currentCfg.Manifest, m.vals.manifest))
+	presets := m.svc.ListPresets()
+	if len(presets) > 0 {
+		if m.vals.preset != currentCfg.ResolvedPreset() {
+			updates.Preset = m.vals.preset
+			changes = append(changes, fmt.Sprintf("Preset: %s → %s", currentCfg.ResolvedPreset(), m.vals.preset))
+		}
+	} else {
+		// Backward compat: no presets available, use legacy manifest+tier
+		if m.vals.manifest != currentCfg.Manifest {
+			updates.Manifest = m.vals.manifest
+			changes = append(changes, fmt.Sprintf("Manifest: %s → %s", currentCfg.Manifest, m.vals.manifest))
+		}
+		if m.vals.tier != currentCfg.Tier {
+			updates.Tier = m.vals.tier
+			changes = append(changes, fmt.Sprintf("Tier: %s → %s", currentCfg.Tier, m.vals.tier))
+		}
 	}
-	if m.vals.tier != currentCfg.Tier {
-		updates.Tier = m.vals.tier
-		changes = append(changes, fmt.Sprintf("Tier: %s → %s", currentCfg.Tier, m.vals.tier))
-	}
+
 	if m.vals.repo != currentCfg.Repo {
 		if m.vals.repo == "" {
 			updates.Repo = model.ClearValue
@@ -226,7 +238,7 @@ func (m settingsModel) saveSettings() (tea.Model, tea.Cmd) {
 	}
 
 	syncMsg := ""
-	if updates.Manifest != "" || updates.Tier != "" {
+	if updates.Preset != "" || updates.Manifest != "" || updates.Tier != "" {
 		result, syncErr := m.svc.Sync()
 		if syncErr != nil {
 			syncMsg = "\n\nSync error: " + syncErr.Error()
@@ -244,15 +256,6 @@ func (m settingsModel) saveSettings() (tea.Model, tea.Cmd) {
 }
 
 func buildSettingsForm(svc commands.ActivateAPI, vals *settingsValues) *huh.Form {
-	manifests := svc.ListManifests()
-	manifestOpts := make([]huh.Option[string], 0, len(manifests))
-	for _, m := range manifests {
-		label := m.Name
-		manifestOpts = append(manifestOpts, huh.NewOption(label, m.ID))
-	}
-
-	tierOpts := buildTierOptions(svc, vals.manifest)
-
 	repoPlaceholder := storage.DefaultRepo
 	branchPlaceholder := storage.DefaultBranch
 
@@ -275,8 +278,30 @@ func buildSettingsForm(svc commands.ActivateAPI, vals *settingsValues) *huh.Form
 		branchField = branchField.Suggestions(branches)
 	}
 
-	return huh.NewForm(
-		huh.NewGroup(
+	var fields []huh.Field
+
+	presets := svc.ListPresets()
+	if len(presets) > 0 {
+		presetOpts := make([]huh.Option[string], 0, len(presets))
+		for _, p := range presets {
+			presetOpts = append(presetOpts, huh.NewOption(p.Name, p.ID))
+		}
+		fields = append(fields,
+			huh.NewSelect[string]().
+				Title("Preset").
+				Description("Framework preset to install").
+				Options(presetOpts...).
+				Value(&vals.preset),
+		)
+	} else {
+		// Backward compat: no presets, show legacy manifest+tier
+		manifests := svc.ListManifests()
+		manifestOpts := make([]huh.Option[string], 0, len(manifests))
+		for _, m := range manifests {
+			manifestOpts = append(manifestOpts, huh.NewOption(m.Name, m.ID))
+		}
+		tierOpts := buildTierOptions(svc, vals.manifest)
+		fields = append(fields,
 			huh.NewSelect[string]().
 				Title("Manifest").
 				Description("Framework to install").
@@ -287,24 +312,31 @@ func buildSettingsForm(svc commands.ActivateAPI, vals *settingsValues) *huh.Form
 				Description("Content tier level").
 				Options(tierOpts...).
 				Value(&vals.tier),
-			huh.NewInput().
-				Title("Repository").
-				Description("GitHub owner/repo (blank = " + repoPlaceholder + ")").
-				Placeholder(repoPlaceholder).
-				Value(&vals.repo),
-			branchField,
-			huh.NewConfirm().
-				Title("Telemetry").
-				Description("Track Copilot usage quota").
-				Affirmative("  Enabled  ").
-				Negative("  Disabled  ").
-				Value(&vals.telemetry),
-			huh.NewSelect[string]().
-				Title("Scope").
-				Description("Where to save these settings").
-				Options(scopeOpts...).
-				Value(&vals.scope),
-		),
+		)
+	}
+
+	fields = append(fields,
+		huh.NewInput().
+			Title("Repository").
+			Description("GitHub owner/repo (blank = " + repoPlaceholder + ")").
+			Placeholder(repoPlaceholder).
+			Value(&vals.repo),
+		branchField,
+		huh.NewConfirm().
+			Title("Telemetry").
+			Description("Track Copilot usage quota").
+			Affirmative("  Enabled  ").
+			Negative("  Disabled  ").
+			Value(&vals.telemetry),
+		huh.NewSelect[string]().
+			Title("Scope").
+			Description("Where to save these settings").
+			Options(scopeOpts...).
+			Value(&vals.scope),
+	)
+
+	return huh.NewForm(
+		huh.NewGroup(fields...),
 	).WithTheme(huh.ThemeCharm()).WithShowHelp(false)
 }
 

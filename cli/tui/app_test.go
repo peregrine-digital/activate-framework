@@ -545,6 +545,31 @@ func TestStateText_Installed(t *testing.T) {
 	}
 }
 
+func TestStateText_InstalledPreset(t *testing.T) {
+	m := mainMenuModel{state: model.InstallState{
+		HasProjectConfig: true,
+		HasInstallMarker: true,
+		InstalledPreset:  "ironarch/workflow",
+	}}
+	text := m.stateText()
+	if !strings.Contains(text, "installed ironarch/workflow") {
+		t.Fatalf("expected preset install info, got %q", text)
+	}
+}
+
+func TestStateText_InstalledPresetOverridesManifest(t *testing.T) {
+	m := mainMenuModel{state: model.InstallState{
+		HasProjectConfig:  true,
+		HasInstallMarker:  true,
+		InstalledPreset:   "ironarch/workflow",
+		InstalledManifest: "alpha",
+	}}
+	text := m.stateText()
+	if !strings.Contains(text, "installed ironarch/workflow") {
+		t.Fatalf("expected preset to take priority, got %q", text)
+	}
+}
+
 // ── mainMenuModel.stateBody ─────────────────────────────────────
 
 func TestStateBody_ShowsConfig(t *testing.T) {
@@ -562,14 +587,31 @@ func TestStateBody_ShowsConfig(t *testing.T) {
 	if !strings.Contains(body, "/test/project") {
 		t.Fatal("expected project dir in body")
 	}
-	if !strings.Contains(body, "manifest: alpha") {
-		t.Fatal("expected manifest in body")
-	}
-	if !strings.Contains(body, "tier: standard") {
-		t.Fatal("expected tier in body")
+	if !strings.Contains(body, "preset: alpha/standard") {
+		t.Fatal("expected preset in body")
 	}
 	if !strings.Contains(body, "Install marker: true") {
 		t.Fatal("expected install marker in body")
+	}
+}
+
+func TestStateBody_ShowsPreset(t *testing.T) {
+	m := mainMenuModel{
+		projectDir: "/test/project",
+		state: model.InstallState{
+			HasGlobalConfig:  true,
+			HasProjectConfig: true,
+			HasInstallMarker: true,
+			InstalledPreset:  "ironarch/workflow",
+		},
+		cfg: model.Config{Preset: "ironarch/workflow"},
+	}
+	body := m.stateBody()
+	if !strings.Contains(body, "preset: ironarch/workflow") {
+		t.Fatal("expected preset in body")
+	}
+	if !strings.Contains(body, "Installed: ironarch/workflow") {
+		t.Fatal("expected installed preset in body")
 	}
 }
 
