@@ -1,0 +1,18 @@
+{
+  "name": "IronArch Skills",
+  "description": "Activate Core plus CI debugging, PR writing, spec creation, and GitHub integration",
+  "extends": "adhoc/core",
+  "files": [
+    "skills/ci-debugger",
+    "skills/context-discovery",
+    "skills/github-context-gathering",
+    "skills/instruction-authoring",
+    "skills/pr-writing",
+    "skills/session-management",
+    "skills/spec-creation",
+    "skills/visual-verification",
+    "@adhoc/mcp-servers/github.json",
+    "mcp-server/screenshot-viewer.json",
+    "mcp-server/screenshot-viewer.js"
+  ]
+}

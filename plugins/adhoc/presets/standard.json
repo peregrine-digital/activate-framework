@@ -1,0 +1,19 @@
+{
+  "name": "Activate Standard",
+  "description": "Core plus language guides, design skills, agents, and GitHub integration",
+  "extends": "adhoc/core",
+  "files": [
+    "prompts/qasp-report.prompt.md",
+    "instructions/code-review.instructions.md",
+    "instructions/python.instructions.md",
+    "instructions/typescript.instructions.md",
+    "skills/activate-installer",
+    "skills/create-journey-map",
+    "skills/create-service-blueprint",
+    "skills/write-user-story",
+    "skills/a11y-alt-text",
+    "skills/track-decisions-with-adrs",
+    "agents/service-designer.agent.md",
+    "mcp-servers/github.json"
+  ]
+}

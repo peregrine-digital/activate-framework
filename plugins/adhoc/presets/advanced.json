@@ -1,0 +1,13 @@
+{
+  "name": "Activate Advanced",
+  "description": "Standard plus federal compliance, AWS alignment, agent authoring, and web fetch",
+  "extends": "adhoc/standard",
+  "files": [
+    "skills/ato-compliant-infrastructure",
+    "skills/aws-well-architected-alignment",
+    "skills/creating-github-agents",
+    "skills/writing-skills",
+    "skills/premium-frontend-ui",
+    "mcp-servers/fetch.json"
+  ]
+}
