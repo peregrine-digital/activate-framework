@@ -192,7 +192,20 @@ func parsePresetFiles(plugin string, raw json.RawMessage) ([]model.PresetFile, e
 }
 
 // resolvePresetFileEntry resolves a string file entry to a PresetFile.
+//
+// Path conventions:
+//   - "/skills/foo"           → repo root (src=skills/foo, dest=skills/foo)
+//   - "@otherplugin/path"     → cross-plugin (src=plugins/otherplugin/path)
+//   - "instructions/foo.md"   → plugin-relative (src=plugins/<plugin>/instructions/foo.md)
 func resolvePresetFileEntry(plugin, entry string) model.PresetFile {
+	if strings.HasPrefix(entry, "/") {
+		// Root-relative: /path → src=path (from repo root)
+		rootPath := entry[1:]
+		return model.PresetFile{
+			Src:  rootPath,
+			Dest: rootPath,
+		}
+	}
 	if strings.HasPrefix(entry, "@") {
 		// Cross-plugin: @otherplugin/path/to/file
 		rest := entry[1:] // strip @
