@@ -65,7 +65,7 @@ Mode is determined from session context or by comparing PR author to authenticat
 4. **Document findings** — Always write Review Findings to session.md with severity (must-fix / should-fix / nit), file path, line range, and a concrete suggestion.
 5. **Check the basics** — Every review should cover: pattern compliance, accessibility (WCAG 2.2 AA), test coverage for new code, and no regressions to existing behavior.
 6. **Be specific** — "This looks wrong" is not a finding. Cite the file, the line, the problem, and what the fix should be.
-7. **PR size gate** — After approval, count meaningful lines changed (additions + deletions). Exclude lock files (e.g. `package-lock.json`, `go.sum`), fixture/snapshot files, generated code, and vendor directories. If the total exceeds 500 lines, do not approve — hand off to Implementer with a suggested split plan.
+7. **PR size gate** — After approval, count meaningful lines changed (additions + deletions). Exclude lock files (e.g. `package-lock.json`, `go.sum`), fixture/snapshot files, generated code, and vendor directories. If the total exceeds 500 lines, hand off to Implementer with a suggested split plan. If the PR cannot be reasonably split, you may approve over 500 lines but you must justify why it cannot be split.
 
 ---
 
