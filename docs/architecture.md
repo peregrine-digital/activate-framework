@@ -1,36 +1,36 @@
 # Architecture
 
-Activate Framework has three delivery surfaces — a Go CLI, a VS Code extension, and a terminal TUI — unified by a shared service layer and JSON-RPC daemon protocol. This document describes how the pieces fit together and how each component works internally.
+Activate Framework has four delivery surfaces — a Go CLI, a VS Code extension, a terminal TUI, and a native desktop app — unified by a shared service layer and JSON-RPC daemon protocol. This document describes how the pieces fit together and how each component works internally.
 
 ## System Overview
 
 ```
-┌──────────────────────────────────────────────────────────────────┐
-│                        User Interfaces                           │
-│                                                                  │
-│   ┌──────────────┐   ┌──────────────┐   ┌──────────────────┐     │
-│   │   CLI        │   │   TUI        │   │   VS Code        │     │
-│   │   Commands   │   │   (Charm)    │   │   Extension      │     │
-│   └──────┬───────┘   └──────┬───────┘   └────────-┬────────┘     │
-│          │                  │                     │              │
-│          │   Direct call    │   Direct call       │  JSON-RPC    │
-│          │                  │                     │  over stdio  │
-│          ▼                  ▼                     ▼              │
-│   ┌─────────────────────────────────────────────────────────┐    │
-│   │                  ActivateService (Go)                   │    │
-│   │                                                         │    │
-│   │   State · Config · Manifests · Files · Tiers · MCP      │    │
-│   └──────────────────────────┬──────────────────────────────┘    │
-│                              │                                   │
-│          ┌───────────┬───────┼───────┬────────────┐              │
-│          ▼           ▼       ▼       ▼            ▼              │
-│       Config      Manifest  Installer  Fetcher   Repo            │
-│       (2-layer)   Discovery  (local)   (GitHub)  Sidecar         │
-│                                                  + gitexclude    │
-└──────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────┐
+│                           User Interfaces                              │
+│                                                                         │
+│  ┌──────────┐  ┌──────────┐  ┌──────────────┐  ┌──────────────────┐     │
+│  │  CLI     │  │  TUI     │  │  VS Code     │  │  Desktop App     │     │
+│  │  Commands│  │  (Charm) │  │  Extension   │  │  (Wails v2)      │     │
+│  └────┬─────┘  └────┬─────┘  └──────┬───────┘  └───────┬──────────┘     │
+│       │             │               │                  │               │
+│       │ Direct call │ Direct call   │  JSON-RPC        │  JSON-RPC    │
+│       │             │               │  over stdio      │  over stdio  │
+│       ▼             ▼               ▼                  ▼               │
+│  ┌──────────────────────────────────────────────────────────────────┐   │
+│  │                    ActivateService (Go)                         │   │
+│  │                                                                 │   │
+│  │     State · Config · Manifests · Files · Tiers · MCP            │   │
+│  └───────────────────────────┬─────────────────────────────────────┘   │
+│                              │                                         │
+│          ┌───────────┬───────┼───────┬────────────┐                    │
+│          ▼           ▼       ▼       ▼            ▼                    │
+│       Config      Manifest  Installer  Fetcher   Repo                  │
+│       (2-layer)   Discovery  (remote)   (GitHub)  Sidecar               │
+│                                                   + gitexclude          │
+└─────────────────────────────────────────────────────────────────────────┘
 ```
 
-The CLI and TUI call the service directly (same process). The extension spawns the daemon (`activate serve --stdio`) and communicates via JSON-RPC 2.0 over Content-Length framed stdio.
+The CLI and TUI call the service directly (same process). The extension and desktop app each spawn a daemon (`activate serve --stdio`) and communicate via JSON-RPC 2.0 over Content-Length framed stdio.
 
 ---
 
@@ -862,6 +862,143 @@ This makes the extension self-contained — it ships with all plugin files embed
 
 ---
 
+## Desktop App (Wails v2)
+
+The desktop app is a native application built with [Wails v2](https://wails.io/) that provides the same management capabilities as the VS Code extension, without requiring VS Code.
+
+### Source Layout
+
+```
+desktop/
+├── main.go                  # Entry point, Wails bootstrap, application menus
+├── app.go                   # App struct: daemon lifecycle, 22 RPC methods
+├── daemon_client.go         # JSON-RPC client over stdio (same protocol as extension)
+├── workspaces.go            # Workspace directory management + persistence
+├── open_darwin.go           # Platform-specific file opener (macOS)
+├── open_linux.go            # Platform-specific file opener (Linux)
+├── open_windows.go          # Platform-specific file opener (Windows)
+├── wails.json               # Wails project configuration
+├── go.mod / go.sum          # Go module (uses go.work replace for cli/)
+├── build/                   # Build assets (icons, plists, installer scripts)
+└── frontend/                # Svelte frontend
+    ├── src/App.svelte       #   Main app component (consumes shared UI)
+    ├── src/main.ts          #   Entry point
+    ├── vite.config.ts       #   Vite config with $lib alias to ui/
+    └── wailsjs/             #   Auto-generated Go ↔ TypeScript bindings
+```
+
+### How It Works
+
+The desktop app follows the same daemon pattern as the VS Code extension:
+
+1. **Startup** — User launches the app and selects a workspace directory
+2. **Daemon spawn** — `App.InitWorkspace()` locates the CLI binary at `~/.activate/bin/activate` (or `PATH`) and spawns `activate serve --stdio`
+3. **JSON-RPC** — `daemonClient` communicates over the same Content-Length framed stdio protocol used by the extension
+4. **Notifications** — The daemon pushes `activate/stateChanged` events; the app forwards them as Wails events to the Svelte frontend
+5. **UI** — The Svelte frontend calls bound Go methods (e.g., `App.GetState()`, `App.Sync()`), which proxy to the daemon
+
+### Installation
+
+Download the platform archive from [GitHub Releases](https://github.com/peregrine-digital/activate-framework/releases):
+
+| Platform | Archive |
+|----------|---------|
+| macOS (Apple Silicon) | `activate-desktop_<version>_darwin-arm64.zip` |
+| macOS (Intel) | `activate-desktop_<version>_darwin-amd64.zip` |
+| Linux (x86_64) | `activate-desktop_<version>_linux-amd64.tar.gz` |
+| Linux (ARM) | `activate-desktop_<version>_linux-arm64.tar.gz` |
+| Windows (x86_64) | `activate-desktop_<version>_windows-amd64.zip` |
+
+**Prerequisite:** The CLI must be installed first. The desktop app locates it at `~/.activate/bin/activate` or via `PATH`.
+
+### Building from Source
+
+```bash
+# Install Wails CLI (one-time)
+go install github.com/wailsapp/wails/v2/cmd/wails@latest
+
+# Build and run via mise task
+mise run desktop
+
+# Or manually
+cd desktop
+wails build
+open build/bin/activate-desktop.app   # macOS
+```
+
+The `mise run desktop` task automatically rebuilds the CLI and installs it to `~/.activate/bin/activate` before building the desktop app.
+
+### Menus
+
+The desktop app provides native menus:
+
+- **Activate** — About, Settings, Workspace Settings, Check for Updates, Quit
+- **File** — Open Workspace (directory picker)
+- **View** — Usage (visible when a workspace is active)
+- **Edit** — Standard copy/paste/undo
+
+Workspace-specific menu items (Workspace Settings, Usage) are hidden until a workspace is opened.
+
+---
+
+## Shared UI Library (`ui/`)
+
+The `ui/` package is a Svelte 5 component library shared between the VS Code extension and the desktop app. It provides a unified interface across delivery surfaces.
+
+### Source Layout
+
+```
+ui/
+├── src/
+│   ├── App.svelte                    # Dev preview entry (standalone)
+│   ├── WebviewApp.svelte             # VS Code webview entry
+│   ├── app.css                       # Theme tokens + global styles
+│   └── lib/
+│       ├── api.ts                    # ActivateAPI interface (22 methods)
+│       ├── adapters/
+│       │   ├── mock.ts               # Dev preview adapter (static data)
+│       │   ├── vscode.ts             # VS Code adapter (postMessage bridge)
+│       │   └── wails.ts              # Desktop adapter (Go bindings)
+│       ├── components/
+│       │   ├── ButtonRow.svelte      # Action buttons row
+│       │   ├── CategoryList.svelte   # Grouped file listing
+│       │   ├── FileCard.svelte       # Individual file with status/actions
+│       │   ├── GlobalSettingsPage.svelte  # Global settings form
+│       │   ├── MainPage.svelte       # Primary dashboard
+│       │   ├── NoCliPage.svelte      # CLI-not-found fallback
+│       │   ├── SelectModal.svelte    # Selection overlay
+│       │   └── SettingsPage.svelte   # Workspace settings form
+│       └── __tests__/                # Vitest tests
+├── package.json                      # Svelte 5 + Vite 8 + Tailwind v4
+└── vite.config.ts
+```
+
+### Platform Adapters
+
+Each delivery surface provides an adapter implementing the `ActivateAPI` interface:
+
+| Adapter | Transport | Used By |
+|---------|-----------|---------|
+| `mock.ts` | In-memory static data | `npm run dev` preview |
+| `vscode.ts` | `postMessage` ↔ extension host | VS Code webview |
+| `wails.ts` | Wails Go bindings | Desktop app |
+
+### Theme System
+
+The library uses 16 portable CSS custom properties (theme tokens) that replace 71 VS Code-specific CSS variables. Each adapter maps platform theme values to these tokens, enabling consistent styling across VS Code, desktop, and standalone dev preview.
+
+### Development
+
+```bash
+cd ui
+npm install
+npm run dev      # Standalone preview at localhost:5173 (uses mock adapter)
+npm run build    # Production build
+npx vitest run   # Run tests
+```
+
+---
+
 ## npm Distribution
 
 The Go binary is distributed via npm using a platform-specific package strategy:
@@ -940,3 +1077,10 @@ VS Code's Copilot discovers instructions, prompts, skills, and agents from the `
 - **Project** — per-repo overrides (different tier, excluded files) that don't affect other repos
 
 The project config is stored in `~/.activate/repos/<hash>/` (not in the workspace) so it never touches the repo's version control.
+
+### Why a Desktop App?
+
+The VS Code extension only reaches users inside VS Code. The desktop app provides the same management capabilities in a standalone native application, using the identical daemon protocol. This means:
+- **No editor lock-in** — teams using other editors can manage their Activate installation
+- **Shared UI** — the Svelte component library (`ui/`) is consumed by both the extension and the desktop app, so features only need to be built once
+- **Same service** — the desktop app spawns the same `activate serve --stdio` daemon, so behavior is identical across surfaces
