@@ -64,7 +64,7 @@ func TestCheckCachedReturnsCachedWhenFresh(t *testing.T) {
 		t.Fatalf("WriteCache: %v", err)
 	}
 
-	got := CheckCached("1.0.0", "", "")
+	got := CheckCached("1.0.0", "", "", "")
 	if got == nil {
 		t.Fatal("expected cached result")
 	}
@@ -90,7 +90,7 @@ func TestCheckCachedStaleTriggersRefresh(t *testing.T) {
 
 	// CheckCached will try a live check which may fail (no network in tests).
 	// It should return nil on network error, not the stale entry.
-	got := CheckCached("1.0.0", "", "")
+	got := CheckCached("1.0.0", "", "", "")
 	// Either nil (network error) or fresh entry — stale entry should NOT be returned as-is.
 	if got != nil && got.CheckedAt.Equal(entry.CheckedAt) {
 		t.Fatal("stale cache entry should not be returned without refresh")

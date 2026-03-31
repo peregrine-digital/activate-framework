@@ -117,7 +117,7 @@ func RepoAdd(manifests []model.Manifest, cfg model.Config, projectDir string, co
 			fmt.Fprintf(os.Stderr, "  ✗  %s: %s\n", r.destRel, r.err)
 			continue
 		}
-		fmt.Printf("  ✓  %s\n", r.destRel)
+		fmt.Fprintf(os.Stderr, "  ✓  %s\n", r.destRel)
 		installed = append(installed, r.destRel)
 	}
 
@@ -143,7 +143,7 @@ func RepoAdd(manifests []model.Manifest, cfg model.Config, projectDir string, co
 				fmt.Fprintf(os.Stderr, "  ✗  %s: %s\n", r.destRel, r.err)
 				continue
 			}
-			fmt.Printf("  ✓  %s\n", r.destRel)
+			fmt.Fprintf(os.Stderr, "  ✓  %s\n", r.destRel)
 			installed = append(installed, r.destRel)
 		}
 	}
@@ -156,7 +156,7 @@ func RepoAdd(manifests []model.Manifest, cfg model.Config, projectDir string, co
 		} else {
 			mcpServerNames = names
 			for _, name := range names {
-				fmt.Printf("  ✓  MCP server: %s\n", name)
+				fmt.Fprintf(os.Stderr, "  ✓  MCP server: %s\n", name)
 			}
 		}
 	}
@@ -176,7 +176,7 @@ func RepoAdd(manifests []model.Manifest, cfg model.Config, projectDir string, co
 
 	_ = storage.WriteProjectConfig(projectDir, &model.Config{Manifest: chosen.ID, Tier: cfg.Tier})
 
-	fmt.Printf("\nAdded %d managed files to repository.\n", len(installed))
+	fmt.Fprintf(os.Stderr, "\nAdded %d managed files to repository.\n", len(installed))
 	return nil
 }
 
@@ -184,13 +184,13 @@ func RepoAdd(manifests []model.Manifest, cfg model.Config, projectDir string, co
 func RepoRemove(projectDir string) error {
 	sc, _ := storage.ReadRepoSidecar(projectDir)
 	if sc == nil {
-		fmt.Println("No managed repo sidecar found; nothing to remove.")
+		fmt.Fprintln(os.Stderr, "No managed repo sidecar found; nothing to remove.")
 		return nil
 	}
 	count := len(sc.Files)
 	if err := storage.DeleteRepoSidecar(projectDir); err != nil {
 		return err
 	}
-	fmt.Printf("Removed %d managed files from repository.\n", count)
+	fmt.Fprintf(os.Stderr, "Removed %d managed files from repository.\n", count)
 	return nil
 }

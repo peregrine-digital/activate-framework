@@ -3,9 +3,9 @@ name: Build VS Code Extension
 on:
   push:
     branches: [main, 'feat/**']
-    paths: ['extension/**', 'framework/**', 'plugins/**', 'manifests/**']
+    paths: ['extension/**', 'ui/**', 'framework/**', 'plugins/**', 'manifests/**']
   pull_request:
-    paths: ['extension/**', 'framework/**', 'plugins/**', 'manifests/**']
+    paths: ['extension/**', 'ui/**', 'framework/**', 'plugins/**', 'manifests/**']
   release:
     types: [published]
 
@@ -31,6 +31,10 @@ jobs:
           cache-dependency-path: extension/package-lock.json
 
       - run: npm ci
+
+      - name: Install shared UI dependencies
+        working-directory: ui
+        run: npm ci --legacy-peer-deps
 
       - name: Audit dependencies
         run: npm audit --omit=dev

@@ -135,7 +135,6 @@ Bundle includes:
 
 ✓ install.mjs (root shim)
 ✓ framework/install.mjs (CLI engine)
-✓ docs/README.md
 ✓ manifests/adhoc.json
 ```
 

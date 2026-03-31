@@ -1,5 +1,6 @@
 # Build artifacts
 assets/
+webview-dist/
 *.vsix
 
 # Dependencies
@@ -7,3 +8,4 @@ node_modules/
 
 # OS
 .DS_Store
+.vscode-test/

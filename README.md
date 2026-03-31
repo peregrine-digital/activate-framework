@@ -2,7 +2,7 @@
 
 Activate is a plugin-based system for distributing AI coding agent configuration to development teams. It packages instructions, prompts, skills, and agent definitions into installable plugins that are injected into your workspace's `.github/` directory — where tools like GitHub Copilot, Claude Code, and Cursor automatically pick them up.
 
-The framework has three delivery surfaces: a **compiled Go CLI** with an interactive TUI, a **VS Code extension** with a sidebar control panel, and a **JSON-RPC daemon** that bridges the two. All three share the same service layer, manifest system, and config schema.
+The framework has four delivery surfaces: a **compiled Go CLI** with an interactive TUI, a **VS Code extension** with a sidebar control panel, a **native desktop app** (Wails v2), and a **JSON-RPC daemon** that bridges them. All four share the same service layer, manifest system, and config schema.
 
 ## What It Does
 
@@ -22,6 +22,19 @@ The framework has three delivery surfaces: a **compiled Go CLI** with an interac
 
 The extension provides a sidebar control panel for switching manifests, changing tiers, browsing installed files, and checking for updates.
 
+### Desktop App
+
+1. Download the latest desktop archive for your platform from [Releases](https://github.com/peregrine-digital/activate-framework/releases):
+   - **macOS**: `activate-desktop_<version>_darwin-arm64.zip` (Apple Silicon) or `darwin-amd64.zip` (Intel)
+   - **Linux**: `activate-desktop_<version>_linux-amd64.tar.gz` or `linux-arm64.tar.gz`
+   - **Windows**: `activate-desktop_<version>_windows-amd64.zip`
+2. Extract the archive and run the application
+3. Use **File → Open Workspace…** to select a project directory
+
+The desktop app spawns the same CLI daemon used by the extension and provides a native UI for managing manifests, tiers, files, and settings across workspaces.
+
+> **Prerequisite:** The CLI must be installed first (`~/.activate/bin/activate`). The desktop app locates it automatically.
+
 ### CLI Only
 
 ```bash
@@ -39,32 +52,32 @@ activate install
 ## Architecture
 
 ```
-┌──────────────────────────────────────────────────────────────────┐
-│                        User Interfaces                           │
-│                                                                  │
-│   ┌──────────────┐   ┌──────────────┐   ┌──────────────────┐     │
-│   │   CLI        │   │   TUI        │   │   VS Code        │     │
-│   │   Commands   │   │   (Charm)    │   │   Extension      │     │
-│   └──────┬───────┘   └──────┬───────┘   └────────-┬────────┘     │
-│          │                  │                     │              │
-│          │   Direct call    │   Direct call       │  JSON-RPC    │
-│          │                  │                     │  over stdio  │
-│          ▼                  ▼                     ▼              │
-│   ┌─────────────────────────────────────────────────────────┐    │
-│   │                  ActivateService (Go)                   │    │
-│   │                                                         │    │
-│   │   State · Config · Manifests · Files · Tiers · MCP      │    │
-│   └──────────────────────────┬──────────────────────────────┘    │
-│                              │                                   │
-│          ┌───────────┬───────┼───────┬────────────┐              │
-│          ▼           ▼       ▼       ▼            ▼              │
-│       Config      Manifest  Installer  Fetcher   Repo            │
-│       (2-layer)   Discovery  (remote)  (GitHub)  Sidecar         │
-│                                                  + gitexclude    │
-└──────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────┐
+│                           User Interfaces                              │
+│                                                                         │
+│  ┌──────────┐  ┌──────────┐  ┌──────────────┐  ┌──────────────────┐     │
+│  │  CLI     │  │  TUI     │  │  VS Code     │  │  Desktop App     │     │
+│  │  Commands│  │  (Charm) │  │  Extension   │  │  (Wails v2)      │     │
+│  └────┬─────┘  └────┬─────┘  └──────┬───────┘  └───────┬──────────┘     │
+│       │             │               │                  │               │
+│       │ Direct call │ Direct call   │  JSON-RPC        │  JSON-RPC    │
+│       │             │               │  over stdio      │  over stdio  │
+│       ▼             ▼               ▼                  ▼               │
+│  ┌──────────────────────────────────────────────────────────────────┐   │
+│  │                    ActivateService (Go)                         │   │
+│  │                                                                 │   │
+│  │     State · Config · Manifests · Files · Tiers · MCP            │   │
+│  └───────────────────────────┬─────────────────────────────────────┘   │
+│                              │                                         │
+│          ┌───────────┬───────┼───────┬────────────┐                    │
+│          ▼           ▼       ▼       ▼            ▼                    │
+│       Config      Manifest  Installer  Fetcher   Repo                  │
+│       (2-layer)   Discovery  (remote)  (GitHub)  Sidecar               │
+│                                                  + gitexclude          │
+└─────────────────────────────────────────────────────────────────────────┘
 ```
 
-The CLI and TUI call the service directly (same process). The extension spawns a daemon (`activate serve --stdio`) and communicates via JSON-RPC 2.0 over Content-Length framed stdio.
+The CLI and TUI call the service directly (same process). The extension and desktop app each spawn a daemon (`activate serve --stdio`) and communicate via JSON-RPC 2.0 over Content-Length framed stdio.
 
 ### Config System
 
@@ -95,9 +108,26 @@ activate-framework/
 │   ├── src/                         #   Extension source (thin daemon wrapper)
 │   │   ├── extension.js             #     Activation, commands, daemon lifecycle
 │   │   ├── controlPanel.js          #     Sidebar WebviewView (files, settings, usage)
+│   │   ├── controlPanel.svelte.js   #     Svelte-based WebviewView (uses shared UI)
 │   │   ├── client.js                #     JSON-RPC client for CLI daemon
-│   │   └── __tests__/               #     Tests (97 tests across 5 files)
+│   │   └── __tests__/               #     Tests (110 tests across 7 files)
 │   └── package.json                 #   Extension manifest + commands
+│
+├── desktop/                         # Native desktop app (Wails v2)
+│   ├── main.go                      #   Entry point, Wails bootstrap, menus
+│   ├── app.go                       #   Daemon lifecycle, 22 RPC methods
+│   ├── daemon_client.go             #   JSON-RPC client over stdio
+│   ├── workspaces.go                #   Workspace directory management
+│   ├── open_darwin.go               #   Platform-specific file openers
+│   └── frontend/                    #   Svelte frontend (consumes shared UI)
+│
+├── ui/                              # Shared Svelte component library
+│   ├── src/lib/                     #   Components, API interface, adapters
+│   │   ├── components/              #     8 reusable Svelte components
+│   │   ├── adapters/mock.ts         #     Dev preview (static data)
+│   │   ├── adapters/vscode.ts       #     VS Code webview (postMessage)
+│   │   └── adapters/wails.ts        #     Desktop (Go bindings)
+│   └── src/lib/api.ts               #   ActivateAPI interface (22 methods)
 │
 ├── manifests/                       # Plugin registry (one JSON per plugin)
 │   ├── adhoc.json                   #   Core framework manifest
@@ -149,6 +179,7 @@ Two GitHub Actions workflows run on every push and PR:
 
 - **CLI** (`cli.yml`) — Builds the Go binary, runs tests, cross-compiles for 5 platforms on release (darwin-arm64/amd64, linux-arm64/amd64, windows-amd64), attaches archives + SHA256 checksums to the GitHub Release
 - **Extension** (`extension.yml`) — Installs dependencies, runs tests, packages the VSIX, attaches it to the GitHub Release
+- **Desktop** (`desktop.yml`) — Builds the Wails desktop app, runs Go + UI tests, cross-compiles for 5 platforms on release, attaches platform archives + checksums to the GitHub Release
 
 Releases are cut with `mise run release`, which bumps versions, tags, and creates a GitHub Release. CI builds and attaches all artifacts automatically.
 
@@ -157,6 +188,7 @@ Releases are cut with `mise run release`, which bumps versions, tags, and create
 ### Prerequisites
 
 - Go 1.25+ and Node.js 20+ (see `mise.toml`)
+- [Wails v2](https://wails.io/) CLI (for desktop app development only): `go install github.com/wailsapp/wails/v2/cmd/wails@latest`
 
 ### Running Tests
 
@@ -164,8 +196,14 @@ Releases are cut with `mise run release`, which bumps versions, tags, and create
 # Go CLI tests (349 tests)
 cd cli && go test ./...
 
-# Extension tests (97 tests)
+# Extension tests (110 tests)
 cd extension && npm test
+
+# Desktop app tests
+cd desktop && go test ./...
+
+# Shared UI tests
+cd ui && npx vitest run
 
 # Plugin structure validation (10 tests)
 npm run validate:plugins

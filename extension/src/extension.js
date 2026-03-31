@@ -6,7 +6,12 @@ const fs = require('fs');
 const os = require('os');
 const https = require('https');
 const { ActivateClient, Method } = require('./client');
-const { ControlPanelProvider } = require('./controlPanel');
+
+// Use Svelte-based control panel if webview bundle exists, otherwise fall back
+const webviewBundlePath = path.join(__dirname, '..', 'webview-dist', 'webview.js');
+const { ControlPanelProvider } = fs.existsSync(webviewBundlePath)
+  ? require('./controlPanel.svelte')
+  : require('./controlPanel');
 
 /** @type {ActivateClient|null} */
 let client = null;
@@ -421,15 +426,16 @@ async function activate(context) {
     }),
 
     vscode.commands.registerCommand('activate-framework.openFile', async (file) => {
-      if (!requireClient()) return;
-      if (!file?.dest) return;
+      if (!file?.dest) { outputChannel.appendLine(`[openFile] no file.dest — file=${JSON.stringify(file)}`); return; }
       const wsRoot = vscode.workspace.workspaceFolders?.[0]?.uri;
-      if (!wsRoot) return;
+      if (!wsRoot) { outputChannel.appendLine('[openFile] no workspace root'); return; }
       const fileUri = vscode.Uri.joinPath(wsRoot, installDir, file.dest);
+      outputChannel.appendLine(`[openFile] opening ${fileUri.fsPath}`);
       try {
         await vscode.commands.executeCommand('vscode.open', fileUri);
-      } catch {
-        vscode.window.showWarningMessage(`Could not open ${file.dest}`);
+      } catch (err) {
+        outputChannel.appendLine(`[openFile] error: ${err?.message || err}`);
+        vscode.window.showWarningMessage(`Could not open ${file.dest}: ${err?.message || err}`);
       }
     }),
 
