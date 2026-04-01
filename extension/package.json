@@ -136,7 +136,7 @@
     "test:integration": "node src/test/runTest.js"
   },
   "devDependencies": {
-    "@types/vscode": "^1.85.0",
+    "@types/vscode": "^1.110.0",
     "@vscode/test-electron": "^2.5.2",
     "@vscode/vsce": "^3.0.0"
   }
