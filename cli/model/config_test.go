@@ -168,3 +168,107 @@ func TestConfig_JSONOmitsEmptyMaps(t *testing.T) {
 		t.Fatal("nil TelemetryEnabled should be omitted from JSON")
 	}
 }
+
+// --- Preset field in MergeConfig ---
+
+func TestConfig_mergeInto_PresetEmptyDoesNotOverwrite(t *testing.T) {
+	dst := &Config{Preset: "adhoc/standard"}
+	src := &Config{Preset: ""}
+	MergeConfig(dst, src)
+	if dst.Preset != "adhoc/standard" {
+		t.Fatalf("empty string overwrote Preset: got %q", dst.Preset)
+	}
+}
+
+func TestConfig_mergeInto_PresetOverwrites(t *testing.T) {
+	dst := &Config{Preset: "adhoc/core"}
+	src := &Config{Preset: "ironarch/workflow"}
+	MergeConfig(dst, src)
+	if dst.Preset != "ironarch/workflow" {
+		t.Fatalf("expected ironarch/workflow, got %q", dst.Preset)
+	}
+}
+
+func TestConfig_mergeInto_PresetClearValue(t *testing.T) {
+	dst := &Config{Preset: "adhoc/standard"}
+	src := &Config{Preset: ClearValue}
+	MergeConfig(dst, src)
+	if dst.Preset != "" {
+		t.Fatalf("expected Preset cleared, got %q", dst.Preset)
+	}
+}
+
+// --- MigrateManifestTierToPreset ---
+
+func TestMigrateManifestTierToPreset(t *testing.T) {
+	tests := []struct {
+		manifest string
+		tier     string
+		want     string
+	}{
+		// Both empty → no migration
+		{"", "", ""},
+		// Adhoc mappings
+		{"adhoc", "minimal", "adhoc/core"},
+		{"adhoc", "standard", "adhoc/standard"},
+		{"adhoc", "advanced", "adhoc/advanced"},
+		{"adhoc", "custom", "adhoc/custom"},
+		// IronArch mappings
+		{"ironarch", "skills", "activate/skills"},
+		{"ironarch", "workflow", "activate/workflow"},
+		{"ironarch", "custom", "activate/custom"},
+		// Unknown manifest
+		{"other", "fancy", "other/fancy"},
+		// Defaults applied when one is missing
+		{"", "advanced", "adhoc/advanced"},        // manifest defaults to "adhoc"
+		{"ironarch", "", "activate/standard"},      // tier defaults to "standard" → maps to activate/standard
+		{"adhoc", "", "adhoc/standard"},            // tier defaults to "standard"
+	}
+	for _, tt := range tests {
+		got := MigrateManifestTierToPreset(tt.manifest, tt.tier)
+		if got != tt.want {
+			t.Errorf("MigrateManifestTierToPreset(%q, %q) = %q, want %q", tt.manifest, tt.tier, got, tt.want)
+		}
+	}
+}
+
+// --- ResolvedPreset ---
+
+func TestConfig_ResolvedPreset_PresetTakesPriority(t *testing.T) {
+	cfg := &Config{Preset: "ironarch/workflow", Manifest: "adhoc", Tier: "advanced"}
+	if got := cfg.ResolvedPreset(); got != "ironarch/workflow" {
+		t.Fatalf("expected ironarch/workflow, got %q", got)
+	}
+}
+
+func TestConfig_ResolvedPreset_FallsBackToMigration(t *testing.T) {
+	cfg := &Config{Manifest: "adhoc", Tier: "minimal"}
+	if got := cfg.ResolvedPreset(); got != "adhoc/core" {
+		t.Fatalf("expected adhoc/core, got %q", got)
+	}
+}
+
+func TestConfig_ResolvedPreset_EmptyWhenUnset(t *testing.T) {
+	cfg := &Config{}
+	if got := cfg.ResolvedPreset(); got != "" {
+		t.Fatalf("expected empty string, got %q", got)
+	}
+}
+
+func TestConfig_ResolvedPreset_ManifestOnlyMigrates(t *testing.T) {
+	cfg := &Config{Manifest: "ironarch"}
+	got := cfg.ResolvedPreset()
+	// manifest=ironarch, tier defaults to "standard" → activate/standard
+	if got != "activate/standard" {
+		t.Fatalf("expected activate/standard, got %q", got)
+	}
+}
+
+func TestConfig_ResolvedPreset_TierOnlyMigrates(t *testing.T) {
+	cfg := &Config{Tier: "advanced"}
+	got := cfg.ResolvedPreset()
+	// manifest defaults to "adhoc", tier=advanced → adhoc/advanced
+	if got != "adhoc/advanced" {
+		t.Fatalf("expected adhoc/advanced, got %q", got)
+	}
+}

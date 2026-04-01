@@ -1,0 +1,13 @@
+{
+  "name": "Activate Workflow",
+  "description": "Full agent pipeline: plan, implement, test, review, document, and PR",
+  "extends": "activate/skills",
+  "files": [
+    "agents/documenter.agent.md",
+    "agents/implementer.agent.md",
+    "agents/planner.agent.md",
+    "agents/pr_writer.agent.md",
+    "agents/reviewer.agent.md",
+    "agents/tester.agent.md"
+  ]
+}

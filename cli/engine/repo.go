@@ -194,3 +194,169 @@ func RepoRemove(projectDir string) error {
 	fmt.Fprintf(os.Stderr, "Removed %d managed files from repository.\n", count)
 	return nil
 }
+
+// ── Preset-based RepoAdd ────────────────────────────────────────
+
+// PresetRepoAdd installs preset files into a project and creates the sidecar.
+func PresetRepoAdd(presets []model.Preset, cfg model.Config, projectDir string, contentCache map[string][]byte) error {
+	presetID := cfg.ResolvedPreset()
+	resolved, err := ResolvePresetInheritance(presets, presetID)
+	if err != nil {
+		return err
+	}
+
+	repo := cfg.Repo
+	branch := cfg.Branch
+	if repo == "" {
+		repo = storage.DefaultRepo
+	}
+	if branch == "" {
+		branch = storage.DefaultBranch
+	}
+
+	installed := make([]string, 0, len(resolved.Files)+1)
+
+	var regularFiles []model.PresetFile
+	var mcpFiles []model.PresetFile
+	for _, f := range resolved.Files {
+		cat := f.Category
+		if cat == "" {
+			cat = model.InferCategory(f.Dest)
+		}
+		if cat == "mcp-servers" {
+			mcpFiles = append(mcpFiles, f)
+		} else {
+			regularFiles = append(regularFiles, f)
+		}
+	}
+
+	prevSidecar, _ := storage.ReadRepoSidecar(projectDir)
+	var previousMcpNames []string
+	if prevSidecar != nil {
+		previousMcpNames = prevSidecar.McpServers
+	}
+
+	type writeJob struct {
+		file     model.PresetFile
+		destRel  string
+		destPath string
+	}
+	var toWrite []writeJob
+
+	for _, f := range regularFiles {
+		if f.IsDir {
+			continue
+		}
+		destRel := filepath.ToSlash(filepath.Join(".github", f.Dest))
+		destPath := filepath.Join(projectDir, destRel)
+
+		// Delta: skip if file on disk matches cached remote version.
+		if contentCache != nil {
+			if cached, ok := contentCache[f.Src]; ok {
+				rv := model.ParseFrontmatterVersion(cached)
+				if rv != "" {
+					if iv, err := storage.ReadFileVersion(destPath); err == nil && iv == rv {
+						installed = append(installed, destRel)
+						continue
+					}
+				}
+			}
+		}
+
+		toWrite = append(toWrite, writeJob{file: f, destRel: destRel, destPath: destPath})
+	}
+
+	type writeResult struct {
+		destRel string
+		err     error
+	}
+
+	var uncachedJobs []writeJob
+	var cachedResults []writeResult
+	for _, j := range toWrite {
+		if contentCache != nil {
+			if data, ok := contentCache[j.file.Src]; ok {
+				if err := os.MkdirAll(filepath.Dir(j.destPath), 0755); err != nil {
+					cachedResults = append(cachedResults, writeResult{destRel: j.destRel, err: err})
+					continue
+				}
+				err := os.WriteFile(j.destPath, data, 0644)
+				cachedResults = append(cachedResults, writeResult{destRel: j.destRel, err: err})
+				continue
+			}
+		}
+		uncachedJobs = append(uncachedJobs, j)
+	}
+
+	for _, r := range cachedResults {
+		if r.err != nil {
+			fmt.Fprintf(os.Stderr, "  ✗  %s: %s\n", r.destRel, r.err)
+			continue
+		}
+		fmt.Fprintf(os.Stderr, "  ✓  %s\n", r.destRel)
+		installed = append(installed, r.destRel)
+	}
+
+	if len(uncachedJobs) > 0 {
+		results := make([]writeResult, len(uncachedJobs))
+		var wg sync.WaitGroup
+		sem := make(chan struct{}, 8)
+		for i, job := range uncachedJobs {
+			wg.Add(1)
+			go func(idx int, j writeJob) {
+				defer wg.Done()
+				sem <- struct{}{}
+				defer func() { <-sem }()
+				err := storage.WritePresetFile(j.file, j.destPath, repo, branch)
+				results[idx] = writeResult{destRel: j.destRel, err: err}
+			}(i, job)
+		}
+		wg.Wait()
+
+		for _, r := range results {
+			if r.err != nil {
+				fmt.Fprintf(os.Stderr, "  ✗  %s: %s\n", r.destRel, r.err)
+				continue
+			}
+			fmt.Fprintf(os.Stderr, "  ✓  %s\n", r.destRel)
+			installed = append(installed, r.destRel)
+		}
+	}
+
+	// Handle MCP files using the legacy MCP injection.
+	var mcpManifestFiles []model.ManifestFile
+	for _, f := range mcpFiles {
+		mcpManifestFiles = append(mcpManifestFiles, model.ManifestFile{
+			Src:  f.Src,
+			Dest: f.Dest,
+		})
+	}
+	var mcpServerNames []string
+	if len(mcpManifestFiles) > 0 || len(previousMcpNames) > 0 {
+		// basePath is empty since PresetFile.Src is already fully resolved.
+		names, err := storage.InjectMcpFromManifest(mcpManifestFiles, "", projectDir, previousMcpNames, repo, branch)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "  ✗  MCP config: %s\n", err)
+		} else {
+			mcpServerNames = names
+			for _, name := range names {
+				fmt.Fprintf(os.Stderr, "  ✓  MCP server: %s\n", name)
+			}
+		}
+	}
+
+	if err := storage.WriteRepoSidecar(projectDir, model.RepoSidecar{
+		Preset:     presetID,
+		Files:      installed,
+		McpServers: mcpServerNames,
+		Source:     repo + "@" + branch,
+	}); err != nil {
+		return err
+	}
+
+	_ = storage.WritePresetCache(projectDir, presets)
+	_ = storage.WriteProjectConfig(projectDir, &model.Config{Preset: presetID})
+
+	fmt.Fprintf(os.Stderr, "\nAdded %d managed files to repository.\n", len(installed))
+	return nil
+}

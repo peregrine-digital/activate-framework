@@ -14,6 +14,7 @@ type WorkspaceInfo struct {
 	Name      string `json:"name"`
 	Manifest  string `json:"manifest,omitempty"`
 	Tier      string `json:"tier,omitempty"`
+	Preset    string `json:"preset,omitempty"`
 	FileCount int    `json:"fileCount"`
 	Exists    bool   `json:"exists"`
 }
@@ -62,17 +63,19 @@ func (a *App) ListWorkspaces() []WorkspaceInfo {
 			ws.Exists = true
 		}
 
-		// Read installed.json for manifest/tier/file count
+		// Read installed.json for manifest/tier/preset/file count
 		sidecarPath := filepath.Join(hashDir, "installed.json")
 		if data, err := os.ReadFile(sidecarPath); err == nil {
 			var sidecar struct {
 				Manifest string   `json:"manifest"`
 				Tier     string   `json:"tier"`
+				Preset   string   `json:"preset"`
 				Files    []string `json:"files"`
 			}
 			if json.Unmarshal(data, &sidecar) == nil {
 				ws.Manifest = sidecar.Manifest
 				ws.Tier = sidecar.Tier
+				ws.Preset = sidecar.Preset
 				ws.FileCount = len(sidecar.Files)
 			}
 		}

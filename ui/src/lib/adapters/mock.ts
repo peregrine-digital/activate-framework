@@ -6,33 +6,35 @@ import type {
   DiffResult,
   FileStatus,
   Manifest,
+  Preset,
   TelemetryEntry,
 } from '../types.js';
 
 const MOCK_FILES: FileStatus[] = [
   // Installed — current
-  { dest: '.github/instructions/general.instructions.md', category: 'instructions', installed: true, installedVersion: '0.5.0', bundledVersion: '0.5.0', updateAvailable: false, inTier: true, override: '', skipped: false, description: 'Universal coding conventions and workflow expectations', displayName: 'general', tier: 'core' },
-  { dest: '.github/instructions/security.instructions.md', category: 'instructions', installed: true, installedVersion: '0.5.0', bundledVersion: '0.5.0', updateAvailable: false, inTier: true, override: '', skipped: false, description: 'Security guardrails for all code changes', displayName: 'security', tier: 'core' },
+  { dest: '.github/instructions/general.instructions.md', category: 'instructions', installed: true, installedVersion: '0.5.0', bundledVersion: '0.5.0', updateAvailable: false, inTier: true, inPreset: true, override: '', skipped: false, description: 'Universal coding conventions and workflow expectations', displayName: 'general', tier: 'core' },
+  { dest: '.github/instructions/security.instructions.md', category: 'instructions', installed: true, installedVersion: '0.5.0', bundledVersion: '0.5.0', updateAvailable: false, inTier: true, inPreset: true, override: '', skipped: false, description: 'Security guardrails for all code changes', displayName: 'security', tier: 'core' },
   // Installed — outdated
-  { dest: '.github/instructions/go.instructions.md', category: 'instructions', installed: true, installedVersion: '0.4.0', bundledVersion: '0.5.0', updateAvailable: true, inTier: true, override: '', skipped: false, description: 'Go language conventions and idioms', displayName: 'go', tier: 'standard' },
+  { dest: '.github/instructions/go.instructions.md', category: 'instructions', installed: true, installedVersion: '0.4.0', bundledVersion: '0.5.0', updateAvailable: true, inTier: true, inPreset: true, override: '', skipped: false, description: 'Go language conventions and idioms', displayName: 'go', tier: 'standard' },
   // Installed — pinned
-  { dest: '.github/prompts/create-adr.prompt.md', category: 'prompts', installed: true, installedVersion: '0.3.0', bundledVersion: '0.5.0', updateAvailable: true, inTier: true, override: 'pinned', skipped: false, description: 'Architecture Decision Record prompt template', displayName: 'create-adr', tier: 'standard' },
+  { dest: '.github/prompts/create-adr.prompt.md', category: 'prompts', installed: true, installedVersion: '0.3.0', bundledVersion: '0.5.0', updateAvailable: true, inTier: true, inPreset: true, override: 'pinned', skipped: false, description: 'Architecture Decision Record prompt template', displayName: 'create-adr', tier: 'standard' },
   // Installed — skill
-  { dest: '.github/skills/pr-writing/SKILL.md', category: 'skills', installed: true, installedVersion: '0.5.0', bundledVersion: '0.5.0', updateAvailable: false, inTier: true, override: '', skipped: false, description: 'Pull request writing guidance', displayName: 'pr-writing', tier: 'standard' },
+  { dest: '.github/skills/pr-writing/SKILL.md', category: 'skills', installed: true, installedVersion: '0.5.0', bundledVersion: '0.5.0', updateAvailable: false, inTier: true, inPreset: true, override: '', skipped: false, description: 'Pull request writing guidance', displayName: 'pr-writing', tier: 'standard' },
   // Available
-  { dest: '.github/instructions/python.instructions.md', category: 'instructions', installed: false, installedVersion: null, bundledVersion: '0.5.0', updateAvailable: false, inTier: true, override: '', skipped: false, description: 'Python conventions and best practices', displayName: 'python', tier: 'standard' },
-  { dest: '.github/prompts/write-user-story.prompt.md', category: 'prompts', installed: false, installedVersion: null, bundledVersion: '0.5.0', updateAvailable: false, inTier: true, override: '', skipped: false, description: 'User story creation prompt', displayName: 'write-user-story', tier: 'standard' },
-  { dest: '.github/agents/codebase-documenter.agent.md', category: 'agents', installed: false, installedVersion: null, bundledVersion: '0.5.0', updateAvailable: false, inTier: true, override: '', skipped: false, description: 'Autonomous codebase documentation agent', displayName: 'codebase-documenter', tier: 'standard' },
-  // Outside tier
-  { dest: '.github/skills/ato-compliant-infrastructure/SKILL.md', category: 'skills', installed: false, installedVersion: null, bundledVersion: '0.5.0', updateAvailable: false, inTier: false, override: '', skipped: false, description: 'ATO-compliant infrastructure guidance', displayName: 'ato-compliant-infrastructure', tier: 'advanced' },
-  { dest: '.github/agents/knowledge-guide.agent.md', category: 'agents', installed: false, installedVersion: null, bundledVersion: '0.5.0', updateAvailable: false, inTier: false, override: '', skipped: false, description: 'Proactive methodology guidance agent', displayName: 'knowledge-guide', tier: 'advanced' },
+  { dest: '.github/instructions/python.instructions.md', category: 'instructions', installed: false, installedVersion: null, bundledVersion: '0.5.0', updateAvailable: false, inTier: true, inPreset: true, override: '', skipped: false, description: 'Python conventions and best practices', displayName: 'python', tier: 'standard' },
+  { dest: '.github/prompts/write-user-story.prompt.md', category: 'prompts', installed: false, installedVersion: null, bundledVersion: '0.5.0', updateAvailable: false, inTier: true, inPreset: true, override: '', skipped: false, description: 'User story creation prompt', displayName: 'write-user-story', tier: 'standard' },
+  { dest: '.github/agents/codebase-documenter.agent.md', category: 'agents', installed: false, installedVersion: null, bundledVersion: '0.5.0', updateAvailable: false, inTier: true, inPreset: true, override: '', skipped: false, description: 'Autonomous codebase documentation agent', displayName: 'codebase-documenter', tier: 'standard' },
+  // Outside preset
+  { dest: '.github/skills/ato-compliant-infrastructure/SKILL.md', category: 'skills', installed: false, installedVersion: null, bundledVersion: '0.5.0', updateAvailable: false, inTier: false, inPreset: false, override: '', skipped: false, description: 'ATO-compliant infrastructure guidance', displayName: 'ato-compliant-infrastructure', tier: 'advanced' },
+  { dest: '.github/agents/knowledge-guide.agent.md', category: 'agents', installed: false, installedVersion: null, bundledVersion: '0.5.0', updateAvailable: false, inTier: false, inPreset: false, override: '', skipped: false, description: 'Proactive methodology guidance agent', displayName: 'knowledge-guide', tier: 'advanced' },
   // Excluded
-  { dest: '.github/instructions/java.instructions.md', category: 'instructions', installed: false, installedVersion: null, bundledVersion: '0.5.0', updateAvailable: false, inTier: true, override: 'excluded', skipped: false, description: 'Java language conventions', displayName: 'java', tier: 'standard' },
+  { dest: '.github/instructions/java.instructions.md', category: 'instructions', installed: false, installedVersion: null, bundledVersion: '0.5.0', updateAvailable: false, inTier: true, inPreset: true, override: 'excluded', skipped: false, description: 'Java language conventions', displayName: 'java', tier: 'standard' },
 ];
 
 const MOCK_CONFIG: Config = {
   manifest: 'activate-framework',
   tier: 'standard',
+  preset: 'adhoc/standard',
   repo: 'peregrine-digital/activate-framework',
   branch: 'main',
   fileOverrides: {
@@ -67,6 +69,11 @@ function mockState(): AppState {
     ],
     manifests: [
       { id: 'activate-framework', name: 'Activate Framework', description: 'Main plugin', basePath: 'plugins/activate-framework', tiers: [], files: [] },
+    ],
+    presets: [
+      { id: 'adhoc/core', name: 'Activate Core', description: 'Essential files only' },
+      { id: 'adhoc/standard', name: 'Activate Standard', description: 'Recommended for most teams' },
+      { id: 'adhoc/advanced', name: 'Activate Advanced', description: 'All files including premium' },
     ],
     files: [...MOCK_FILES],
     categories: [
@@ -145,6 +152,7 @@ export function createMockAPI(platformOverride?: Platform): ActivateAPI {
     },
 
     listManifests: () => delay(mockState().manifests),
+    listPresets: () => delay(mockState().presets ?? []),
     listBranches: () => delay(['main', 'develop', 'feat/shared-ui-svelte']),
 
     runTelemetry: async () => delay(undefined, 400),
@@ -153,6 +161,7 @@ export function createMockAPI(platformOverride?: Platform): ActivateAPI {
     openFile: async () => {},
     changeTier: async () => notify(),
     changeManifest: async () => notify(),
+    changePreset: async () => notify(),
     installCLI: async () => {},
     checkForUpdates: async () => {},
 

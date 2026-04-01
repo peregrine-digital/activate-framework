@@ -128,8 +128,14 @@ func (m fileBrowserModel) View() string {
 
 	m.svc.RefreshConfig()
 	cfg := m.svc.CurrentConfig()
-	subtitle := fmt.Sprintf("  manifest=%s · tier=%s · %d files",
-		cfg.Manifest, cfg.Tier, len(m.files))
+	var subtitle string
+	if cfg.Preset != "" || cfg.ResolvedPreset() != "" {
+		subtitle = fmt.Sprintf("  preset=%s · %d files",
+			cfg.ResolvedPreset(), len(m.files))
+	} else {
+		subtitle = fmt.Sprintf("  manifest=%s · tier=%s · %d files",
+			cfg.Manifest, cfg.Tier, len(m.files))
+	}
 
 	switch m.mode {
 	case "browse":

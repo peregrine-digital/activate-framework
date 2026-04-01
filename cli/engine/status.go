@@ -141,3 +141,113 @@ func DetectInstallState(projectDir string) model.InstallState {
 
 	return state
 }
+
+// ── Preset-aware status ─────────────────────────────────────────
+
+// PrefetchPresetFiles downloads all files for a resolved preset concurrently.
+func PrefetchPresetFiles(p model.Preset, repo, branch string) map[string][]byte {
+	start := time.Now()
+	type fetchResult struct {
+		srcPath string
+		data    []byte
+	}
+	results := make([]fetchResult, len(p.Files))
+	var wg sync.WaitGroup
+	var failCount int
+	sem := make(chan struct{}, 8)
+	for i, f := range p.Files {
+		if f.IsDir {
+			continue
+		}
+		wg.Add(1)
+		go func(idx int, src string) {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+			data, err := storage.FetchFile(src, repo, branch)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "[prefetch] failed to fetch %s: %s\n", src, err)
+				failCount++
+			}
+			results[idx] = fetchResult{srcPath: src, data: data}
+		}(i, f.Src)
+	}
+	wg.Wait()
+
+	cache := make(map[string][]byte, len(p.Files))
+	for _, r := range results {
+		if r.data != nil {
+			cache[r.srcPath] = r.data
+		}
+	}
+	fmt.Fprintf(os.Stderr, "[prefetch] completed in %s (%d files, %d failures)\n", time.Since(start), len(cache), failCount)
+	return cache
+}
+
+// ComputePresetFileStatuses builds status list for every file in a resolved preset.
+func ComputePresetFileStatuses(p model.Preset, sidecar *model.RepoSidecar, cfg model.Config, projectDir string, remoteVersions map[string]string) []model.FileStatus {
+	installedSet := make(map[string]bool)
+	if sidecar != nil {
+		for _, f := range sidecar.Files {
+			installedSet[f] = true
+		}
+	}
+
+	result := make([]model.FileStatus, 0, len(p.Files))
+	for _, f := range p.Files {
+		if f.IsDir {
+			continue
+		}
+		destRel := ".github/" + f.Dest
+		cat := f.Category
+		if cat == "" {
+			cat = model.InferCategory(f.Dest)
+		}
+
+		fs := model.FileStatus{
+			Dest:        f.Dest,
+			DisplayName: model.FileDisplayName(f.Dest),
+			Category:    cat,
+			InPreset:    true,
+			InTier:      true, // backward compat
+		}
+		if f.Description != "" {
+			fs.Description = f.Description
+		}
+		if ov, ok := cfg.FileOverrides[f.Dest]; ok {
+			fs.Override = ov
+		}
+		fs.Installed = installedSet[destRel]
+
+		if remoteVersions != nil {
+			fs.BundledVersion = remoteVersions[f.Src]
+		}
+		if fs.Installed {
+			iv, _ := storage.ReadFileVersion(projectDir + "/" + destRel)
+			fs.InstalledVersion = iv
+		}
+		if fs.Installed && fs.BundledVersion != "" && fs.InstalledVersion != "" && fs.BundledVersion != fs.InstalledVersion {
+			fs.UpdateAvailable = true
+		}
+		if sv, ok := cfg.SkippedVersions[f.Dest]; ok && sv == fs.BundledVersion {
+			fs.Skipped = true
+			fs.UpdateAvailable = false
+		}
+
+		result = append(result, fs)
+	}
+	return result
+}
+
+// DetectInstallStatePreset updates install state with preset info.
+func DetectInstallStatePreset(projectDir string) model.InstallState {
+	state := DetectInstallState(projectDir)
+	if sc, _ := storage.ReadRepoSidecar(projectDir); sc != nil {
+		if sc.Preset != "" {
+			state.InstalledPreset = sc.Preset
+		} else if sc.Manifest != "" {
+			state.InstalledPreset = model.MigrateManifestTierToPreset(sc.Manifest, sc.Tier)
+		}
+	}
+	return state
+}

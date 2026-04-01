@@ -29,6 +29,8 @@ const (
 	MethodCheckUpdate   = "activate/checkUpdate"
 	MethodSelfUpdate    = "activate/selfUpdate"
 	MethodBranchList    = "activate/branchList"
+	MethodPresetList    = "activate/presetList"
+	MethodPresetFiles   = "activate/presetFiles"
 
 	// Notification methods (server → client)
 	NotifyStateChanged = "activate/stateChanged"
@@ -55,12 +57,19 @@ type ConfigGetParams struct {
 // ConfigSetParams specifies config updates and scope.
 type ConfigSetParams struct {
 	Scope            string       `json:"scope,omitempty"` // "project" (default), "global"
-	Manifest         string       `json:"manifest,omitempty"`
-	Tier             string       `json:"tier,omitempty"`
+	Manifest         string       `json:"manifest,omitempty"`  // Deprecated: use Preset
+	Tier             string       `json:"tier,omitempty"`       // Deprecated: use Preset
+	Preset           string       `json:"preset,omitempty"`
 	Repo             string       `json:"repo,omitempty"`
 	Branch           string       `json:"branch,omitempty"`
 	TelemetryEnabled *bool        `json:"telemetryEnabled,omitempty"`
 	Updates          *model.Config `json:"updates,omitempty"` // for full config patches
+}
+
+// PresetFilesParams specifies which preset/category to list files for.
+type PresetFilesParams struct {
+	Preset   string `json:"preset,omitempty"`
+	Category string `json:"category,omitempty"`
 }
 
 // ManifestFilesParams specifies which manifest/tier/category to list files for.

@@ -146,6 +146,34 @@ func fetchRaw(filePath, repo, branch string) ([]byte, error) {
 	return io.ReadAll(io.LimitReader(resp.Body, 10<<20))
 }
 
+// ListDirEntries lists subdirectory names (type "dir") or file names
+// under a directory path using the GitHub Contents API.
+func ListDirEntries(dirPath, repo, branch, entryType string) ([]string, error) {
+	url := fmt.Sprintf("%s/repos/%s/contents/%s?ref=%s", APIBase, repo, dirPath, branch)
+	resp, err := GitHubGet(url)
+	if err != nil {
+		return nil, fmt.Errorf("list %s: %w", dirPath, err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf("list %s: %d %s", dirPath, resp.StatusCode, resp.Status)
+	}
+	var entries []struct {
+		Name string `json:"name"`
+		Type string `json:"type"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&entries); err != nil {
+		return nil, fmt.Errorf("parse %s listing: %w", dirPath, err)
+	}
+	var names []string
+	for _, e := range entries {
+		if e.Type == entryType {
+			names = append(names, e.Name)
+		}
+	}
+	return names, nil
+}
+
 // FetchBranches lists branch names for a GitHub repo via the API.
 func FetchBranches(repo string) ([]string, error) {
 	url := fmt.Sprintf("%s/repos/%s/branches?per_page=100", APIBase, repo)

@@ -2,8 +2,9 @@ package model
 
 // RepoSidecar tracks installed files and their metadata.
 type RepoSidecar struct {
-	Manifest   string   `json:"manifest"`
-	Tier       string   `json:"tier"`
+	Manifest   string   `json:"manifest,omitempty"`   // Deprecated: use Preset
+	Tier       string   `json:"tier,omitempty"`        // Deprecated: use Preset
+	Preset     string   `json:"preset,omitempty"`
 	Files      []string `json:"files"`
 	McpServers []string `json:"mcpServers,omitempty"`
 	Source     string   `json:"source,omitempty"`
@@ -14,23 +15,25 @@ type InstallState struct {
 	HasGlobalConfig   bool   `json:"hasGlobalConfig"`
 	HasProjectConfig  bool   `json:"hasProjectConfig"`
 	HasInstallMarker  bool   `json:"hasInstallMarker"`
-	InstalledManifest string `json:"installedManifest,omitempty"`
+	InstalledManifest string `json:"installedManifest,omitempty"` // Deprecated: kept for compat
+	InstalledPreset   string `json:"installedPreset,omitempty"`
 }
 
-// FileStatus describes the install/version state of a single manifest file.
+// FileStatus describes the install/version state of a single file.
 type FileStatus struct {
 	Dest             string `json:"dest"`
 	DisplayName      string `json:"displayName"`
 	Category         string `json:"category"`
-	Tier             string `json:"tier"`
+	Tier             string `json:"tier,omitempty"`              // Deprecated: kept for compat
 	Description      string `json:"description,omitempty"`
 	Installed        bool   `json:"installed"`
-	InTier           bool   `json:"inTier"`
+	InTier           bool   `json:"inTier"`                     // Deprecated: kept for compat
+	InPreset         bool   `json:"inPreset"`
 	BundledVersion   string `json:"bundledVersion,omitempty"`
 	InstalledVersion string `json:"installedVersion,omitempty"`
 	UpdateAvailable  bool   `json:"updateAvailable"`
 	Skipped          bool   `json:"skipped"`
-	Override         string `json:"override,omitempty"` // "pinned", "excluded", or ""
+	Override         string `json:"override,omitempty"`
 }
 
 // TelemetryEntry is a single quota log entry.

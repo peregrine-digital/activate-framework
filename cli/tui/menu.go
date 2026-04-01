@@ -135,21 +135,34 @@ func (m mainMenuModel) stateText() string {
 		text = "no project config detected"
 	}
 	if m.state.HasInstallMarker {
-		text += fmt.Sprintf(" · installed %s", m.state.InstalledManifest)
+		installed := m.state.InstalledPreset
+		if installed == "" {
+			installed = m.state.InstalledManifest
+		}
+		text += fmt.Sprintf(" · installed %s", installed)
 	}
 	return text
 }
 
 func (m mainMenuModel) stateBody() string {
+	installed := m.state.InstalledPreset
+	if installed == "" {
+		installed = m.state.InstalledManifest
+	}
+
+	presetLine := m.cfg.ResolvedPreset()
+	if presetLine == "" {
+		presetLine = fmt.Sprintf("%s/%s", m.cfg.Manifest, m.cfg.Tier)
+	}
+
 	return fmt.Sprintf(
-		"Project: %s\nGlobal config:  %t\nProject config: %t\nInstall marker: %t\nInstalled: %s\n\nEffective config:\n  manifest: %s\n  tier: %s",
+		"Project: %s\nGlobal config:  %t\nProject config: %t\nInstall marker: %t\nInstalled: %s\n\nEffective config:\n  preset: %s",
 		m.projectDir,
 		m.state.HasGlobalConfig,
 		m.state.HasProjectConfig,
 		m.state.HasInstallMarker,
-		m.state.InstalledManifest,
-		m.cfg.Manifest,
-		m.cfg.Tier,
+		installed,
+		presetLine,
 	)
 }
 
@@ -197,7 +210,11 @@ func buildMainMenuForm(state model.InstallState, choice *string) *huh.Form {
 		stateText = "no project config detected"
 	}
 	if state.HasInstallMarker {
-		stateText += fmt.Sprintf(" · installed %s", state.InstalledManifest)
+		installed := state.InstalledPreset
+		if installed == "" {
+			installed = state.InstalledManifest
+		}
+		stateText += fmt.Sprintf(" · installed %s", installed)
 	}
 
 	return huh.NewForm(
@@ -249,6 +266,16 @@ func RunInteractiveMenu(svc commands.ActivateAPI) error {
 			target := defaultTargetDir()
 			confirm := false
 
+			presetLabel := cfg.ResolvedPreset()
+			var confirmTitle, subtitle string
+			if presetLabel != "" {
+				confirmTitle = fmt.Sprintf("Install with preset=%s?", presetLabel)
+				subtitle = fmt.Sprintf("preset=%s", presetLabel)
+			} else {
+				confirmTitle = fmt.Sprintf("Install with manifest=%s, tier=%s?", cfg.Manifest, cfg.Tier)
+				subtitle = fmt.Sprintf("manifest=%s · tier=%s", cfg.Manifest, cfg.Tier)
+			}
+
 			quickForm := huh.NewForm(
 				huh.NewGroup(
 					huh.NewInput().
@@ -257,14 +284,14 @@ func RunInteractiveMenu(svc commands.ActivateAPI) error {
 						Placeholder(defaultTargetDir()).
 						Value(&target),
 					huh.NewConfirm().
-						Title(fmt.Sprintf("Install with manifest=%s, tier=%s?", cfg.Manifest, cfg.Tier)).
+						Title(confirmTitle).
 						Affirmative("  Install  ").
 						Negative("  Cancel  ").
 						Value(&confirm),
 				),
 			).WithTheme(huh.ThemeCharm()).WithShowHelp(false)
 
-			if err := runFullscreenForm(quickForm, "Quick Install", fmt.Sprintf("manifest=%s · tier=%s", cfg.Manifest, cfg.Tier)); err != nil {
+			if err := runFullscreenForm(quickForm, "Quick Install", subtitle); err != nil {
 				return err
 			}
 			if confirm {
@@ -278,7 +305,12 @@ func RunInteractiveMenu(svc commands.ActivateAPI) error {
 			if err != nil {
 				_ = runFullscreenText("Action Failed", "Repo add", err.Error())
 			} else {
-				msg := fmt.Sprintf("✓ Added managed files to repository\n\n  Manifest: %s\n  Tier:     %s", addResult.Manifest, addResult.Tier)
+				var msg string
+				if addResult.Preset != "" {
+					msg = fmt.Sprintf("✓ Added managed files to repository\n\n  Preset: %s", addResult.Preset)
+				} else {
+					msg = fmt.Sprintf("✓ Added managed files to repository\n\n  Manifest: %s\n  Tier:     %s", addResult.Manifest, addResult.Tier)
+				}
 				_ = runFullscreenText("Repo Add Complete", "", msg)
 			}
 

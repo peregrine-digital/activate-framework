@@ -144,7 +144,7 @@ Plugins are validated against this structure. Required checks:
 - [ ] Each `*.instructions.md` has `applyTo` frontmatter
 - [ ] Each skill folder contains `SKILL.md` with `name` and `description`
 - [ ] Each `*.agent.md` has `name` and `description` frontmatter
-- [ ] Manifest `category` values match directory structure
+- [ ] Preset `files` entries match directory structure
 
 ## Reference
 

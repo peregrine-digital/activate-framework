@@ -172,3 +172,150 @@ func SyncNeeded(m model.Manifest, sidecar *model.RepoSidecar, tier string) bool 
 	}
 	return sidecar.Manifest != m.ID || sidecar.Tier != tier
 }
+
+// ── Preset-aware operations ─────────────────────────────────────
+
+// PresetUpdateFiles re-installs only currently-tracked files for a preset.
+func PresetUpdateFiles(p model.Preset, sidecar *model.RepoSidecar, cfg model.Config, projectDir string) (updated []string, skipped []string, err error) {
+	if sidecar == nil {
+		return nil, nil, fmt.Errorf("no sidecar found; nothing to update")
+	}
+
+	repo := cfg.Repo
+	branch := cfg.Branch
+	if repo == "" {
+		repo = storage.DefaultRepo
+	}
+	if branch == "" {
+		branch = storage.DefaultBranch
+	}
+
+	installedSet := make(map[string]bool)
+	for _, f := range sidecar.Files {
+		installedSet[f] = true
+	}
+
+	var mcpFiles []model.PresetFile
+	for _, f := range p.Files {
+		if f.IsDir {
+			continue
+		}
+		cat := f.Category
+		if cat == "" {
+			cat = model.InferCategory(f.Dest)
+		}
+		if cat == "mcp-servers" {
+			mcpFiles = append(mcpFiles, f)
+			continue
+		}
+
+		destRel := ".github/" + f.Dest
+		if !installedSet[destRel] {
+			continue
+		}
+
+		if sv, ok := cfg.SkippedVersions[f.Dest]; ok {
+			bv, _ := storage.ReadFileVersionRemote(f.Src, repo, branch)
+			if sv == bv {
+				skipped = append(skipped, f.Dest)
+				continue
+			}
+		}
+
+		destPath := filepath.Join(projectDir, destRel)
+		if writeErr := storage.WritePresetFile(f, destPath, repo, branch); writeErr != nil {
+			fmt.Fprintf(os.Stderr, "  ✗  %s: %s\n", f.Dest, writeErr)
+			continue
+		}
+		updated = append(updated, f.Dest)
+	}
+
+	// Handle MCP
+	var mcpManifestFiles []model.ManifestFile
+	for _, f := range mcpFiles {
+		mcpManifestFiles = append(mcpManifestFiles, model.ManifestFile{Src: f.Src, Dest: f.Dest})
+	}
+	if len(mcpManifestFiles) > 0 || len(sidecar.McpServers) > 0 {
+		names, mcpErr := storage.InjectMcpFromManifest(mcpManifestFiles, "", projectDir, sidecar.McpServers, repo, branch)
+		if mcpErr != nil {
+			fmt.Fprintf(os.Stderr, "  ✗  MCP config: %s\n", mcpErr)
+		} else {
+			sidecar.McpServers = names
+		}
+	}
+
+	if err := storage.WriteRepoSidecar(projectDir, *sidecar); err != nil {
+		return updated, skipped, err
+	}
+	return updated, skipped, nil
+}
+
+// PresetInstallSingleFile installs one preset file and updates the sidecar.
+func PresetInstallSingleFile(f model.PresetFile, presetID, projectDir string, cfg model.Config) error {
+	repo := cfg.Repo
+	branch := cfg.Branch
+	if repo == "" {
+		repo = storage.DefaultRepo
+	}
+	if branch == "" {
+		branch = storage.DefaultBranch
+	}
+
+	destRel := ".github/" + f.Dest
+	destPath := filepath.Join(projectDir, destRel)
+
+	if err := storage.WritePresetFile(f, destPath, repo, branch); err != nil {
+		return err
+	}
+
+	sidecar, _ := storage.ReadRepoSidecar(projectDir)
+	if sidecar == nil {
+		sidecar = &model.RepoSidecar{Preset: presetID}
+	}
+	if !model.ContainsString(sidecar.Files, destRel) {
+		sidecar.Files = append(sidecar.Files, destRel)
+	}
+	return storage.WriteRepoSidecar(projectDir, *sidecar)
+}
+
+// PresetDiffFile produces a unified diff for a preset file.
+func PresetDiffFile(f model.PresetFile, projectDir string, cfg model.Config) (string, error) {
+	repo := cfg.Repo
+	branch := cfg.Branch
+	if repo == "" {
+		repo = storage.DefaultRepo
+	}
+	if branch == "" {
+		branch = storage.DefaultBranch
+	}
+
+	bundled, err := storage.FetchFile(f.Src, repo, branch)
+	if err != nil {
+		return "", fmt.Errorf("fetch %s: %w", f.Src, err)
+	}
+
+	destRel := ".github/" + f.Dest
+	installedPath := filepath.Join(projectDir, destRel)
+	installed, err := os.ReadFile(installedPath)
+	if err != nil {
+		return "", fmt.Errorf("read installed %s: %w", destRel, err)
+	}
+
+	return unifiedDiff(string(bundled), string(installed), "remote/"+f.Src, "installed/"+destRel), nil
+}
+
+// PresetSyncNeeded checks if the installed preset differs from the desired preset.
+func PresetSyncNeeded(sidecar *model.RepoSidecar, presetID string) bool {
+	if sidecar == nil {
+		return false
+	}
+	if sidecar.Preset != "" {
+		return sidecar.Preset != presetID
+	}
+	// Legacy: check old manifest+tier
+	if sidecar.Manifest != "" {
+		legacy := model.MigrateManifestTierToPreset(sidecar.Manifest, sidecar.Tier)
+		return legacy != presetID
+	}
+	return false
+}

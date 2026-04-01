@@ -234,6 +234,13 @@ func (a *App) ListManifests() (json.RawMessage, error) {
 	return a.daemon.call("activate/manifestList", nil)
 }
 
+func (a *App) ListPresets() (json.RawMessage, error) {
+	if err := a.requireDaemon(); err != nil {
+		return nil, err
+	}
+	return a.daemon.call("activate/presetList", nil)
+}
+
 func (a *App) ListBranches() (json.RawMessage, error) {
 	if err := a.requireDaemon(); err != nil {
 		return nil, err

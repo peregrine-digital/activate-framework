@@ -285,6 +285,88 @@ func TestListWorkspaces_Sorting(t *testing.T) {
 	}
 }
 
+func TestListWorkspaces_PresetField(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	projectDir := "/usr/local"
+
+	reposDir := filepath.Join(home, ".activate", "repos")
+	hashDir := filepath.Join(reposDir, "preset-hash")
+	os.MkdirAll(hashDir, 0755)
+
+	repoJSON, _ := json.Marshal(map[string]string{"path": projectDir})
+	os.WriteFile(filepath.Join(hashDir, "repo.json"), repoJSON, 0644)
+
+	installedJSON, _ := json.Marshal(map[string]interface{}{
+		"preset": "adhoc/standard",
+		"files":  []string{"file1.yml", "file2.yml"},
+	})
+	os.WriteFile(filepath.Join(hashDir, "installed.json"), installedJSON, 0644)
+
+	app := &App{}
+	ws := app.ListWorkspaces()
+
+	if len(ws) != 1 {
+		t.Fatalf("expected 1 workspace, got %d", len(ws))
+	}
+
+	w := ws[0]
+	if w.Preset != "adhoc/standard" {
+		t.Errorf("preset = %q, want %q", w.Preset, "adhoc/standard")
+	}
+	if w.Manifest != "" {
+		t.Errorf("manifest should be empty for preset-only sidecar, got %q", w.Manifest)
+	}
+	if w.Tier != "" {
+		t.Errorf("tier should be empty for preset-only sidecar, got %q", w.Tier)
+	}
+	if w.FileCount != 2 {
+		t.Errorf("fileCount = %d, want %d", w.FileCount, 2)
+	}
+}
+
+func TestListWorkspaces_PresetWithLegacyFields(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	projectDir := "/usr/local"
+
+	reposDir := filepath.Join(home, ".activate", "repos")
+	hashDir := filepath.Join(reposDir, "preset-legacy-hash")
+	os.MkdirAll(hashDir, 0755)
+
+	repoJSON, _ := json.Marshal(map[string]string{"path": projectDir})
+	os.WriteFile(filepath.Join(hashDir, "repo.json"), repoJSON, 0644)
+
+	// Sidecar with both preset and legacy manifest/tier fields
+	installedJSON, _ := json.Marshal(map[string]interface{}{
+		"manifest": "activate-framework",
+		"tier":     "standard",
+		"preset":   "adhoc/standard",
+		"files":    []string{"file1.yml"},
+	})
+	os.WriteFile(filepath.Join(hashDir, "installed.json"), installedJSON, 0644)
+
+	app := &App{}
+	ws := app.ListWorkspaces()
+
+	if len(ws) != 1 {
+		t.Fatalf("expected 1 workspace, got %d", len(ws))
+	}
+
+	w := ws[0]
+	if w.Preset != "adhoc/standard" {
+		t.Errorf("preset = %q, want %q", w.Preset, "adhoc/standard")
+	}
+	if w.Manifest != "activate-framework" {
+		t.Errorf("manifest = %q, want %q", w.Manifest, "activate-framework")
+	}
+	if w.Tier != "standard" {
+		t.Errorf("tier = %q, want %q", w.Tier, "standard")
+	}
+}
+
 func TestListWorkspaces_SkipsFiles(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)

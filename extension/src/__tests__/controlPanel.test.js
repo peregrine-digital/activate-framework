@@ -188,6 +188,46 @@ describe('ControlPanelProvider', () => {
       assert.equal(state.availableFiles.length, 1); // only foundation files
       assert.equal(state.outsideTierFiles.length, 1); // extras is outside basic
     });
+
+    it('uses presets from daemon state when available', async () => {
+      mockClient._mockResults.getState = {
+        config: { preset: 'activate/workflow', manifest: 'ironarch', tier: 'workflow', fileOverrides: {}, skippedVersions: {} },
+        state: { hasInstallMarker: true },
+        presets: [
+          { id: 'activate/standard', name: 'Activate Standard', description: 'Standard preset' },
+          { id: 'activate/workflow', name: 'Activate Workflow', description: 'Workflow preset' },
+        ],
+        tiers: [],
+        files: [
+          { dest: 'instructions/a.md', category: 'instructions', installed: true, inPreset: true, inTier: true, override: '' },
+          { dest: 'agents/b.md', category: 'agents', installed: false, inPreset: true, inTier: false, override: '' },
+          { dest: 'agents/c.md', category: 'agents', installed: false, inPreset: false, inTier: false, override: '' },
+        ],
+      };
+
+      const state = await panel._gatherState();
+      assert.equal(state.preset, 'activate/workflow');
+      assert.equal(state.presetLabel, 'Activate Workflow');
+      assert.equal(state.presets.length, 2);
+      assert.equal(state.installedFiles.length, 1);
+      assert.equal(state.availableFiles.length, 1); // agents/b.md is inPreset
+      assert.equal(state.outsideTierFiles.length, 1); // agents/c.md is not inPreset
+    });
+
+    it('falls back to inTier when no presets available', async () => {
+      mockClient._mockResults.getState = {
+        config: { tier: 'standard', manifest: 'test', fileOverrides: {}, skippedVersions: {} },
+        state: { hasInstallMarker: true },
+        tiers: [{ id: 'standard', label: 'Standard' }],
+        files: [
+          { dest: 'a.md', category: 'instructions', installed: false, inPreset: false, inTier: true, override: '' },
+        ],
+      };
+
+      const state = await panel._gatherState();
+      assert.equal(state.presets.length, 0);
+      assert.equal(state.availableFiles.length, 1); // falls back to inTier
+    });
   });
 
   describe('_render', () => {
@@ -213,6 +253,27 @@ describe('ControlPanelProvider', () => {
         // HTML generation may fail without full webview mock — that's fine
       }
       assert.ok(logCalled, 'readTelemetryLog should have been called');
+    });
+
+    it('renders settings page with preset when presets available', async () => {
+      mockClient._mockResults.getState = {
+        config: { preset: 'activate/workflow', manifest: 'ironarch', tier: 'workflow', telemetryEnabled: true },
+        state: { hasInstallMarker: true },
+        presets: [{ id: 'activate/workflow', name: 'Activate Workflow', description: 'Workflow' }],
+        tiers: [],
+        projectDir: '/test/project',
+      };
+      mockClient._mockResults.config_global = { preset: 'activate/workflow' };
+      mockClient._mockResults.config_project = { preset: 'activate/workflow' };
+
+      panel._currentPage = 'settings';
+      panel._view = {
+        webview: { html: '', options: {}, cspSource: '' },
+      };
+
+      await panel._render();
+      assert.ok(panel._view.webview.html.includes('Preset'), 'should show Preset label when presets available');
+      assert.ok(panel._view.webview.html.includes('activate/workflow'), 'should show preset value');
     });
 
     it('renders settings page with config scopes', async () => {
