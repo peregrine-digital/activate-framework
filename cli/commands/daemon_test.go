@@ -189,6 +189,7 @@ func newHarness(t *testing.T) *harness {
 	clientReader := bufio.NewReader(clientRead)
 
 	daemon := NewDaemon(svc, serverTransport, "")
+	daemon.DisableWatcher = true
 
 	errCh := make(chan error, 1)
 	go func() {
@@ -780,6 +781,7 @@ func newEmptyHarness(t *testing.T) *harness {
 	clientReader := bufio.NewReader(clientRead)
 
 	daemon := NewDaemon(svc, serverTransport, "1.0.0-test")
+	daemon.DisableWatcher = true
 
 	errCh := make(chan error, 1)
 	go func() {
