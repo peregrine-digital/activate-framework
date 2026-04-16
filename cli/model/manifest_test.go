@@ -47,7 +47,7 @@ func TestPresetFileFields(t *testing.T) {
 func TestPresetFields(t *testing.T) {
 	p := Preset{
 		ID:      "adhoc/standard",
-		Name:    "Activate Standard",
+		Name:    "AdHoc Standard",
 		Plugin:  "adhoc",
 		Extends: "adhoc/core",
 		Files:   []PresetFile{{Src: "plugins/adhoc/a.md", Dest: "a.md"}},

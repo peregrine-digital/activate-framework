@@ -1,5 +1,5 @@
 {
-  "name": "Activate Core",
+  "name": "AdHoc Core",
   "description": "Foundation: security guardrails, coding conventions, and essential prompts",
   "files": [
     "AGENTS.md",

@@ -1,5 +1,5 @@
 {
-  "name": "Activate Advanced",
+  "name": "AdHoc Advanced",
   "description": "Standard plus federal compliance, AWS alignment, agent authoring, and web fetch",
   "extends": "adhoc/standard",
   "files": [

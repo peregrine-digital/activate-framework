@@ -1,5 +1,5 @@
 {
-  "name": "Activate Standard",
+  "name": "AdHoc Standard",
   "description": "Core plus language guides, design skills, agents, and GitHub integration",
   "extends": "adhoc/core",
   "files": [
