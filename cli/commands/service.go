@@ -563,7 +563,11 @@ func (s *ActivateService) syncPreset() (*SyncResult, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &SyncResult{Action: "updated", Updated: updated, Skipped: skipped}, nil
+	action := "none"
+	if len(updated) > 0 {
+		action = "updated"
+	}
+	return &SyncResult{Action: action, Updated: updated, Skipped: skipped}, nil
 }
 
 func (s *ActivateService) syncManifest() (*SyncResult, error) {
@@ -594,8 +598,12 @@ func (s *ActivateService) syncManifest() (*SyncResult, error) {
 		return nil, err
 	}
 
+	action := "none"
+	if len(updated) > 0 {
+		action = "updated"
+	}
 	return &SyncResult{
-		Action:  "updated",
+		Action:  action,
 		Updated: updated,
 		Skipped: skipped,
 	}, nil
