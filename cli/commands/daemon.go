@@ -8,6 +8,7 @@ import (
 
 	"github.com/peregrine-digital/activate-framework/cli/model"
 	"github.com/peregrine-digital/activate-framework/cli/selfupdate"
+	"github.com/peregrine-digital/activate-framework/cli/storage"
 	"github.com/peregrine-digital/activate-framework/cli/transport"
 )
 
@@ -57,6 +58,23 @@ func (d *Daemon) Serve() error {
 }
 
 func (d *Daemon) dispatch(req *transport.Request) *transport.Response {
+	if isMutating(req.Method) {
+		projectDir := d.service.CurrentProjectDir()
+		if projectDir != "" {
+			var resp *transport.Response
+			if err := storage.WithProjectLock(projectDir, func() error {
+				resp = d.route(req)
+				return nil
+			}); err != nil {
+				return transport.ErrorResponse(req.ID, transport.ErrCodeInternal, fmt.Sprintf("lock: %s", err))
+			}
+			return resp
+		}
+	}
+	return d.route(req)
+}
+
+func (d *Daemon) route(req *transport.Request) *transport.Response {
 	switch req.Method {
 	case transport.MethodInitialize:
 		return d.handleInitialize(req)

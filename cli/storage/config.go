@@ -141,25 +141,29 @@ func WriteProjectConfig(projectDir string, updates *model.Config) error {
 }
 
 // WriteGlobalConfig writes (merge-update) ~/.activate/config.json.
+// Acquires a global advisory lock to prevent concurrent writes from
+// multiple daemon processes.
 func WriteGlobalConfig(updates *model.Config) error {
-	path := GlobalConfigPath()
-	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
-		return err
-	}
-	existing, _ := ReadGlobalConfig()
-	base := &model.Config{
-		FileOverrides:   make(map[string]string),
-		SkippedVersions: make(map[string]string),
-	}
-	if existing != nil {
-		base = existing
-	}
-	model.MergeConfig(base, updates)
-	data, err := json.MarshalIndent(base, "", "  ")
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(path, append(data, '\n'), 0644)
+	return WithGlobalLock(func() error {
+		path := GlobalConfigPath()
+		if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+			return err
+		}
+		existing, _ := ReadGlobalConfig()
+		base := &model.Config{
+			FileOverrides:   make(map[string]string),
+			SkippedVersions: make(map[string]string),
+		}
+		if existing != nil {
+			base = existing
+		}
+		model.MergeConfig(base, updates)
+		data, err := json.MarshalIndent(base, "", "  ")
+		if err != nil {
+			return err
+		}
+		return os.WriteFile(path, append(data, '\n'), 0644)
+	})
 }
 
 // SetFileOverride sets a file override ("pinned" or "excluded") in project config.
