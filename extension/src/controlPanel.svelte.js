@@ -145,8 +145,8 @@ class ControlPanelProvider {
           break;
         }
         case 'readTelemetryLog': {
-          const log = await this._client.readTelemetryLog();
-          respond(log?.entries || []);
+          const entries = await this._client.readTelemetryLog();
+          respond(entries || []);
           break;
         }
 
