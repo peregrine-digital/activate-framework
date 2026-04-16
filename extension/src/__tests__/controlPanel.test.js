@@ -421,4 +421,68 @@ describe('groupByCategory (via controlPanel module)', () => {
       assert.ok(renderCount <= 2, `expected at most 2 renders, got ${renderCount}`);
     });
   });
+
+  describe('showSettings message', () => {
+    it('switches to settings page when gear button message is received', async () => {
+      const mc = new MockClient();
+      const p = new ControlPanelProvider(mc, '0.1.0');
+      mc._mockResults.getState = {
+        config: { preset: 'adhoc/core', manifest: '', tier: '' },
+        state: { hasInstallMarker: true },
+        presets: [{ id: 'adhoc/core', name: 'AdHoc Core' }],
+        tiers: [],
+        projectDir: '/test/project',
+      };
+      mc._mockResults.config_global = {};
+      mc._mockResults.config_project = {};
+
+      let messageHandler;
+      const webview = {
+        options: {},
+        onDidReceiveMessage: (handler) => { messageHandler = handler; },
+        html: '',
+      };
+      p.resolveWebviewView({ webview });
+
+      // Wait for initial render
+      await new Promise((r) => setTimeout(r, 50));
+
+      // Simulate gear button click
+      assert.equal(p._currentPage, 'main');
+      messageHandler({ command: 'showSettings' });
+
+      // Wait for async render
+      await new Promise((r) => setTimeout(r, 50));
+
+      assert.equal(p._currentPage, 'settings');
+      assert.ok(webview.html.includes('Settings'), 'should render settings page HTML');
+      assert.ok(webview.html.includes('backToMain'), 'should have back button');
+    });
+
+    it('shows error in panel when settings render fails', async () => {
+      const mc = new MockClient();
+      const p = new ControlPanelProvider(mc, '0.1.0');
+      // Make getConfig reject to simulate daemon error
+      mc.getConfig = async () => { throw new Error('daemon unavailable'); };
+      mc._mockResults.getState = {
+        config: {}, state: {}, presets: [], tiers: [],
+      };
+
+      let messageHandler;
+      const webview = {
+        options: {},
+        onDidReceiveMessage: (handler) => { messageHandler = handler; },
+        html: '',
+      };
+      p.resolveWebviewView({ webview });
+      await new Promise((r) => setTimeout(r, 50));
+
+      messageHandler({ command: 'showSettings' });
+      await new Promise((r) => setTimeout(r, 50));
+
+      assert.ok(webview.html.includes('Render failed'), 'should show error message');
+      assert.ok(webview.html.includes('daemon unavailable'), 'should show error details');
+      assert.ok(webview.html.includes('backToMain'), 'should have back button');
+    });
+  });
 });
