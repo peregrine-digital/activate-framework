@@ -8,6 +8,7 @@ import (
 
 	"github.com/peregrine-digital/activate-framework/cli/model"
 	"github.com/peregrine-digital/activate-framework/cli/selfupdate"
+	"github.com/peregrine-digital/activate-framework/cli/storage"
 	"github.com/peregrine-digital/activate-framework/cli/transport"
 )
 
@@ -57,6 +58,23 @@ func (d *Daemon) Serve() error {
 }
 
 func (d *Daemon) dispatch(req *transport.Request) *transport.Response {
+	if isMutating(req.Method) {
+		projectDir := d.service.CurrentProjectDir()
+		if projectDir != "" {
+			var resp *transport.Response
+			if err := storage.WithProjectLock(projectDir, func() error {
+				resp = d.route(req)
+				return nil
+			}); err != nil {
+				return transport.ErrorResponse(req.ID, transport.ErrCodeInternal, fmt.Sprintf("lock: %s", err))
+			}
+			return resp
+		}
+	}
+	return d.route(req)
+}
+
+func (d *Daemon) route(req *transport.Request) *transport.Response {
 	switch req.Method {
 	case transport.MethodInitialize:
 		return d.handleInitialize(req)
@@ -76,6 +94,8 @@ func (d *Daemon) dispatch(req *transport.Request) *transport.Response {
 		return d.handlePresetList(req)
 	case transport.MethodPresetFiles:
 		return d.handlePresetFiles(req)
+	case transport.MethodPresetRefresh:
+		return d.handlePresetRefresh(req)
 	case transport.MethodRepoAdd:
 		return d.handleRepoAdd(req)
 	case transport.MethodRepoRemove:
@@ -114,7 +134,7 @@ func isMutating(method string) bool {
 	case transport.MethodConfigSet, transport.MethodRepoAdd, transport.MethodRepoRemove,
 		transport.MethodSync, transport.MethodUpdate, transport.MethodFileInstall,
 		transport.MethodFileUninstall, transport.MethodFileSkip, transport.MethodFileOverride,
-		transport.MethodTelemetryRun:
+		transport.MethodTelemetryRun, transport.MethodPresetRefresh:
 		return true
 	}
 	return false
@@ -242,6 +262,10 @@ func (d *Daemon) handlePresetFiles(req *transport.Request) *transport.Response {
 		return transport.ErrorResponse(req.ID, transport.ErrCodeInternal, err.Error())
 	}
 	return transport.SuccessResponse(req.ID, result)
+}
+
+func (d *Daemon) handlePresetRefresh(req *transport.Request) *transport.Response {
+	return transport.SuccessResponse(req.ID, d.service.RefreshPresets())
 }
 
 func (d *Daemon) handleRepoAdd(req *transport.Request) *transport.Response {
