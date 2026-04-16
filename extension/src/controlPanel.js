@@ -172,9 +172,15 @@ class ControlPanelProvider {
         this._view.webview.html = this._getHtml(state);
       }
     } catch (err) {
-      // Daemon may not be ready yet — log for diagnostics
+      // Daemon may not be ready yet — show error in panel so it's visible
       if (typeof console !== 'undefined') {
         console.warn('[ControlPanel] render failed:', err?.message || err);
+      }
+      if (this._view) {
+        this._view.webview.html = `<!DOCTYPE html><html><body>
+          <p style="color:var(--vscode-errorForeground)">Render failed: ${String(err?.message || err).replace(/</g, '&lt;')}</p>
+          <button onclick="const v=acquireVsCodeApi();v.postMessage({command:'backToMain'})">← Back</button>
+        </body></html>`;
       }
     }
   }

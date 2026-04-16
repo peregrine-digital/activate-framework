@@ -648,9 +648,9 @@ async function autoSetup(controlPanel, context) {
     } else {
       // Sync to pick up version changes
       const result = await client.sync();
-      if (result.action === 'updated') {
+      if (result.action === 'updated' && result.updated && result.updated.length > 0) {
         vscode.window.showInformationMessage(
-          `Peregrine Activate updated: ${result.previousVersion} → ${result.availableVersion}`,
+          `Peregrine Activate updated ${result.updated.length} file(s)`,
         );
       }
     }

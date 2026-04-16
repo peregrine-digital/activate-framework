@@ -23,7 +23,7 @@
   $effect(() => { loadConfigs(); });
 
   let resolved = $derived(appState.config);
-  let tiers = $derived(appState.tiers);
+  let tiers = $derived(appState.tiers ?? []);
   let tierLabel = $derived(tiers.find((t) => t.id === resolved.tier)?.label || resolved.tier || '—');
   let hasPresets = $derived((appState.presets?.length ?? 0) > 0);
   let presetLabel = $derived(appState.presets?.find((p) => p.id === resolved.preset)?.name || resolved.preset || '—');
