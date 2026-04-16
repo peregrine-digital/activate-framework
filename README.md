@@ -6,7 +6,7 @@ The framework has four delivery surfaces: a **compiled Go CLI** with an interact
 
 ## What It Does
 
-1. **Discovers presets** — Each preset defines a named collection of files that users pick from a single flat list (e.g., "Activate Standard", "IronArch Workflow")
+1. **Discovers presets** — Each preset defines a named collection of files that users pick from a single flat list (e.g., "AdHoc Standard", "Activate Workflow")
 2. **Installs agent configuration** — Copies `.instructions.md`, `.prompt.md`, `.agent.md`, `SKILL.md`, and `AGENTS.md` files into your workspace's `.github/` directory
 3. **Hides from git** — Installed files are auto-excluded via `.git/info/exclude` so they never get committed
 4. **Tracks state** — A sidecar file (`~/.activate/repos/<hash>/installed.json`) tracks what's installed, versions, and checksums
@@ -153,7 +153,7 @@ plugins/{plugin-name}/
 └── agents/*.agent.md                      # Specialized personas
 ```
 
-Each plugin defines **presets** — named configurations that users pick from a single flat list. Presets support inheritance via `extends`, so "Activate Standard" includes everything from "Activate Core" plus additional files. Files are resolved as paths relative to the plugin directory, with `@plugin/path` for cross-plugin references.
+Each plugin defines **presets** — named configurations that users pick from a single flat list. Presets support inheritance via `extends`, so "AdHoc Standard" includes everything from "AdHoc Core" plus additional files. Files are resolved as paths relative to the plugin directory, with `@plugin/path` for cross-plugin references.
 
 ### Available Presets
 

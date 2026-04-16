@@ -13,10 +13,11 @@ import (
 
 // Daemon is the JSON-RPC server that dispatches requests to an ActivateService.
 type Daemon struct {
-	service   ActivateAPI
-	transport *transport.Transport
-	version   string
-	watcher   *configWatcher
+	service        ActivateAPI
+	transport      *transport.Transport
+	version        string
+	watcher        *configWatcher
+	DisableWatcher bool // skip file watcher (for tests)
 }
 
 // NewDaemon creates a daemon wired to the given service and transport.
@@ -27,10 +28,12 @@ func NewDaemon(service ActivateAPI, t *transport.Transport, version string) *Dae
 // Serve reads requests from the transport and dispatches them until EOF or shutdown.
 func (d *Daemon) Serve() error {
 	// Start file watcher for cross-process config change detection
-	if cw, err := newConfigWatcher(d.transport); err == nil {
-		d.watcher = cw
-		go cw.run()
-		defer cw.close()
+	if !d.DisableWatcher {
+		if cw, err := newConfigWatcher(d.transport); err == nil {
+			d.watcher = cw
+			go cw.run()
+			defer cw.close()
+		}
 	}
 
 	for {

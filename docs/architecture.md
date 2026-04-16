@@ -200,7 +200,7 @@ type ActivateService struct {
 ```go
 type Preset struct {
     ID          string         // e.g., "adhoc/standard"
-    Name        string         // display name (e.g., "Activate Standard")
+    Name        string         // display name (e.g., "AdHoc Standard")
     Description string
     Extends     string         // parent preset ID (e.g., "adhoc/core"), empty if base
     BasePath    string         // relative to repo root (e.g., "plugins/adhoc")
