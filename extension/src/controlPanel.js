@@ -195,6 +195,12 @@ class ControlPanelProvider {
       case 'changePreset':
         vscode.commands.executeCommand('activate-framework.changePreset');
         break;
+      case 'refreshPresets':
+        this._client.refreshPresets().then(
+          () => this._render(),
+          () => this._render(),
+        );
+        break;
       case 'addToWorkspace':
         vscode.commands.executeCommand('activate-framework.addToWorkspace');
         break;
@@ -821,7 +827,8 @@ class ControlPanelProvider {
 
   <div class="button-row">
     ${hasPresets
-      ? `<button class="secondary" onclick="send('changePreset')">◆ Preset</button>`
+      ? `<button class="secondary" onclick="send('changePreset')">◆ Preset</button>
+    <button class="secondary" onclick="send('refreshPresets')" title="Refresh presets from GitHub">↻ Refresh</button>`
       : `<button class="secondary" onclick="send('changeTier')">◆ Tier</button>
     ${manifestCount > 1 ? `<button class="secondary" onclick="send('changeManifest')">⇋ Manifest</button>` : ''}`}
     <button class="secondary" onclick="send('${installAction}')">${esc(installButtonLabel)}</button>

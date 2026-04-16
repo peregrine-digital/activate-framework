@@ -35,6 +35,7 @@ const Method = {
   BranchList:    'activate/branchList',
   PresetList:    'activate/presetList',
   PresetFiles:   'activate/presetFiles',
+  PresetRefresh: 'activate/presetRefresh',
 
   // Notifications (server → client)
   NotifyStateChanged: 'activate/stateChanged',
@@ -341,6 +342,10 @@ class ActivateClient extends EventEmitter {
 
   listPresetFiles(params) {
     return this.request(Method.PresetFiles, params || {});
+  }
+
+  refreshPresets() {
+    return this.request(Method.PresetRefresh);
   }
 
   // ── Internal ───────────────────────────────────────────────────
