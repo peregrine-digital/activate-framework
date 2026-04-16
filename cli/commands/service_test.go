@@ -1149,3 +1149,93 @@ func TestServiceSyncErrors(t *testing.T) {
 		}
 	})
 }
+
+// ── RefreshPresets ──────────────────────────────────────────────
+
+func TestServiceRefreshPresetsRediscovers(t *testing.T) {
+	repo := "test/repo"
+	branch := "main"
+
+	presetJSON := `{"name":"Standard","files":["instructions/setup.md"]}`
+	presetJSONV2 := `{"name":"Standard V2","description":"updated","files":["instructions/setup.md"]}`
+	currentPreset := &presetJSON
+
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/contents/plugins") && r.URL.Query().Get("ref") == branch:
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(`[{"name":"test","type":"dir"}]`))
+		case strings.HasSuffix(r.URL.Path, "/contents/plugins/test/presets") && r.URL.Query().Get("ref") == branch:
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(`[{"name":"standard.json","type":"file"}]`))
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer api.Close()
+
+	raw := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		prefix := "/" + repo + "/" + branch + "/"
+		if strings.HasSuffix(r.URL.Path, "plugins/test/presets/standard.json") && strings.HasPrefix(r.URL.Path, prefix) {
+			w.Write([]byte(*currentPreset))
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer raw.Close()
+
+	origAPI := storage.APIBase
+	origRaw := storage.RawBase
+	origResolver := storage.TokenResolver
+	storage.APIBase = api.URL
+	storage.RawBase = raw.URL
+	storage.TokenResolver = func() string { return "" }
+	storage.ResetTokenCache()
+	t.Cleanup(func() {
+		storage.APIBase = origAPI
+		storage.RawBase = origRaw
+		storage.TokenResolver = origResolver
+		storage.ResetTokenCache()
+	})
+
+	homeDir := t.TempDir()
+	old := storage.ActivateBaseDir
+	storage.ActivateBaseDir = homeDir
+	t.Cleanup(func() { storage.ActivateBaseDir = old })
+
+	projectDir := t.TempDir()
+
+	// Write project config so refreshConfig() preserves repo/branch
+	if err := storage.WriteProjectConfig(projectDir, &model.Config{
+		Repo: repo, Branch: branch,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := model.Config{Repo: repo, Branch: branch}
+	svc := NewService(projectDir, nil, cfg)
+	svc.Initialize(projectDir)
+
+	// Should have discovered the preset
+	if len(svc.Presets) != 1 {
+		t.Fatalf("expected 1 preset after init, got %d", len(svc.Presets))
+	}
+	if svc.Presets[0].Name != "Standard" {
+		t.Errorf("preset name = %q, want Standard", svc.Presets[0].Name)
+	}
+
+	// Update the remote preset content
+	currentPreset = &presetJSONV2
+
+	// RefreshPresets should pick up the updated name
+	result := svc.RefreshPresets()
+	if len(result) != 1 {
+		t.Fatalf("expected 1 preset after refresh, got %d", len(result))
+	}
+	if result[0].Name != "Standard V2" {
+		t.Errorf("refreshed preset name = %q, want Standard V2", result[0].Name)
+	}
+	if result[0].Description != "updated" {
+		t.Errorf("refreshed preset description = %q, want updated", result[0].Description)
+	}
+}

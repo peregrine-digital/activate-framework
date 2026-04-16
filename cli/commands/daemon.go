@@ -76,6 +76,8 @@ func (d *Daemon) dispatch(req *transport.Request) *transport.Response {
 		return d.handlePresetList(req)
 	case transport.MethodPresetFiles:
 		return d.handlePresetFiles(req)
+	case transport.MethodPresetRefresh:
+		return d.handlePresetRefresh(req)
 	case transport.MethodRepoAdd:
 		return d.handleRepoAdd(req)
 	case transport.MethodRepoRemove:
@@ -114,7 +116,7 @@ func isMutating(method string) bool {
 	case transport.MethodConfigSet, transport.MethodRepoAdd, transport.MethodRepoRemove,
 		transport.MethodSync, transport.MethodUpdate, transport.MethodFileInstall,
 		transport.MethodFileUninstall, transport.MethodFileSkip, transport.MethodFileOverride,
-		transport.MethodTelemetryRun:
+		transport.MethodTelemetryRun, transport.MethodPresetRefresh:
 		return true
 	}
 	return false
@@ -242,6 +244,10 @@ func (d *Daemon) handlePresetFiles(req *transport.Request) *transport.Response {
 		return transport.ErrorResponse(req.ID, transport.ErrCodeInternal, err.Error())
 	}
 	return transport.SuccessResponse(req.ID, result)
+}
+
+func (d *Daemon) handlePresetRefresh(req *transport.Request) *transport.Response {
+	return transport.SuccessResponse(req.ID, d.service.RefreshPresets())
 }
 
 func (d *Daemon) handleRepoAdd(req *transport.Request) *transport.Response {

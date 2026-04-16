@@ -31,6 +31,7 @@ const (
 	MethodBranchList    = "activate/branchList"
 	MethodPresetList    = "activate/presetList"
 	MethodPresetFiles   = "activate/presetFiles"
+	MethodPresetRefresh = "activate/presetRefresh"
 
 	// Notification methods (server → client)
 	NotifyStateChanged = "activate/stateChanged"

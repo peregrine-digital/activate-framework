@@ -506,6 +506,20 @@ describe('ActivateClient', () => {
     assert.deepStrictEqual(result, [{ dest: 'agents/plan.md' }]);
   });
 
+  it('refreshPresets sends PresetRefresh request', async () => {
+    const { client, nextRequest, sendResponse } = createMockClient();
+
+    const resultPromise = client.refreshPresets();
+    const req = await nextRequest();
+
+    assert.strictEqual(req.method, Method.PresetRefresh);
+
+    const presets = [{ id: 'activate/workflow', name: 'Activate Workflow' }];
+    sendResponse(req.id, presets);
+    const result = await resultPromise;
+    assert.deepStrictEqual(result, presets);
+  });
+
   // ── Daemon auth token tests ──────────────────────────────────
 
   it('stores token option and exposes via getter', () => {

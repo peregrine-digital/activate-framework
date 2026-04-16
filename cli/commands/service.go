@@ -21,6 +21,7 @@ type ActivateAPI interface {
 	ListFiles(manifestID, tierID, category string) (*ListFilesResult, error)
 	ListPresets() []model.Preset
 	ListPresetFiles(presetID, category string) (*ListPresetFilesResult, error)
+	RefreshPresets() []model.Preset
 	RepoAdd() (*RepoAddResult, error)
 	RepoRemove() error
 	Sync() (*SyncResult, error)
@@ -472,6 +473,13 @@ func (s *ActivateService) ListFiles(manifestID, tierID, category string) (*ListF
 }
 
 func (s *ActivateService) ListPresets() []model.Preset {
+	return s.Presets
+}
+
+func (s *ActivateService) RefreshPresets() []model.Preset {
+	s.Presets = nil
+	s.contentCache = nil
+	s.discoverPresets()
 	return s.Presets
 }
 

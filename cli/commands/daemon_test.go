@@ -1003,3 +1003,23 @@ func TestServiceGetStateReadsFromDisk(t *testing.T) {
 		t.Fatal("expected hasInstallMarker=false after external sidecar delete")
 	}
 }
+
+// TestDaemonPresetRefresh verifies the presetRefresh RPC re-fetches presets
+// and sends a stateChanged notification.
+func TestDaemonPresetRefresh(t *testing.T) {
+	h := newHarness(t)
+	defer h.cleanup()
+
+	sendRequest(t, h.clientWriter, h.clientReader, transport.MethodInitialize, 1, transport.InitializeParams{ProjectDir: h.projectDir})
+
+	// presetRefresh is mutating: expect response + notification
+	resp := sendRequest(t, h.clientWriter, h.clientReader, transport.MethodPresetRefresh, 2, nil)
+	if resp.Error != nil {
+		t.Fatalf("unexpected error: %v", resp.Error)
+	}
+
+	notif := readNotification(t, h.clientReader)
+	if notif.Method != "activate/stateChanged" {
+		t.Errorf("notification method = %q, want activate/stateChanged", notif.Method)
+	}
+}
