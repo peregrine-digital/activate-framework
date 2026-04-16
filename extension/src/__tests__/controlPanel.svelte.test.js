@@ -14,7 +14,7 @@ class MockClient extends EventEmitter {
   }
 
   async getState() { this._calls.push('getState'); return this._mockResults.getState || {}; }
-  async readTelemetryLog() { this._calls.push('readTelemetryLog'); return this._mockResults.readTelemetryLog || { entries: [] }; }
+  async readTelemetryLog() { this._calls.push('readTelemetryLog'); return this._mockResults.readTelemetryLog || []; }
   async getConfig(scope) { this._calls.push(`getConfig:${scope}`); return this._mockResults[`config_${scope}`] || {}; }
   async setConfig(opts) { this._calls.push('setConfig'); return { ok: true }; }
   async setFileOverride(dest, override) { this._calls.push(`setFileOverride:${dest}:${override}`); return {}; }
@@ -270,7 +270,7 @@ describe('ControlPanelProvider (svelte)', () => {
       const entries = [
         { date: '2025-01-01', premium_used: 10, premium_remaining: 90, premium_entitlement: 100 },
       ];
-      mockClient._mockResults.readTelemetryLog = { entries };
+      mockClient._mockResults.readTelemetryLog = entries;
 
       await panel._onMessage({ command: 'readTelemetryLog', _reqId: 7 });
 
