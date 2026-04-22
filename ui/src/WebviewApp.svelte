@@ -12,6 +12,7 @@
   let appState = $state<AppState | null>(null);
   let loading = $state(true);
   let hasCli = $state(true);
+  let serverVersion = $state('');
 
   async function load() {
     try {
@@ -33,6 +34,7 @@
       const msg = event.data;
       if (msg?.type === 'init') {
         hasCli = msg.hasCli !== false;
+        if (msg.serverVersion) serverVersion = msg.serverVersion;
         if (!hasCli) {
           nav.page = 'no-cli';
           loading = false;
@@ -53,6 +55,7 @@
     <WorkspaceView
       {appState}
       {api}
+      {serverVersion}
       page={nav.page}
       onNavigate={nav.navigateTo}
       onBack={nav.navigateBack}

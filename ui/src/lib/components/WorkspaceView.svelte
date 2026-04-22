@@ -26,7 +26,7 @@
 {:else if page === 'usage'}
   <UsagePage {api} telemetryEnabled={appState.config.telemetryEnabled === true} onBack={onBack} />
 {:else if page === 'workspace-settings'}
-  <SettingsPage {appState} {api} onBack={onBack} />
+  <SettingsPage {appState} {api} {serverVersion} onBack={onBack} />
 {:else}
   <MainPage {appState} {api} onNavigate={onNavigate} />
 {/if}
