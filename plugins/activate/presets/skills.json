@@ -1,7 +1,6 @@
 {
   "name": "Activate Skills",
-  "description": "Activate Core plus CI debugging, PR writing, spec creation, and GitHub integration",
-  "extends": "adhoc/core",
+  "description": "CI debugging, PR writing, spec creation, and GitHub integration skills",
   "files": [
     "/skills/ci-debugger",
     "/skills/context-discovery",

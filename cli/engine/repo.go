@@ -39,7 +39,7 @@ func RepoAdd(manifests []model.Manifest, cfg model.Config, projectDir string, co
 		if cat == "" {
 			cat = model.InferCategory(f.Src)
 		}
-		if cat == "mcp-servers" {
+		if cat == "mcp-servers" && filepath.Ext(f.Src) == ".json" {
 			mcpFiles = append(mcpFiles, f)
 		} else {
 			regularFiles = append(regularFiles, f)
@@ -223,7 +223,7 @@ func PresetRepoAdd(presets []model.Preset, cfg model.Config, projectDir string, 
 		if cat == "" {
 			cat = model.InferCategory(f.Dest)
 		}
-		if cat == "mcp-servers" {
+		if cat == "mcp-servers" && filepath.Ext(f.Src) == ".json" {
 			mcpFiles = append(mcpFiles, f)
 		} else {
 			regularFiles = append(regularFiles, f)
