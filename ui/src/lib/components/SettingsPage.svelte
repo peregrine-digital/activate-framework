@@ -7,10 +7,11 @@
   interface Props {
     appState: AppState;
     api: ActivateAPI;
+    serverVersion?: string;
     onBack: () => void;
   }
 
-  let { appState, api, onBack }: Props = $props();
+  let { appState, api, serverVersion = '', onBack }: Props = $props();
 
   let globalCfg = $state<Config | null>(null);
   let projectCfg = $state<Config | null>(null);
@@ -250,6 +251,19 @@
       </span>
     </div>
   {/each}
+{/if}
+
+<hr class="divider" />
+
+<div class="section-label">Updates</div>
+<div class="setting-row">
+  <span class="font-semibold text-xs">CLI Version</span>
+  <span class="text-xs">{serverVersion || '—'}</span>
+</div>
+{#if api.platform !== 'desktop'}
+<div class="py-2">
+  <button class="btn btn-primary" onclick={() => api.checkForUpdates()}>🔄 Check for Updates</button>
+</div>
 {/if}
 
 <style>
