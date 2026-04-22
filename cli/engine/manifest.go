@@ -144,6 +144,12 @@ func loadRemotePreset(plugin, name, repo, branch string) (model.Preset, error) {
 		return model.Preset{}, err
 	}
 
+	// Expand directory entries into individual file entries.
+	files, err = expandPresetDirEntries(files, repo, branch)
+	if err != nil {
+		return model.Preset{}, err
+	}
+
 	return model.Preset{
 		ID:          plugin + "/" + name,
 		Name:        displayName,
@@ -202,8 +208,9 @@ func resolvePresetFileEntry(plugin, entry string) model.PresetFile {
 		// Root-relative: /path → src=path (from repo root)
 		rootPath := entry[1:]
 		return model.PresetFile{
-			Src:  rootPath,
-			Dest: rootPath,
+			Src:   rootPath,
+			Dest:  rootPath,
+			IsDir: path.Ext(path.Base(rootPath)) == "",
 		}
 	}
 	if strings.HasPrefix(entry, "@") {
@@ -216,15 +223,47 @@ func resolvePresetFileEntry(plugin, entry string) model.PresetFile {
 		refPlugin := rest[:slashIdx]
 		refPath := rest[slashIdx+1:]
 		return model.PresetFile{
-			Src:  "plugins/" + refPlugin + "/" + refPath,
-			Dest: refPath,
+			Src:   "plugins/" + refPlugin + "/" + refPath,
+			Dest:  refPath,
+			IsDir: path.Ext(path.Base(refPath)) == "",
 		}
 	}
 	// Local: path relative to plugin dir.
 	return model.PresetFile{
-		Src:  "plugins/" + plugin + "/" + entry,
-		Dest: entry,
+		Src:   "plugins/" + plugin + "/" + entry,
+		Dest:  entry,
+		IsDir: path.Ext(path.Base(entry)) == "",
 	}
+}
+
+// expandPresetDirEntries expands IsDir entries by listing their contents from
+// GitHub and appending individual file entries. The original IsDir marker entry
+// is preserved for display purposes (category grouping in the control panel).
+func expandPresetDirEntries(files []model.PresetFile, repo, branch string) ([]model.PresetFile, error) {
+	var result []model.PresetFile
+	for _, f := range files {
+		if !f.IsDir {
+			result = append(result, f)
+			continue
+		}
+		// Keep the directory marker for UI display.
+		result = append(result, f)
+		// List all files recursively under the directory.
+		dirFiles, err := storage.ListFilesRecursive(f.Src, repo, branch)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "  ⚠  could not expand directory %s: %s\n", f.Src, err)
+			continue
+		}
+		for _, fp := range dirFiles {
+			// Compute dest by replacing the Src prefix with Dest.
+			relSuffix := fp[len(f.Src):]
+			result = append(result, model.PresetFile{
+				Src:  fp,
+				Dest: f.Dest + relSuffix,
+			})
+		}
+	}
+	return result, nil
 }
 
 // ResolvePresetInheritance resolves the full file list for a preset by walking the extends chain.
