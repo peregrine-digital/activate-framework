@@ -38,7 +38,7 @@ func UpdateFiles(m model.Manifest, sidecar *model.RepoSidecar, cfg model.Config,
 		if cat == "" {
 			cat = model.InferCategory(f.Src)
 		}
-		if cat == "mcp-servers" {
+		if cat == "mcp-servers" && filepath.Ext(f.Src) == ".json" {
 			mcpFiles = append(mcpFiles, f)
 			continue
 		}
@@ -204,7 +204,7 @@ func PresetUpdateFiles(p model.Preset, sidecar *model.RepoSidecar, cfg model.Con
 		if cat == "" {
 			cat = model.InferCategory(f.Dest)
 		}
-		if cat == "mcp-servers" {
+		if cat == "mcp-servers" && filepath.Ext(f.Src) == ".json" {
 			mcpFiles = append(mcpFiles, f)
 			continue
 		}

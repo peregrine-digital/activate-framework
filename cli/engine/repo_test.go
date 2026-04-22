@@ -276,6 +276,60 @@ func TestRepoAddFiltersMcpFiles(t *testing.T) {
 	}
 }
 
+func TestRepoAddInstallsNonJsonMcpAsRegularFiles(t *testing.T) {
+	projectDir := t.TempDir()
+	setupTestStore(t)
+
+	excludePath := filepath.Join(projectDir, ".git", "info", "exclude")
+	if err := os.MkdirAll(filepath.Dir(excludePath), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(excludePath, []byte(""), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	basePath := "plugins/test"
+	mcpJSON := `{"test-server": {"type": "stdio", "command": "node", "args": [".github/mcp-servers/server.js"]}}`
+	jsContent := "console.log('mcp server');"
+
+	_, repo, branch := serveRemoteFiles(t, map[string]string{
+		basePath + "/mcp-servers/server.json": mcpJSON,
+		basePath + "/mcp-servers/server.js":   jsContent,
+	})
+
+	manifest := model.Manifest{
+		ID: "m1", Name: "Test", BasePath: basePath,
+		Files: []model.ManifestFile{
+			{Src: "mcp-servers/server.json", Dest: "mcp-servers/server.json", Tier: "core"},
+			{Src: "mcp-servers/server.js", Dest: "mcp-servers/server.js", Tier: "core"},
+		},
+	}
+
+	cfg := model.Config{Manifest: "m1", Tier: "minimal", Repo: repo, Branch: branch}
+	if err := RepoAdd([]model.Manifest{manifest}, cfg, projectDir, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	// Assert: .json config merged into .vscode/mcp.json
+	mcpCfgData, err := os.ReadFile(filepath.Join(projectDir, ".vscode", "mcp.json"))
+	if err != nil {
+		t.Fatalf("expected .vscode/mcp.json to exist, err=%v", err)
+	}
+	if !strings.Contains(string(mcpCfgData), "test-server") {
+		t.Fatalf("expected test-server in mcp.json, got:\n%s", string(mcpCfgData))
+	}
+
+	// Assert: .js companion file installed as regular file to .github/
+	jsPath := filepath.Join(projectDir, ".github", "mcp-servers", "server.js")
+	jsData, err := os.ReadFile(jsPath)
+	if err != nil {
+		t.Fatalf("expected .js file installed to .github/, err=%v", err)
+	}
+	if string(jsData) != jsContent {
+		t.Fatalf("unexpected .js content: %q", string(jsData))
+	}
+}
+
 func TestRepoAddDeltaSkipsCurrentVersion(t *testing.T) {
 	projectDir := t.TempDir()
 	setupTestStore(t)
