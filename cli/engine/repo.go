@@ -327,8 +327,9 @@ func PresetRepoAdd(presets []model.Preset, cfg model.Config, projectDir string, 
 	var mcpManifestFiles []model.ManifestFile
 	for _, f := range mcpFiles {
 		mcpManifestFiles = append(mcpManifestFiles, model.ManifestFile{
-			Src:  f.Src,
-			Dest: f.Dest,
+			Src:      f.Src,
+			Dest:     f.Dest,
+			Category: "mcp-servers",
 		})
 	}
 	var mcpServerNames []string

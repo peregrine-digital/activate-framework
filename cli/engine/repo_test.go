@@ -479,3 +479,69 @@ func TestRepoAddDeltaDownloadsNewFile(t *testing.T) {
 		t.Fatalf("expected new content, got: %s", string(data))
 	}
 }
+
+func TestPresetRepoAddMergesPluginLocalMcpConfig(t *testing.T) {
+	projectDir := t.TempDir()
+	setupTestStore(t)
+
+	excludePath := filepath.Join(projectDir, ".git", "info", "exclude")
+	if err := os.MkdirAll(filepath.Dir(excludePath), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(excludePath, []byte(""), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	mcpJSON := `{"my-server": {"type": "stdio", "command": "node", "args": [".github/mcp-servers/my-server.js"]}}`
+	jsContent := "console.log('server');"
+
+	_, repo, branch := serveRemoteFiles(t, map[string]string{
+		"plugins/myplugin/mcp-servers/my-server.json": mcpJSON,
+		"plugins/myplugin/mcp-servers/my-server.js":   jsContent,
+	})
+
+	presets := []model.Preset{
+		{
+			ID:     "myplugin/test",
+			Name:   "Test",
+			Plugin: "myplugin",
+			Files: []model.PresetFile{
+				{Src: "plugins/myplugin/mcp-servers/my-server.json", Dest: "mcp-servers/my-server.json"},
+				{Src: "plugins/myplugin/mcp-servers/my-server.js", Dest: "mcp-servers/my-server.js"},
+			},
+		},
+	}
+
+	cfg := model.Config{Preset: "myplugin/test", Repo: repo, Branch: branch}
+	if err := PresetRepoAdd(presets, cfg, projectDir, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	// Assert: .json config merged into .vscode/mcp.json
+	mcpCfgData, err := os.ReadFile(filepath.Join(projectDir, ".vscode", "mcp.json"))
+	if err != nil {
+		t.Fatalf("expected .vscode/mcp.json to exist, err=%v", err)
+	}
+	if !strings.Contains(string(mcpCfgData), "my-server") {
+		t.Fatalf("expected my-server in mcp.json, got:\n%s", string(mcpCfgData))
+	}
+
+	// Assert: .js companion installed as regular file
+	jsPath := filepath.Join(projectDir, ".github", "mcp-servers", "my-server.js")
+	jsData, err := os.ReadFile(jsPath)
+	if err != nil {
+		t.Fatalf("expected .js file installed to .github/, err=%v", err)
+	}
+	if string(jsData) != jsContent {
+		t.Fatalf("unexpected .js content: %q", string(jsData))
+	}
+
+	// Assert: sidecar tracks the MCP server name
+	scData, err := os.ReadFile(storage.SidecarPath(projectDir))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(scData), "my-server") {
+		t.Fatalf("expected sidecar to track my-server, got:\n%s", string(scData))
+	}
+}
