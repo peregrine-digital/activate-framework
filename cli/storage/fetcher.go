@@ -174,6 +174,41 @@ func ListDirEntries(dirPath, repo, branch, entryType string) ([]string, error) {
 	return names, nil
 }
 
+// ListFilesRecursive lists all file paths under a directory (recursively)
+// using the GitHub Contents API. Returns paths relative to the repo root.
+func ListFilesRecursive(dirPath, repo, branch string) ([]string, error) {
+	url := fmt.Sprintf("%s/repos/%s/contents/%s?ref=%s", APIBase, repo, dirPath, branch)
+	resp, err := GitHubGet(url)
+	if err != nil {
+		return nil, fmt.Errorf("list %s: %w", dirPath, err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf("list %s: %d %s", dirPath, resp.StatusCode, resp.Status)
+	}
+	var entries []struct {
+		Name string `json:"name"`
+		Type string `json:"type"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&entries); err != nil {
+		return nil, fmt.Errorf("parse %s listing: %w", dirPath, err)
+	}
+	var files []string
+	for _, e := range entries {
+		fullPath := dirPath + "/" + e.Name
+		if e.Type == "file" {
+			files = append(files, fullPath)
+		} else if e.Type == "dir" {
+			subFiles, err := ListFilesRecursive(fullPath, repo, branch)
+			if err != nil {
+				continue
+			}
+			files = append(files, subFiles...)
+		}
+	}
+	return files, nil
+}
+
 // FetchBranches lists branch names for a GitHub repo via the API.
 func FetchBranches(repo string) ([]string, error) {
 	url := fmt.Sprintf("%s/repos/%s/branches?per_page=100", APIBase, repo)
