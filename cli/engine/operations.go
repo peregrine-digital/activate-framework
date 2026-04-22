@@ -233,7 +233,7 @@ func PresetUpdateFiles(p model.Preset, sidecar *model.RepoSidecar, cfg model.Con
 	// Handle MCP
 	var mcpManifestFiles []model.ManifestFile
 	for _, f := range mcpFiles {
-		mcpManifestFiles = append(mcpManifestFiles, model.ManifestFile{Src: f.Src, Dest: f.Dest})
+		mcpManifestFiles = append(mcpManifestFiles, model.ManifestFile{Src: f.Src, Dest: f.Dest, Category: "mcp-servers"})
 	}
 	if len(mcpManifestFiles) > 0 || len(sidecar.McpServers) > 0 {
 		names, mcpErr := storage.InjectMcpFromManifest(mcpManifestFiles, "", projectDir, sidecar.McpServers, repo, branch)
