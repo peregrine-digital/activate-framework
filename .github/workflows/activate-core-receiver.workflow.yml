@@ -140,7 +140,7 @@ jobs:
           npm test --if-present || { echo "::error title=Quality gates failed::npm test failed."; exit 1; }
 
       - name: Open or update pull request
-        uses: peter-evans/create-pull-request@v7
+        uses: peter-evans/create-pull-request@v8
         with:
           branch: chore/activate-core-update
           commit-message: "chore: sync activate core from upstream"
